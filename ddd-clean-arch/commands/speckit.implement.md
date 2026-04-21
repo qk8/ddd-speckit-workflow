@@ -4,14 +4,18 @@ Determine the current feature: scan .specify/specs/ and find the feature
 whose tasks.md contains the first TODO task.
 Read its plan.md and tasks.md.
 
-PARALLEL MODE: If the workflow input includes "--parallel" (indicated by the
-presence of a workflow input section with parallel flag):
+PARALLEL MODE (batch independent tasks):
+  The workflow YAML passes this instruction via input.args. When you see this
+  section, process tasks in batches instead of one at a time:
   1. Find ALL TODO tasks whose Depends-on tasks are all DONE.
-  2. Group them by dependency level (tasks with no inter-dependencies = same batch).
-  3. Process each batch sequentially. Within a batch, process tasks one at a time.
+  2. Group them by dependency level:
+     Level 0: tasks with no depends-on (or only DONE dependencies)
+     Level 1: tasks whose only depends-on are Level 0 tasks
+     Level 2+: tasks whose depends-on are all at lower levels
+  3. Process each level as a batch. Within a batch, process tasks sequentially.
   4. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
-  5. Continue to the next batch. Stop when no more TODO tasks with all dependencies met.
-  6. In parallel mode, the completion report covers the entire batch.
+  5. Continue to the next level. Stop when no more TODO tasks with all dependencies met.
+  6. In batch mode, the completion report covers the entire batch.
 
 Use targeted spec loading — read only the plan.md sections relevant to
 the next task's Type. Do not read plan.md end to end:
@@ -405,11 +409,14 @@ Update tasks.md for TASK-[N]:
   Built: [one sentence]
   Test file: [path]
   Spec changes applied: [list | none]
+  Perf warning: [Check [J] warning text | none]
+    (Record any performance budget warnings here so retrospect can read them.)
 
 # Recovery note for the next session if this task was previously ABANDONED:
 # If the task was previously ABANDONED and this is a restart, verify that
 # partial files from the previous attempt are consistent with what was just built.
 # Remove any stale partial artifacts before marking DONE.
 
-Count total DONE tasks. If count % 10 == 0 (or matches adaptive cadence): print
-  "[N] tasks completed. The workflow will now run /speckit.retrospect."
+Count total DONE tasks. The workflow (check-tasks.sh) handles adaptive retrospective
+cadence based on project complexity. Print a completion notice:
+  "[N] tasks completed."

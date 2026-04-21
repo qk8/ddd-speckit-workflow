@@ -19,16 +19,17 @@ Cross-check: are all in plan.md?
 
 plan.md §10: end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
 
-Check [J] results from all DONE tasks:
+Read tasks.md DONE entries for "Perf warning:" lines:
+  grep -B5 "Perf warning:" tasks.md | grep "TASK-\[" to extract per-task perf warnings.
   backend-api tasks with perf warnings: list each endpoint, measured p95, budget.
   frontend-feature tasks with perf warnings: list each page, measured LCP, budget.
 
-If any Check [J] warning exists:
+If any Perf warning exists in tasks.md:
   WARNING: [N] task(s) exceeded performance budget.
-  List: TASK-[N] — [endpoint/page] measured=[N]ms budget=[N]ms
+  List: TASK-[N] — [endpoint/page] [warning text from tasks.md]
 
 Budget plausible: yes | uncertain | likely violated
-Basis: [measured data from Check [J] | no data yet]
+Basis: [measured data from tasks.md Perf warnings | no data yet]
 Recommendation: [none | run a load test | revisit budget]
 
 ━━ SECTION 3: EDGE CASE COVERAGE ━━━━━━

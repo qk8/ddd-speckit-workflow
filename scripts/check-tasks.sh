@@ -11,15 +11,16 @@ FEATURE_DIR=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | so
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "has_todo=false"; echo "done_count=0"; echo "todo_count=0"
   echo "in_progress="; echo "abandoned_count=0"; echo "total_tasks=0"
+  echo "complexity=medium"; echo "retro_interval=10"; echo "first_retro_threshold=5"
   exit 0
 fi
 
 TASKS_FILE="$FEATURE_DIR/tasks.md"
-DONE_COUNT=$(grep -c "^Status: DONE" "$TASKS_FILE" 2>/dev/null || echo 0)
-TODO_COUNT=$(grep -c "^Status: TODO" "$TASKS_FILE" 2>/dev/null || echo 0)
+DONE_COUNT=$(grep -c "^Status: DONE" "$TASKS_FILE" || true)
+TODO_COUNT=$(grep -c "^Status: TODO" "$TASKS_FILE" || true)
 IN_PROGRESS=$(grep -B1 "^Status: IN_PROGRESS" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | head -1 | sed 's/^## //' || true)
-ABANDONED_COUNT=$(grep -c "^Status: ABANDONED" "$TASKS_FILE" 2>/dev/null || echo 0)
-TOTAL_TASKS=$(grep -c "^## TASK-\[" "$TASKS_FILE" 2>/dev/null || echo 0)
+ABANDONED_COUNT=$(grep -c "^Status: ABANDONED" "$TASKS_FILE" || true)
+TOTAL_TASKS=$(grep -c "^## TASK-\[" "$TASKS_FILE" || true)
 
 if [ -n "$IN_PROGRESS" ]; then
   echo "WARNING: Status: IN_PROGRESS found — previous session interrupted." >&2
@@ -35,10 +36,14 @@ fi
 
 # Adaptive retrospective cadence based on total task count and complexity
 # Complexity is read from project-brief.md; defaults to "medium"
+# project-brief.md format: "## Complexity" header followed by value on next line
 COMPLEXITY="medium"
 if [ -f "project-brief.md" ]; then
-  COMPLEXITY=$(grep -i "^complexity:" project-brief.md 2>/dev/null | head -1 | awk '{print $2}' | tr '[:upper:]' '[:lower:]' || echo "medium")
-  if [ -z "$COMPLEXITY" ]; then COMPLEXITY="medium"; fi
+  COMPLEXITY=$(awk '/^## Complexity/{found=1; next} found && /^[^ ]/{print tolower($1); exit}' project-brief.md)
+  case "$COMPLEXITY" in
+    simple|medium|complex) ;; # valid
+    *) COMPLEXITY="medium" ;;
+  esac
 fi
 
 # Determine retrospective interval based on complexity and total tasks
