@@ -1,0 +1,561 @@
+schema_version: "1.0"
+workflow:
+  id: "ddd-full-cycle"
+  name: "DDD + Clean Architecture Full Cycle"
+  version: "2.0.0"
+  author: "your-org"
+  description: >
+    Full spec-driven development cycle with DDD and Clean Architecture.
+    All project context is read from project-brief.md — no CLI duplication.
+    Phases: clarify → spec → plan A (§1-10) → plan B (§11-14) →
+    plan C (§15-20 + companion files) → tasks → implement loop
+    (one task, 9 checks, TDD) → retrospect every 10 tasks → final verify.
+
+requires:
+  speckit_version: ">=0.7.2"
+  integrations:
+    any: ["claude"]
+
+# No inputs — all project context comes from project-brief.md.
+# Fill in project-brief.md before running this workflow.
+inputs: {}
+
+steps:
+
+  # ── PREFLIGHT: VALIDATE project-brief.md ──────────────────────
+  - id: preflight
+    type: prompt
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md.
+        Check that ALL of the following fields are filled in
+        (not placeholder text in brackets):
+          - Project name
+          - What does this system do (at least 2 sentences)
+          - Stack: backend_language, backend_framework, database,
+                   frontend_language, frontend_framework, monorepo_tool
+          - At least one hard constraint or explicit "none"
+          - At least one out-of-scope item or explicit "none"
+          - Security posture
+
+        If any field is missing or still contains placeholder text:
+          List the missing fields and stop.
+          Print: "Fill in project-brief.md and run the workflow again."
+
+        If all fields are present:
+          Print a one-paragraph summary of what you read.
+
+        Also check the following tooling is installed locally:
+          - gitleaks: run 'gitleaks version' — needed for secret scanning
+          - node: run 'node --version' — needed for Playwright MCP
+
+        If gitleaks is missing: print a warning suggesting
+          'bash scripts/setup-hooks.sh' to install it.
+        If node is missing: print a warning suggesting
+          'bash scripts/setup-mcp.sh' after installing Node.js.
+
+        Print: "project-brief.md is complete — proceeding."
+
+  - id: review-preflight
+    type: gate
+    message: |
+      Review the project-brief.md summary above.
+      Does it correctly reflect your project?
+      If anything is wrong, edit project-brief.md and restart the workflow.
+    options: [approve, restart]
+    on_restart: abort
+
+  # ── PHASE 1: CLARIFY ──────────────────────────────────────────
+  - id: clarify
+    type: prompt
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md fully.
+
+        Based on what you read, ask 3-5 targeted clarifying questions.
+        Focus only on things that are genuinely ambiguous or missing and
+        that would significantly affect architecture decisions.
+        Do not ask about things already covered in the brief.
+        Do not ask generic questions.
+
+        Good questions probe: edge cases in the core domain, conflict
+        resolution between competing requirements, specific compliance
+        obligations, external system API constraints, and expected
+        data volumes for the most critical operations.
+
+  - id: review-clarify
+    type: gate
+    message: |
+      Answer the clarifying questions above.
+      Edit your answers directly in this gate if needed.
+      Approve when requirements are well-understood.
+    options: [approve, re-clarify]
+    on_re-clarify:
+      goto: clarify
+
+  # ── PHASE 2: SPEC ─────────────────────────────────────────────
+  - id: specify
+    command: speckit.specify
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md and the clarification answers from the
+        previous phase. Produce the feature spec (spec.md).
+
+  - id: review-spec
+    type: gate
+    message: |
+      Review .specify/specs/[feature]/spec.md
+      Does it correctly capture user stories and acceptance requirements?
+      Are there missing scenarios or incorrect assumptions?
+      Approve to proceed to the technical plan.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── PHASE 3A: PLAN — DOMAIN + ARCHITECTURE (§1–§10) ──────────
+  # Split into two passes to avoid context window overflow.
+  # Pass A covers the decisions that affect everything else.
+  - id: plan-part-a
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md and .specify/specs/[feature]/spec.md.
+        Use plan-template.md.
+
+        Produce ONLY sections §1 through §10 of plan.md:
+          §1  Requirements
+          §2  Ubiquitous language
+          §3  Bounded contexts
+          §4  Aggregates (full detail including concurrency and idempotency)
+          §5  Domain services
+          §6  Architecture (modules, dependency graph, layer rules)
+          §7  Cross-cutting concerns (error taxonomy, transaction boundary,
+              authorization, logging)
+          §8  API design (all endpoints with full detail)
+          §9  Security (threat model, CSP consistent with §8 token delivery
+              and CORS)
+          §10 Performance & scalability (end-to-end budget first, then
+              backend p95 derived from it)
+
+        Do NOT produce §11 onwards yet.
+        Do NOT produce companion files yet.
+        End with: "Plan Part A complete (§1–§10). Waiting for review."
+
+  - id: review-plan-a
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART A (§1–§10) ━━
+
+      [ ] §2 Ubiquitous language: exact names you want in code?
+      [ ] §4 Aggregates: invariants correct? Concurrency strategy right per aggregate?
+      [ ] §4 Aggregates: idempotency mechanisms specified?
+      [ ] §7 Error taxonomy: four types defined? Envelope shape correct?
+      [ ] §8 API: every endpoint present? Auth correct on each?
+      [ ] §8 Token delivery: security trade-off acceptable?
+      [ ] §8 CORS: consistent with security requirements?
+      [ ] §9 CSP: connect-src includes API origin?
+      [ ] §9 CSP: consistent with token delivery (cookie domain if httpOnly)?
+      [ ] §10 End-to-end budget: realistic? Backend p95 derived from it?
+
+      PREVIEW — §13 api_testing_tool (decided in Plan B, but depends on §8):
+        Based on the backend_language in project-brief.md, the API testing tool
+        will be selected in Plan B as:
+          Java        → REST Assured  (runs via mvn test / gradle test)
+          TypeScript  → Playwright API (runs via npx playwright test --project=api)
+          Python      → pytest + httpx (runs via pytest tests/api/)
+        If this is not the right tool for your project, note it now so Plan B
+        uses the correct selection.
+
+      Edit plan.md directly before approving.
+      These decisions propagate through everything that follows.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-a
+
+  # ── PHASE 3B: PLAN — RELIABILITY + DATA + OPERATIONS (§11–§20) + FILES
+  # ── PHASE 3B: §11–§14 (reliability, data, testing, devex) ───────
+  # Split from the original monolithic pass to avoid context window degradation.
+  # §11-14 are dense structural decisions that reference §1-10 heavily.
+  # §15-20 + companion files come in phase 3C after these are reviewed.
+  - id: plan-part-b
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§10 of plan.md are approved. Produce ONLY §11–§14 now.
+        All decisions must be consistent with §1–§10.
+        Call out any tension explicitly rather than silently contradicting
+        an earlier decision. Do NOT produce companion files yet.
+
+        Produce:
+          §11 Reliability & observability
+              Correlation ID header name must match §8 correlation_id_header_name exactly.
+              Health check paths must not overlap with API endpoint paths from §8.
+              Circuit breakers only for external deps listed in §8 integrations.
+
+          §12 Data design
+              Tables must reflect §4 aggregate boundaries — one table per aggregate root
+              unless denormalization is explicitly justified.
+              Indexes must each name the specific use case or query they support.
+              Migration strategy: include teardown scripts for test database setup.
+
+          §13 Testing strategy
+              - api_testing_tool: select based on backend_language
+                  Java → rest-assured (runner: mvn test or gradle test)
+                  TypeScript → playwright-api (runner: npx playwright test --project=api)
+                  Python → pytest-httpx (runner: pytest tests/api/)
+              - e2e_testing_tool: playwright (always)
+              - Define all three regression commands:
+                  regression_command.all (arch + unit + integration + api + e2e)
+                  regression_command.api_only (arch + unit + integration + api, no browser)
+                  regression_command.e2e_only (browser tests only, headless)
+              - e2e_tests.coverage_focus: list every critical user journey from spec.md
+                  Form: "As a [user], I [action sequence] and verify [outcome]"
+              - e2e_tests.location and naming_convention must be set
+              - test_data_strategy:
+                  approach: api_seeding | db_seeding | fixture_files
+                  factory_location: [path where factory/builder classes live]
+                  teardown_mechanism: [how test data is cleaned up — transaction_rollback |
+                    explicit_delete | db_reset | isolated_schema]
+                  isolation_rule: each test creates its own data; tests pass in any order
+              - e2e_data_setup.strategy: [how E2E tests set up and tear down their data]
+              - flaky_test_protocol:
+                  quarantine_label: [label or annotation to mark flaky tests]
+                  max_time_in_quarantine: [e.g. "2 weeks" — after this, fix or delete]
+                  quarantine_location: [separate file or tag]
+              - E2E test owner and which CI pipeline runs them
+
+          §14 Monorepo & developer experience
+              Frontend cache invalidation must align with §8 cache-control + §10 caching.
+              local_dev_setup.steps must be runnable by a new engineer in under 15 minutes.
+              Include: ci_local_script: scripts/ci-local.sh (to be created in Phase 3C).
+
+        End with: "Plan Part B (§11–§14) complete. Waiting for review."
+
+  - id: review-plan-b
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART B (§11–§14) ━━
+
+      §11 Reliability:
+        [ ] Correlation ID header name matches §8 exactly?
+        [ ] Health check paths don't conflict with API routes?
+
+      §12 Data design:
+        [ ] Tables match §4 aggregates? Indexes each name their supporting use case?
+        [ ] Migration teardown scripts included for test DB setup?
+
+      §13 Testing:
+        [ ] api_testing_tool selected correctly for the backend language?
+        [ ] All three regression_command variants defined (all / api_only / e2e_only)?
+        [ ] e2e_tests.coverage_focus: every critical user journey listed?
+        [ ] test_data_strategy.teardown_mechanism chosen and documented?
+        [ ] e2e_data_setup.strategy defined?
+        [ ] flaky_test_protocol.max_time_in_quarantine set?
+        [ ] E2E test owner and pipeline decided?
+
+      §14 DevEx:
+        [ ] local_dev_setup.steps realistic and complete?
+        [ ] ci_local_script: scripts/ci-local.sh referenced in §14?
+
+      Edit plan.md directly before approving.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-b
+
+  # ── PHASE 3C: §15–§20 + ALL COMPANION FILES ───────────────────
+  # Separate pass so edge cases, constraints, and self-critique get full attention.
+  - id: plan-part-c
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§14 of plan.md are approved. Produce §15–§20 and all companion
+        files. Be thorough — these sections get the full context window.
+        Call out any tension with §1–§14 explicitly.
+
+        Produce:
+          §15 Edge cases & failure modes
+              Minimum 10 scenarios. Do not include concurrency conflicts (§4 covers those).
+              Focus on domain-specific scenarios. For each FAILURE: detection, response, recovery.
+              Be specific — "the payment provider returns a 429" not "upstream failure".
+              Spend time here. Shallow edge cases are the most common spec weakness.
+
+          §16 Architectural constraints
+              Exactly 10. Specific to THIS codebase — not generic advice.
+              Form: "Never [specific action] because [specific consequence in this domain]."
+              These become CLAUDE.md "What NOT to do" and are enforced by arch tests.
+
+          §17 Definition of done
+              Concrete verifiable criteria. Must align with the 9 checks in speckit.implement.
+              Include: test file committed, regression suite green, secret scan clean.
+
+          §18 Self-critique (mandatory — do not soften)
+              The 3 weakest points. For each: problem, reason accepted, early warning signs,
+              what changes under 20x load / second team / key dependency lost.
+
+          §19 ADR log
+              One ADR per: aggregate boundary decision, locking strategy, tech stack selection,
+              bounded context boundary, token delivery, CORS policy, rendering strategy,
+              contract sharing strategy, and any irreversible decision.
+
+          §20 Architectural test inventory
+              Populate after generating the enforcement test files below.
+
+        Companion files to produce:
+
+          docs/spec/api-contract.yaml
+            OpenAPI 3.1. Error envelope as $component referenced everywhere.
+            Every endpoint from §8. CORS + token delivery as top comment block.
+            Cache-control response headers for cacheable endpoints.
+
+          docs/spec/data-model.sql
+            DDL from §12. Migration strategy as top comment block.
+            Each table: comment stating aggregate and bounded context.
+            Each index: comment stating which use case it supports.
+            Include teardown SQL for test database setup (schema drop + recreate).
+
+          docs/spec/backend-interfaces.[ext]
+            Domain layer signatures only — no implementation bodies.
+            Aggregate roots, value objects, domain events, repository interfaces.
+            Zero infrastructure imports.
+
+          docs/spec/frontend-interfaces.[ext]
+            Four error types as discriminated union (tags match §7 exactly).
+            Auth state type consistent with §8 token_delivery.
+            One typed async function per endpoint — Result<T,E>, never throws.
+
+          .specify/memory/conventions.md
+            Naming: use cases, repositories, events, value objects, test classes.
+            Method conventions: execute signature, factory vs constructor.
+            Error handling conventions per layer.
+            Frontend: component, hook, type naming. Error surface per error type.
+            Shared: commit format, TODO format.
+            Decision log section (empty — grows via /speckit.review).
+
+          Architectural enforcement test files:
+            Java backend → [module]/src/test/java/arch/ArchitectureTest.java (ArchUnit)
+            TypeScript backend → [module]/.dependency-cruiser.cjs
+            Other → closest available static analysis tool config
+            Frontend → [frontend-module]/.dependency-cruiser.cjs
+
+          Run arch tests on empty codebase. Must pass.
+          A test that fails before any source code exists is misconfigured.
+          Populate §20 after generating arch test files.
+
+          .gitignore (copy from boilerplate and verify):
+            The boilerplate .gitignore covers common patterns.
+            After copying, verify that any project-specific build output
+            directories, generated files, or secret file patterns are added.
+            The .env file must be listed. Only .env.example is committed.
+
+          CLAUDE.md (update, max 150 lines):
+            Use ddd-clean-arch/templates/claude-md-template.md as the structure.
+            Fill in every placeholder from plan.md:
+              [PROJECT_NAME]       → from project-brief.md Project name
+              What this is         → from §1 requirements scope + out_of_scope
+              Stack                → from §14 stack + §13 api_testing_tool + e2e_testing_tool
+              Architecture         → from §6 modules + future_extraction_candidates
+              Module boundaries    → from §6 modules (owns + does_not_own per module)
+              Ubiquitous language  → from §2 + §4 (aggregate roots, events, value objects, repos)
+              What NOT to do       → from §16 verbatim (all 10 constraints, do not paraphrase)
+              Test conventions     → from §13 (all frameworks, locations, runners)
+              Regression commands  → from §13 regression_command (all three)
+              Definition of done   → from §17 verbatim
+            The output must be ≤150 lines. If it exceeds 150 lines, condense the
+            Architecture and Module boundaries sections — never cut §16 or §17.
+
+          scripts/ci-local.sh (fill in the COMMANDS section):
+            Populate the command variables at the top of scripts/ci-local.sh
+            using the values from plan.md §13 and §14:
+              SECRET_SCAN_CMD: gitleaks detect --source . --redact -q
+              LINT_CMD: from §14 task_runner.lint
+              ARCH_TEST_CMD: from §20 backend_arch_tool runner + frontend arch:check
+              UNIT_TEST_CMD: from §13 unit_tests runner
+              INTEGRATION_TEST_CMD: from §13 integration_tests runner
+              API_TEST_CMD: from §13 api_testing_tool.runner
+              CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
+              E2E_TEST_CMD: from §13 regression_command.e2e_only
+
+        End with: "Plan Part C (§15–§20 + companion files) complete. Waiting for final review."
+
+  - id: review-plan-c
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C (§15–§20 + COMPANION FILES) ━━
+
+      §15–§20:
+        [ ] §15 Edge cases: 10 specific scenarios with detection/response/recovery?
+            Are they domain-specific (not generic "upstream failure")?
+        [ ] §16 Constraints: exactly 10? Each specific to this codebase with consequence?
+        [ ] §17 Done criteria: aligned with the 9 implement checks?
+        [ ] §18 Self-critique: honest? Early warning signs defined for each weak point?
+        [ ] §19 ADRs: one per aggregate boundary? Per locking strategy? Per stack choice?
+        [ ] §20 Arch test inventory: populated after arch tests generated?
+
+      Companion files:
+        [ ] api-contract.yaml: all §8 endpoints present? Error envelope as $component?
+        [ ] data-model.sql: schema matches §12? Teardown SQL included?
+        [ ] backend-interfaces: signatures match §4? Zero infra imports?
+        [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
+        [ ] conventions.md: naming patterns filled in for this stack?
+        [ ] CLAUDE.md: ≤150 lines? All template sections filled (no [PLACEHOLDER] text)?
+            §16 constraints verbatim? Names from §2 and §4? Regression commands listed?
+        [ ] Arch test files: pass on empty codebase?
+        [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+
+      Edit any file directly before approving.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c
+
+  # ── PHASE 4: TASKS ─────────────────────────────────────────────
+  - id: tasks
+    command: speckit.tasks
+    integration: claude
+    input:
+      args: >
+        Read plan.md and use tasks-template.md.
+
+        Produce one task per aggregate (domain layer), one per aggregate
+        (infra layer), one per endpoint group (api layer), then shared,
+        frontend-data, frontend-feature, e2e — in that order.
+
+        Rules:
+          - Acceptance criteria must name exact classes from plan.md.
+            Form: "calling [ExactClass].[method]([input]) raises/returns [output]"
+          - Each task has exactly one "Do NOT" scope-creep guard.
+          - Max 5 files and max 1 aggregate per task.
+          - All Depends-on fields must reference earlier tasks.
+          - No circular dependencies.
+
+  - id: review-tasks
+    type: gate
+    message: |
+      Review .specify/specs/[feature]/tasks.md
+
+      [ ] Task order: domain → infra → api → shared → frontend-data → frontend-feature → e2e
+      [ ] Acceptance criteria verifiable (name exact classes/methods from plan.md)?
+      [ ] Each "Do NOT" guard is specific to that task?
+      [ ] No task touches more than 5 files or more than 1 aggregate?
+      [ ] All Depends-on references are to earlier tasks?
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
+  - id: implement_loop
+    type: while
+    condition: "{{ steps.check_remaining.output.has_todo == 'true' }}"
+    steps:
+
+      - id: check_remaining
+        type: shell
+        command: "bash scripts/check-tasks.sh"
+
+      - id: check_in_progress
+        type: if
+        condition: "{{ steps.check_remaining.output.in_progress != '' }}"
+        then:
+          - id: resolve_in_progress
+            type: gate
+            message: |
+              ⚠ An IN_PROGRESS task was detected from a previous interrupted session:
+                {{ steps.check_remaining.output.in_progress }}
+
+              A previous session was interrupted before this task completed.
+              The task may have partial files on disk.
+
+              Choose how to proceed:
+                restart  — Mark the task TODO and restart it cleanly.
+                          Recommended if the partial files should be discarded.
+                continue — Leave it IN_PROGRESS and attempt to resume.
+                          Use only if you know what was completed in the last session.
+                abandon  — Mark it ABANDONED and skip to the next TODO task.
+                          Use if the partial work is unrecoverable.
+            options: [restart, continue, abandon]
+            on_restart:
+              type: shell
+              command: >
+                bash -c "sed -i 's/^Status: IN_PROGRESS/Status: TODO/' .specify/specs/*/tasks.md"
+            on_abandon:
+              type: shell
+              command: >
+                bash -c "sed -i 's/^Status: IN_PROGRESS/Status: ABANDONED/' .specify/specs/*/tasks.md"
+            # on_continue: do nothing, implement_one will pick it up
+
+      - id: check_abandoned
+        type: if
+        condition: "{{ steps.check_remaining.output.abandoned_count | int > 0 }}"
+        then:
+          - id: warn_abandoned
+            type: gate
+            message: |
+              ⚠ {{ steps.check_remaining.output.abandoned_count }} ABANDONED task(s) found.
+              These tasks were interrupted and left with partial files on disk.
+              Review them in tasks.md and clean up any partial files before continuing.
+              Approve to continue with the next TODO task (ABANDONED tasks are skipped).
+            options: [approve]
+
+      - id: should_retrospect
+        type: if
+        condition: >
+          {{ steps.check_remaining.output.done_count | int > 0 and
+             steps.check_remaining.output.done_count | int % 10 == 0 }}
+        then:
+          - id: run_retrospect
+            command: speckit.retrospect
+            integration: claude
+
+          - id: review-retrospect
+            type: gate
+            message: |
+              Review the retrospect report.
+              Respond to all MUST DO items before continuing.
+              Confirm or reject each proposed spec change.
+              Confirm or reject each proposed edge-case task addition.
+              Approve when all blocking issues are resolved.
+            options: [approve]
+
+      - id: implement_one
+        command: speckit.implement
+        integration: claude
+
+      - id: review-implement
+        type: gate
+        message: |
+          Review the completion report for the last task.
+
+          [ ] All acceptance criteria satisfied (test name + file:line references)?
+          [ ] All 9 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan)?
+          [ ] Check [C] regression: zero new failures in existing test suite?
+          [ ] Test file committed alongside implementation?
+          [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+
+          Approve to continue to the next task.
+          Stop to pause the workflow (resume with: specify workflow resume <run-id>)
+        options: [approve, stop]
+        on_stop: abort
+
+  # ── PHASE 6: FINAL VERIFY ───────────────────────────────────────
+  - id: final_verify
+    command: speckit.verify
+    integration: claude
+    input:
+      args: "full"
+
+  - id: review-final-verify
+    type: gate
+    message: |
+      Review the final verify report.
+
+      CLEAN → spec and code are fully aligned. Ready to merge.
+      DRIFT DETECTED → fix issues before merging.
+        For each issue, decide: fix in code (align to spec) or fix in spec
+        (intentional deviation). Add fix tasks to tasks.md if needed,
+        then select "fix-needed" to resume the implement loop.
+    options: [approved-clean, fix-needed]
+    on_fix-needed:
+      goto: implement_loop

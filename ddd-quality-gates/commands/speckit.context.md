@@ -1,0 +1,67 @@
+Locate the current feature:
+  Scan .specify/specs/ for the first feature directory.
+  The feature's tasks.md is at: .specify/specs/[feature-name]/tasks.md
+  The feature's plan.md is at:  .specify/specs/[feature-name]/plan.md
+
+Find the first task in tasks.md where Status is TODO
+and all Depends-on tasks are DONE.
+If no such task exists: "No unblocked tasks. Run /speckit.status." and stop.
+
+Print: Next task: TASK-[N] — [title] | Type: [type] | Scope: [files]
+
+Read CLAUDE.md fully.
+Then read ONLY these plan.md sections based on task Type:
+
+  backend-domain  → §2, §4 (aggregate in scope only), §6 domain rules,
+                    §7 validation + error taxonomy,
+                    §13 unit_tests (location, framework, coverage_focus),
+                    §16, §17
+  backend-infra   → §4 (aggregate in scope), §6 infra rules,
+                    §12 (table in scope), migration_strategy,
+                    §13 integration_tests (location, framework),
+                    §13 test_data_strategy,
+                    §16, §17
+  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope),
+                    §11 correlation ID,
+                    §13 api_tests + api_testing_tool + regression_command,
+                    §13 test_data_strategy,
+                    §16, §17
+  shared          → §14 contract + change_detection, §3,
+                    §13 contract_testing,
+                    §16, §17
+                    + full api-contract + both interface files
+  frontend-data   → §7, §8 (endpoints called), §11 correlation header,
+                    §14 data layer + auth_flow + observability,
+                    §13 unit_tests,
+                    §16, §17
+  frontend-feature→ §7 user-facing errors, §14 ui + feature + client state +
+                    form_validation + component_library,
+                    §13 e2e_tests + e2e_testing_tool + regression_command,
+                    §13 e2e_data_setup + test_data_strategy,
+                    §16, §17
+  e2e             → §13 e2e_tests + e2e_testing_tool + regression_command,
+                    §13 e2e_data_setup + test_data_strategy,
+                    §8 all endpoints, §17
+
+Do not read sections outside the list above.
+
+Print compact context:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONTEXT LOADED — TASK-[N]: [title] | Type: [type]
+
+RELEVANT SPEC:
+  [Only the fields directly needed — verbatim from plan.md]
+
+KEY NAMES (§2 + §4):
+  [class/event/field names for this task only]
+
+LAYER RULES:
+  [rules for this task's layer only]
+
+CONSTRAINTS TO WATCH (§16):
+  [constraints this task could plausibly violate]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Context ready. Run /speckit.implement to begin.
+Do not implement from this command.

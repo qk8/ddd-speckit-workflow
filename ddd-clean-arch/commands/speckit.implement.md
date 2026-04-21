@@ -1,0 +1,382 @@
+Read CLAUDE.md fully.
+
+Determine the current feature: scan .specify/specs/ and find the feature
+whose tasks.md contains the first TODO task.
+Read its plan.md and tasks.md.
+
+Use targeted spec loading — read only the plan.md sections relevant to
+the next task's Type. Do not read plan.md end to end:
+
+  backend-domain  → §2, §4 (aggregate in scope only), §6 domain rules,
+                    §7 validation + error taxonomy, §13 unit_tests, §16, §17
+  backend-infra   → §4 (aggregate in scope), §6 infra rules,
+                    §12 (table in scope), migration_strategy,
+                    §13 integration_tests, §16, §17
+  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope),
+                    §11 correlation ID,
+                    §13 api_tests + regression_command, §16, §17
+                    + docs/spec/api-contract.yaml for the endpoint(s) in scope
+  shared          → §14 contract_sharing + change_detection, §3,
+                    §13 contract_testing, §16, §17
+                    + docs/spec/api-contract.yaml full
+                    + docs/spec/backend-interfaces.[ext] and frontend-interfaces.[ext]
+  frontend-data   → §7 error taxonomy, §8 (endpoints this module calls),
+                    §11 correlation_id_header_name,
+                    §14 data layer + auth_flow + frontend_observability,
+                    §13 unit_tests, §16, §17
+                    + docs/spec/frontend-interfaces.[ext] for the relevant context
+  frontend-feature→ §7 user-facing error behavior,
+                    §14 ui + feature layer rules + client state +
+                    form_validation + component_library,
+                    §13 e2e_tests + e2e_testing_tool + regression_command, §16, §17
+  e2e             → §13 e2e_tests + e2e_testing_tool + regression_command,
+                    §8 all endpoints, §17
+
+Find the first task in tasks.md where Status is TODO.
+
+Check all Depends-on tasks. If any is not DONE:
+  Print: BLOCKED: TASK-[N] — incomplete dependencies: [list]
+  Print: Run /speckit.status to see what is unblocked.
+  Stop.
+
+━━ TASK PLAN ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Task: TASK-[N] — [title]
+Type: [type]
+Test file to create: [derived from §13 for this type — path and tool]
+Impl files to create: [from Scope.Creates]
+Files to modify: [from Scope.Modifies]
+Acceptance criteria: [numbered, verbatim from task]
+Do NOT: [verbatim from task]
+Layer rules for this type: [from CLAUDE.md]
+§16 constraints that apply: [relevant ones]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Print the plan and wait for the user to confirm before proceeding.
+
+If the user confirms, immediately update tasks.md:
+  Change Status from TODO to IN_PROGRESS for TASK-[N].
+  This marks the session as active. If this session is interrupted before
+  completion, check-tasks.sh will detect IN_PROGRESS and warn the next session.
+
+If at any point the user asks to stop or the session is interrupted:
+  Update tasks.md for TASK-[N]:
+    Status: ABANDONED
+    Abandoned at: [which step was in progress — Step 1 / Step 2 / Step 3 check [X]]
+    Partial files: [list any files that were created or modified before interruption]
+  Print: "Task marked ABANDONED. On next session, review partial files before restarting."
+  The partial files may need manual cleanup before the task is restarted as TODO.
+
+─────────────────────────────────────────
+STEP 1 — WRITE FAILING TESTS (TDD, outside-in)
+─────────────────────────────────────────
+Start from the outermost test that proves the acceptance criteria.
+Work inward to unit tests. Write ALL test files before any implementation.
+
+Read plan.md §13 to determine the test type, location, and naming convention.
+The test file is permanent — it will be committed alongside the implementation
+and will run in regression for every future task.
+
+  TYPE: backend-domain
+    Write a UNIT TEST for the domain layer.
+    Location: plan.md §13 unit_tests.location
+    Framework: plan.md §13 unit_tests.framework
+    Cover:
+      - Each invariant from §4: attempting to violate it raises the correct error
+      - Each domain event: the aggregate raises it under the correct condition
+      - Each state transition: the aggregate reaches the correct state
+      - Value objects: equality by value, immutable, invalid construction rejected
+
+  TYPE: backend-infra
+    Write an INTEGRATION TEST for the repository.
+    Location: plan.md §13 integration_tests.location
+    Framework: plan.md §13 integration_tests.framework (with Testcontainers or equivalent)
+    Cover:
+      - save() then findById() returns an identical aggregate
+      - Any query methods implied by §8 endpoints return correct results
+      - Optimistic lock conflict (if concurrency.strategy is optimistic_version):
+        concurrent save raises the correct conflict error
+      - Soft delete (if soft_delete: yes in §12): deleted records are excluded from queries
+
+  TYPE: backend-api
+    Write an API TEST using the tool from plan.md §13 api_testing_tool.selected.
+    Location: plan.md §13 api_tests.location
+    Naming: plan.md §13 api_tests.naming_convention
+    For each endpoint implemented in this task, write test cases for:
+      - Happy path: correct request → expected status code + response shape from §8
+      - Auth required: unauthenticated request → 401 with correct envelope
+      - Each validation error: malformed input → 400 with field-level detail in §7 envelope
+      - Each domain error: business rule violation → correct status + domain_error envelope
+      - Idempotency (if §8 says idempotent: yes): duplicate request → same result, not error
+      - Correlation ID: response contains the header from §8 correlation_id_header_name
+      - Error envelope shape: all four error types use the §7 envelope structure exactly
+    ALSO write unit tests for the use case class and controller:
+      - Use case: correct orchestration of domain objects without business logic
+      - Controller: input validation rejects malformed requests before use case is called
+
+  TYPE: shared
+    Write a UNIT TEST validating the generated type contract.
+    Cover: generated types match the api-contract.yaml schema;
+    breaking changes in the schema fail the test.
+
+  TYPE: frontend-data
+    Write a UNIT TEST for the data layer module.
+    Framework: plan.md §13 unit_tests.framework
+    Cover:
+      - Happy path: successful API response → correct typed return value
+      - Each of the four error types from §7: correct discriminated union tag
+      - Correlation ID: included in infrastructure_error and unexpected_error objects
+      - Network failure (simulated): returns typed infrastructure_error, never throws
+      - All functions return Result<T,E> — none of them throw under any condition
+
+  TYPE: frontend-feature
+    Write an E2E TEST using Playwright.
+    Location: plan.md §13 e2e_tests.location
+    Naming: plan.md §13 e2e_tests.naming_convention
+    For the feature implemented in this task, write test cases for:
+      - Happy path of every acceptance criterion:
+        navigate to the route → interact → verify expected content/state
+      - One error state: trigger a validation error or failed request;
+        verify the correct user-facing error message appears (from §7)
+      - If the error message should show a correlation ID (from §11): assert it is visible
+    Use Playwright's accessibility tree for element selection, not CSS selectors.
+    Tests must run headlessly in CI without Playwright MCP.
+
+  TYPE: e2e
+    Write an E2E TEST covering the full cross-feature journey.
+    Location: plan.md §13 e2e_tests.location
+    Cover the complete user journey from start to final state.
+    Include an error trigger midway through to verify correlation ID is visible.
+    The test must be completely independent: it sets up its own test data.
+
+START THE DEV ENVIRONMENT if not running (plan.md §14 task_runner.dev).
+Wait until ready. API tests and E2E tests need it to fail meaningfully.
+
+  DEV SERVER FAILURE PROTOCOL:
+  If the dev server fails to start:
+    1. Print the full startup error output.
+    2. Do NOT proceed to run tests — they will produce misleading results.
+    3. Do NOT mark any check as PASS.
+    4. Diagnose: is it a port conflict, missing environment variable,
+       database not running, or compilation error?
+    5. Fix the startup issue first.
+    6. Only proceed once the dev server responds to a health check:
+       curl -f http://localhost:[backend_port]/health/ready
+       (path from plan.md §11 health_checks.readiness.path)
+    Print: "Dev server started and healthy — proceeding."
+
+TEST DATA ISOLATION — enforce before writing test code:
+  Read plan.md §13 test_data_strategy.
+  Every test you write must follow these rules:
+    - Unit and integration tests: use factory functions from
+      plan.md §13 test_data_strategy.factory_location
+      Never construct domain objects by hand in test code.
+    - API tests: each test creates its own data via the API or test helpers
+      and cleans up in teardown. Never depend on data from another test.
+    - E2E tests: use the approach from plan.md §13 e2e_data_setup.strategy.
+      Each test creates its own user / entity and is independent.
+      Tests must pass when run in any order and in parallel.
+  If the factory location does not exist yet: create it as part of this task.
+
+RUN THE TESTS. Expected: FAIL (implementation does not exist yet).
+Print full output.
+  - Unit tests: fail with "class not found" or assertion errors — correct.
+  - API tests: fail with connection refused or 404 — both are correct.
+  - E2E tests: fail with "element not found" or navigation error — correct.
+
+If any test passes at this stage: STOP.
+A test that passes before implementation exists is testing nothing.
+Rewrite it to fail, then continue.
+
+Confirm: "Test file: [path] — [N] test cases, all failing. Proceeding."
+
+─────────────────────────────────────────
+STEP 2 — IMPLEMENT
+─────────────────────────────────────────
+Write the implementation until the tests from Step 1 pass.
+
+Rules (non-negotiable):
+- Exact names from plan.md — any deviation is a bug, not a style choice.
+- Never violate a layer rule or §16 constraint. Redesign instead.
+- Never ask permission to violate a rule.
+- Only touch: Scope.Creates, Scope.Modifies, and the test file from Step 1.
+- Never implement any part of another task speculatively.
+- Spec conflict found → stop and report. Never resolve unilaterally.
+
+─────────────────────────────────────────
+STEP 3 — RUN ALL CHECKS
+─────────────────────────────────────────
+Run every check in order. Print full output.
+A task cannot be marked DONE until every check passes.
+
+[A] ARCHITECTURAL TESTS
+  Run arch test command from plan.md §20.
+  Required: PASS. If fail: fix the layer violation. Do not skip.
+
+[B] NEW TESTS PASS
+  Run only the test file created in Step 1.
+  Required: all pass.
+  If any fail: fix the implementation. Do not weaken the tests to make them pass.
+
+  FLAKY TEST WATCH: if a test passes on the first run but you suspect it
+  might be timing-dependent or state-dependent, run it 5 times consecutively:
+    [test runner command] --repeat=5  (or equivalent for the framework)
+  If it fails on any of those runs, it is already flaky.
+  Fix the root cause (explicit wait conditions, better test isolation)
+  before marking the task DONE. Do not mask flakiness with retries.
+
+[C] REGRESSION SUITE — zero new failures allowed
+  Run the full test suite (all tests, not just the new ones):
+    For backend-domain tasks:   plan.md §13 regression_command.api_only
+    For backend-infra tasks:    plan.md §13 regression_command.api_only
+    For backend-api tasks:      plan.md §13 regression_command.api_only
+    For shared tasks:           plan.md §13 regression_command.api_only
+    For frontend-data tasks:    plan.md §13 regression_command.api_only
+    For frontend-feature tasks: plan.md §13 regression_command.all
+    For e2e tasks:              plan.md §13 regression_command.all
+  Required: ZERO new test failures.
+  If a previously passing test now fails:
+    This task introduced a regression. Do not mark DONE.
+    Identify exactly which change broke the existing test.
+    Fix the regression, then re-run the full regression suite.
+    Print: "REGRESSION FOUND AND FIXED — [test name]: [root cause and fix]"
+  This check exists because every new task can break existing features.
+  Running only new tests is not sufficient.
+
+[D] LINTER
+  Run lint command from CLAUDE.md. Required: no errors.
+
+[E] DEPENDENCY VULNERABILITY SCAN
+  Run scanning tool from plan.md §9 dependency_security.scanning_tool.
+  Required: no CRITICAL or HIGH CVEs in direct dependencies.
+  If found:
+    Print: SECURITY BLOCK — [CVE ID]: [package] [severity]
+    Do not mark DONE. User must update the dependency or document an accepted
+    risk in plan.md §9 with justification and remediation deadline.
+  If tool not installed: install it now. Add to CI. Document in plan.md §9.
+
+[F] MIGRATION TEST — backend-infra tasks only
+  If Type is backend-infra and a migration file was created:
+    Apply migration to test database (tool from plan.md §12 migration_strategy).
+    Verify every table, column type, nullability, and index from §12 exists.
+    Print schema diff. Required: matches §12 exactly.
+    If mismatch: fix migration and re-run. Do not mark DONE.
+
+[G] OBSERVABILITY ASSERTIONS — backend-api and frontend-data tasks only
+  Verify that the test file from Step 1 already asserts observability.
+  If any assertion is missing: add it to the test file now (not optional).
+
+  If Type is backend-api, verify the API test asserts:
+    1. Correlation ID header (exact name from §8) present in HTTP response
+    2. Error envelope shape matches §7 exactly for each error type tested
+    (Structured log assertion is not automated — note in completion report
+     that log output was manually verified during implementation)
+
+  If Type is frontend-data, verify the unit test asserts:
+    1. Correlation ID attached to infrastructure_error and unexpected_error objects
+    2. All four error types return the correct discriminated union tag
+    3. No function throws — all errors are returned as typed values
+
+[H] BROWSER VERIFICATION — frontend-feature and e2e tasks only
+  Run the E2E test file headlessly first:
+    Command: plan.md §13 regression_command.e2e_only
+    Required: all tests pass headlessly.
+    This proves the feature works without a visible browser and will pass in CI.
+
+  If Playwright MCP is available (local Claude Code):
+    Replay the E2E test scenario using Playwright MCP visible browser.
+    This adds human-visible confirmation that the UI looks correct.
+    Take a screenshot at the final state of the happy path.
+    Save to: docs/test-results/[YYYY-MM-DD]-TASK-[N]-[feature].png
+    Read browser console output — flag any errors or unhandled rejections.
+
+    If the headless test passes but the visible browser reveals a visual bug
+    not caught by the test assertions (broken layout, wrong color, overlapping
+    elements): note it in the completion report. It is not a blocker unless
+    it prevents the user from completing the action.
+
+    If the headless test fails:
+      DEBUG PROTOCOL:
+      1. Take a screenshot of the failure state.
+      2. Use Chrome DevTools MCP to read console errors and network requests.
+      3. Find the correlation ID in any failed API response.
+         Use it to locate the corresponding backend log entry.
+      4. Trace the root cause to its source layer.
+      5. Fix. Re-run headless E2E only. Then re-run check [C] regression suite.
+
+  If Playwright MCP is not available (web sandbox):
+    Headless only. Print warning: "Playwright MCP not available — visual
+    verification skipped. All headless E2E tests pass."
+
+  If Type is backend-domain, backend-infra, shared, or frontend-data:
+    Skip check [H]. N/A.
+
+[I] SECRET SCANNING — all tasks
+  Run gitleaks on all files staged or modified in this task:
+    gitleaks detect --source . --redact -q
+  Required: no secrets detected.
+  If gitleaks is not installed: print a warning and remind the user to run
+    bash scripts/setup-hooks.sh
+  to install it. Do not block on this if the tool is missing, but note it.
+  If a secret is detected:
+    Print: SECRET FOUND — [file:line] [description, redacted]
+    Do NOT commit. The user must:
+      1. Remove the secret from the file
+      2. If already in git history: rotate the credential immediately,
+         then use git-filter-repo or BFG to remove it from history
+      3. Add a false-positive allowance to .gitleaks.toml if it is not
+         a real secret, with a comment explaining why
+
+─────────────────────────────────────────
+STEP 4 — COMPLETION REPORT
+─────────────────────────────────────────
+
+Print:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMPLETION REPORT — TASK-[N]
+
+Test file: [path] ([N] test cases committed)
+
+Acceptance criteria:
+  [1] [criterion] → SATISFIED — [test name that proves it]
+  ...
+
+Do NOT constraint: [restate] → RESPECTED — [how]
+
+Checks:
+  [A] Arch tests:      PASS
+  [B] New tests:       PASS ([N] cases, stability-checked)
+  [C] Regression:      PASS ([total N] tests, 0 new failures)
+  [D] Linter:          PASS
+  [E] Dep scan:        PASS | BLOCKED — [details]
+  [F] Migration:       PASS | N/A
+  [G] Observability:   PASS | N/A
+  [H] Browser verify:  PASS (screenshot: [path]) | headless only | N/A
+  [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
+
+Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
+
+━━ SPEC LEARNINGS ━━━━━━━━━━━━━━━━━━━━━━
+  A) Spec decision wrong/impractical?    [yes — description | none]
+  B) Gap requiring a decision?           [yes — description | none]
+  C) CLAUDE.md rule ambiguous?           [yes — description | none]
+  D) Assumption invalidated by library?  [yes — description | none]
+
+For each finding: propose a change to plan.md [section.field → new value].
+Do NOT apply until user confirms. List all and wait for confirmation.
+After confirmation: update plan.md and record in tasks.md.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Update tasks.md for TASK-[N]:
+  Status: DONE
+  Built: [one sentence]
+  Test file: [path]
+  Spec changes applied: [list | none]
+
+# Recovery note for the next session if this task was previously ABANDONED:
+# If the task was previously ABANDONED and this is a restart, verify that
+# partial files from the previous attempt are consistent with what was just built.
+# Remove any stale partial artifacts before marking DONE.
+
+Count total DONE tasks. If count % 10 == 0: print
+  "10 tasks completed. The workflow will now run /speckit.retrospect."

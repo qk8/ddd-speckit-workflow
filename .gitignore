@@ -1,0 +1,67 @@
+# Environment variables — NEVER commit real secrets
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Only commit the example file with placeholder values:
+# .env.example  ← DO commit this (no real values)
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+target/
+build/
+dist/
+out/
+.next/
+.nuxt/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Test outputs
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+docs/test-results/*.png
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.gradle/
+.gradle/
+gradle-app.setting
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Spec Kit runtime
+.specify/runs/
+
+# Gitleaks false-positive notes (the config itself IS committed)
+# .gitleaks.toml  ← DO commit this

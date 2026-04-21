@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "notes": "Browser testing and E2E automation. Requires: npx playwright install chromium"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"],
+      "notes": "Browser debugging: network inspection, console errors, performance profiling"
+    }
+  },
+  "notes": [
+    "This file configures MCP servers for Claude Code (project scope).",
+    "Both servers require local Claude Code — they do NOT work in claude.ai/code web sandbox.",
+    "Run scripts/setup-mcp.sh once per machine to install browser binaries and register MCPs.",
+    "Playwright MCP: use for frontend-feature and e2e tasks (browser testing).",
+    "Chrome DevTools MCP: use for debugging network, console errors, and performance."
+  ]
+}

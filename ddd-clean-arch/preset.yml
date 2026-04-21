@@ -1,0 +1,35 @@
+id: ddd-clean-arch
+name: "DDD + Clean Architecture"
+version: "2.0.0"
+author: "your-org"
+description: >
+  Overrides Spec Kit's plan, tasks, and implement templates with
+  Domain-Driven Design and Clean Architecture standards. All project
+  context is read from project-brief.md — no CLI input duplication.
+  Produces a 20-section architecture document as the technical plan,
+  a structured backlog with dependency tracking, and enforces failing-
+  first tests, architectural enforcement tests, observability checks,
+  migration schema validation, and dependency vulnerability scanning
+  on every implementation task.
+tags:
+  - ddd
+  - clean-architecture
+  - modular-monolith
+  - production-grade
+
+# Template overrides: replace Spec Kit's default templates with ours.
+# Spec Kit uses the 'replace' strategy — our file takes full precedence.
+templates:
+  plan:
+    source: templates/plan-template.md
+    strategy: replace
+  tasks:
+    source: templates/tasks-template.md
+    strategy: replace
+  constitution:
+    source: templates/constitution-template.md
+    strategy: replace
+
+# Command overrides: replace Spec Kit's default speckit.implement.
+commands:
+  - speckit.implement
