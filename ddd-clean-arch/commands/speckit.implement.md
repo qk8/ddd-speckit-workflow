@@ -4,6 +4,15 @@ Determine the current feature: scan .specify/specs/ and find the feature
 whose tasks.md contains the first TODO task.
 Read its plan.md and tasks.md.
 
+PARALLEL MODE: If the workflow input includes "--parallel" (indicated by the
+presence of a workflow input section with parallel flag):
+  1. Find ALL TODO tasks whose Depends-on tasks are all DONE.
+  2. Group them by dependency level (tasks with no inter-dependencies = same batch).
+  3. Process each batch sequentially. Within a batch, process tasks one at a time.
+  4. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
+  5. Continue to the next batch. Stop when no more TODO tasks with all dependencies met.
+  6. In parallel mode, the completion report covers the entire batch.
+
 Use targeted spec loading — read only the plan.md sections relevant to
 the next task's Type. Do not read plan.md end to end:
 
@@ -326,6 +335,29 @@ A task cannot be marked DONE until every check passes.
       3. Add a false-positive allowance to .gitleaks.toml if it is not
          a real secret, with a comment explaining why
 
+[J] PERFORMANCE BUDGET — backend-api and frontend-feature tasks only
+  Read plan.md §10 for the performance budget:
+    end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
+
+  If Type is backend-api:
+    Run a quick load test against the endpoint(s) implemented in this task:
+      ab -n 100 -c 10 http://localhost:[port]/[endpoint]  (or wrk, or equivalent)
+    Measure p95 response time. Compare against backend_p95 from §10.
+    If p95 exceeds budget: print WARNING — "[endpoint] p95=[N]ms exceeds budget [budget]ms"
+    Do NOT block on performance warning, but record it for the next retrospect.
+
+  If Type is frontend-feature:
+    Use Chrome DevTools MCP to measure LCP on the feature page:
+      1. Navigate to the page
+      2. Run performance trace (autoStop=true, 5s duration)
+      3. Extract LCP value from the trace
+    Compare LCP against frontend budget from §10.
+    If LCP exceeds budget: print WARNING — "LCP=[N]ms exceeds budget [budget]ms"
+    Note in completion report for retrospect review.
+
+  If Type is backend-domain, backend-infra, shared, frontend-data, or e2e:
+    Skip check [J]. N/A.
+
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
@@ -353,6 +385,7 @@ Checks:
   [G] Observability:   PASS | N/A
   [H] Browser verify:  PASS (screenshot: [path]) | headless only | N/A
   [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
+  [J] Perf budget:     PASS | WARNING — [details] | N/A
 
 Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
 
@@ -378,5 +411,5 @@ Update tasks.md for TASK-[N]:
 # partial files from the previous attempt are consistent with what was just built.
 # Remove any stale partial artifacts before marking DONE.
 
-Count total DONE tasks. If count % 10 == 0: print
-  "10 tasks completed. The workflow will now run /speckit.retrospect."
+Count total DONE tasks. If count % 10 == 0 (or matches adaptive cadence): print
+  "[N] tasks completed. The workflow will now run /speckit.retrospect."

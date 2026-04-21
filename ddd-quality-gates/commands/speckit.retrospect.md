@@ -18,11 +18,17 @@ Cross-check: are all in plan.md?
 ━━ SECTION 2: PERFORMANCE BUDGET ━━━━━━
 
 plan.md §10: end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
-DONE backend-api tasks: any profiling data? Compare against §10.
-DONE frontend-feature tasks: any Lighthouse/bundle data? Compare against §10.
+
+Check [J] results from all DONE tasks:
+  backend-api tasks with perf warnings: list each endpoint, measured p95, budget.
+  frontend-feature tasks with perf warnings: list each page, measured LCP, budget.
+
+If any Check [J] warning exists:
+  WARNING: [N] task(s) exceeded performance budget.
+  List: TASK-[N] — [endpoint/page] measured=[N]ms budget=[N]ms
 
 Budget plausible: yes | uncertain | likely violated
-Basis: [measured data | no data yet]
+Basis: [measured data from Check [J] | no data yet]
 Recommendation: [none | run a load test | revisit budget]
 
 ━━ SECTION 3: EDGE CASE COVERAGE ━━━━━━

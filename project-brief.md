@@ -31,6 +31,13 @@ monorepo_tool: [e.g. pnpm workspaces + Turborepo]
 ## Known external integrations
 [External systems and services this system will communicate with.]
 
+## Complexity
+[simple | medium | complex]
+simple — small project (< 30 tasks), single team, low risk
+medium — moderate project (30-80 tasks), single team
+complex — large project (80+ tasks), multiple teams, high availability required
+(defaults to medium if not specified)
+
 ## Security posture
 [How sensitive is the data? Which compliance requirements?
 Rate limiting, audit log, etc. needed?]

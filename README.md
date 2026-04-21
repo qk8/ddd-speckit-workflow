@@ -17,6 +17,7 @@ scripts/
   setup-mcp.sh                             ← One-time MCP + Playwright setup (run once per machine)
   setup-hooks.sh                           ← One-time pre-commit hook setup (run once per machine)
   check-tasks.sh                           ← Task progress helper (used by workflow)
+  validate-tasks.sh                        ← Task dependency graph validation (used by workflow)
   ci-local.sh                              ← Run full CI pipeline locally (--fast | --e2e-only)
 ddd-clean-arch/                            ← Preset
   preset.yml
@@ -25,7 +26,7 @@ ddd-clean-arch/                            ← Preset
     tasks-template.md                      ← Structured backlog format
     constitution-template.md              ← Layer rules and constraints
   commands/
-    speckit.implement.md                   ← Build override (9 checks: TDD + regression + security + browser)
+    speckit.implement.md                   ← Build override (10 checks: TDD + regression + security + browser + perf budget)
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/
@@ -57,6 +58,7 @@ Edit `project-brief.md`. Fill in every field:
 - What the system does (2-5 sentences)
 - Users and scale
 - Stack (all 6 fields)
+- Complexity: simple | medium | complex (controls retrospective cadence)
 - Hard constraints, out of scope, external integrations, security posture
 
 **This is the only place you enter project details.** The workflow reads from here.
@@ -75,6 +77,7 @@ cp /path/to/boilerplate/project-brief.md .
 cp /path/to/boilerplate/.gitignore .
 mkdir -p scripts .claude
 cp /path/to/boilerplate/scripts/check-tasks.sh scripts/
+cp /path/to/boilerplate/scripts/validate-tasks.sh scripts/
 cp /path/to/boilerplate/scripts/setup-mcp.sh scripts/
 cp /path/to/boilerplate/scripts/setup-hooks.sh scripts/
 cp /path/to/boilerplate/scripts/ci-local.sh scripts/
@@ -123,7 +126,7 @@ specify workflow list-runs
 specify workflow resume <run-id>
 ```
 
-## The 9 quality checks
+## The 10 quality checks
 
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
@@ -136,6 +139,7 @@ specify workflow resume <run-id>
 | [G] Observability | Correlation ID, logging, error taxonomy assertions | backend-api, frontend-data |
 | [H] Browser verification | Headless E2E + optional Playwright MCP visual replay | frontend-feature, e2e |
 | [I] Secret scan | gitleaks — no credentials or secrets in committed files | All |
+| [J] Performance budget | p95 response time / LCP within §10 budget | backend-api, frontend-feature |
 
 ### TDD and regression (checks [B] + [C])
 
@@ -182,11 +186,11 @@ check [H] runs headless only — all other checks are unaffected.
 
 | Command | When |
 |---------|------|
-| `/speckit.implement` | One task — main build loop |
+| `/speckit.implement` | One task or batch (with --parallel) — main build loop |
 | `/speckit.test` | Standalone test or debug session |
 | `/speckit.verify` | Spec-code drift check |
 | `/speckit.review` | Design quality review |
-| `/speckit.retrospect` | Every 10 DONE tasks |
+| `/speckit.retrospect` | Adaptive cadence (simple: 15, medium: 10, complex: 5 tasks) |
 | `/speckit.status` | Progress dashboard |
 | `/speckit.context` | Targeted spec loading |
 

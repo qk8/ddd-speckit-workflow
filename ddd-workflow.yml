@@ -8,8 +8,9 @@ workflow:
     Full spec-driven development cycle with DDD and Clean Architecture.
     All project context is read from project-brief.md — no CLI duplication.
     Phases: clarify → spec → plan A (§1-10) → plan B (§11-14) →
-    plan C (§15-20 + companion files) → tasks → implement loop
-    (one task, 9 checks, TDD) → retrospect every 10 tasks → final verify.
+    plan C1 (§15-16) → plan C2 (§17-20 + conventions) → plan C3 (companion files)
+    → tasks → validate dependency graph → implement loop
+    (batched parallel tasks, 10 checks, TDD) → adaptive retrospective → final verify.
 
 requires:
   speckit_version: ">=0.7.2"
@@ -35,6 +36,7 @@ steps:
           - What does this system do (at least 2 sentences)
           - Stack: backend_language, backend_framework, database,
                    frontend_language, frontend_framework, monorepo_tool
+          - Complexity: simple | medium | complex
           - At least one hard constraint or explicit "none"
           - At least one out-of-scope item or explicit "none"
           - Security posture
@@ -266,69 +268,71 @@ steps:
     on_revise:
       goto: plan-part-b
 
-  # ── PHASE 3C: §15–§20 + ALL COMPANION FILES ───────────────────
-  # Separate pass so edge cases, constraints, and self-critique get full attention.
-  - id: plan-part-c
+  # ── PHASE 3C1: §15–§16 (edge cases + constraints) ─────────────
+  # Fast, low-risk — domain-specific edge cases and hard constraints.
+  - id: plan-part-c1
     command: speckit.plan
     integration: claude
     input:
       args: >
-        §1–§14 of plan.md are approved. Produce §15–§20 and all companion
-        files. Be thorough — these sections get the full context window.
-        Call out any tension with §1–§14 explicitly.
+        §1–§14 of plan.md are approved. Produce §15–§16 only.
 
-        Produce:
-          §15 Edge cases & failure modes
-              Minimum 10 scenarios. Do not include concurrency conflicts (§4 covers those).
-              Focus on domain-specific scenarios. For each FAILURE: detection, response, recovery.
-              Be specific — "the payment provider returns a 429" not "upstream failure".
-              Spend time here. Shallow edge cases are the most common spec weakness.
+        §15 Edge cases & failure modes
+            Minimum 10 scenarios. Do not include concurrency conflicts (§4 covers those).
+            Focus on domain-specific scenarios. For each FAILURE: detection, response, recovery.
+            Be specific — "the payment provider returns a 429" not "upstream failure".
 
-          §16 Architectural constraints
-              Exactly 10. Specific to THIS codebase — not generic advice.
-              Form: "Never [specific action] because [specific consequence in this domain]."
-              These become CLAUDE.md "What NOT to do" and are enforced by arch tests.
+        §16 Architectural constraints
+            Exactly 10. Specific to THIS codebase — not generic advice.
+            Form: "Never [specific action] because [specific consequence in this domain]."
 
-          §17 Definition of done
-              Concrete verifiable criteria. Must align with the 9 checks in speckit.implement.
-              Include: test file committed, regression suite green, secret scan clean.
+        End with: "Plan Part C1 (§15–§16) complete. Waiting for review."
 
-          §18 Self-critique (mandatory — do not soften)
-              The 3 weakest points. For each: problem, reason accepted, early warning signs,
-              what changes under 20x load / second team / key dependency lost.
+  - id: review-plan-c1
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C1 (§15–§16) ━━
 
-          §19 ADR log
-              One ADR per: aggregate boundary decision, locking strategy, tech stack selection,
-              bounded context boundary, token delivery, CORS policy, rendering strategy,
-              contract sharing strategy, and any irreversible decision.
+      [ ] §15 Edge cases: 10 specific scenarios with detection/response/recovery?
+          Domain-specific (not generic "upstream failure")?
+      [ ] §16 Constraints: exactly 10? Each specific to this codebase with consequence?
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c1
 
-          §20 Architectural test inventory
-              Populate after generating the enforcement test files below.
+  # ── PHASE 3C2: §17–§20 + conventions.md ────────────────────────
+  # Medium risk — DoD, self-critique, ADRs, arch tests, conventions.
+  - id: plan-part-c2
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§14 and §15–§16 of plan.md are approved. Produce §17–§20 and
+        .specify/memory/conventions.md.
 
-        Companion files to produce:
+        §17 Definition of done
+            Concrete verifiable criteria. Must align with the 10 checks in speckit.implement.
+            Include: test file committed, regression suite green, secret scan clean.
 
-          docs/spec/api-contract.yaml
-            OpenAPI 3.1. Error envelope as $component referenced everywhere.
-            Every endpoint from §8. CORS + token delivery as top comment block.
-            Cache-control response headers for cacheable endpoints.
+        §18 Self-critique (mandatory — do not soften)
+            The 3 weakest points. For each: problem, reason accepted, early warning signs,
+            what changes under 20x load / second team / key dependency lost.
 
-          docs/spec/data-model.sql
-            DDL from §12. Migration strategy as top comment block.
-            Each table: comment stating aggregate and bounded context.
-            Each index: comment stating which use case it supports.
-            Include teardown SQL for test database setup (schema drop + recreate).
+        §19 ADR log
+            One ADR per: aggregate boundary decision, locking strategy, tech stack selection,
+            bounded context boundary, token delivery, CORS policy, rendering strategy,
+            contract sharing strategy, and any irreversible decision.
 
-          docs/spec/backend-interfaces.[ext]
-            Domain layer signatures only — no implementation bodies.
-            Aggregate roots, value objects, domain events, repository interfaces.
-            Zero infrastructure imports.
+        §20 Architectural test inventory
+            Generate enforcement test files:
+              Java backend → [module]/src/test/java/arch/ArchitectureTest.java (ArchUnit)
+              TypeScript backend → [module]/.dependency-cruiser.cjs
+              Other → closest available static analysis tool config
+              Frontend → [frontend-module]/.dependency-cruiser.cjs
+            Run arch tests on empty codebase. Must pass.
+            Populate §20 after generating arch test files.
 
-          docs/spec/frontend-interfaces.[ext]
-            Four error types as discriminated union (tags match §7 exactly).
-            Auth state type consistent with §8 token_delivery.
-            One typed async function per endpoint — Result<T,E>, never throws.
-
-          .specify/memory/conventions.md
+        .specify/memory/conventions.md
             Naming: use cases, repositories, events, value objects, test classes.
             Method conventions: execute signature, factory vs constructor.
             Error handling conventions per layer.
@@ -336,81 +340,105 @@ steps:
             Shared: commit format, TODO format.
             Decision log section (empty — grows via /speckit.review).
 
-          Architectural enforcement test files:
-            Java backend → [module]/src/test/java/arch/ArchitectureTest.java (ArchUnit)
-            TypeScript backend → [module]/.dependency-cruiser.cjs
-            Other → closest available static analysis tool config
-            Frontend → [frontend-module]/.dependency-cruiser.cjs
+        End with: "Plan Part C2 (§17–§20 + conventions) complete. Waiting for review."
 
-          Run arch tests on empty codebase. Must pass.
-          A test that fails before any source code exists is misconfigured.
-          Populate §20 after generating arch test files.
-
-          .gitignore (copy from boilerplate and verify):
-            The boilerplate .gitignore covers common patterns.
-            After copying, verify that any project-specific build output
-            directories, generated files, or secret file patterns are added.
-            The .env file must be listed. Only .env.example is committed.
-
-          CLAUDE.md (update, max 150 lines):
-            Use ddd-clean-arch/templates/claude-md-template.md as the structure.
-            Fill in every placeholder from plan.md:
-              [PROJECT_NAME]       → from project-brief.md Project name
-              What this is         → from §1 requirements scope + out_of_scope
-              Stack                → from §14 stack + §13 api_testing_tool + e2e_testing_tool
-              Architecture         → from §6 modules + future_extraction_candidates
-              Module boundaries    → from §6 modules (owns + does_not_own per module)
-              Ubiquitous language  → from §2 + §4 (aggregate roots, events, value objects, repos)
-              What NOT to do       → from §16 verbatim (all 10 constraints, do not paraphrase)
-              Test conventions     → from §13 (all frameworks, locations, runners)
-              Regression commands  → from §13 regression_command (all three)
-              Definition of done   → from §17 verbatim
-            The output must be ≤150 lines. If it exceeds 150 lines, condense the
-            Architecture and Module boundaries sections — never cut §16 or §17.
-
-          scripts/ci-local.sh (fill in the COMMANDS section):
-            Populate the command variables at the top of scripts/ci-local.sh
-            using the values from plan.md §13 and §14:
-              SECRET_SCAN_CMD: gitleaks detect --source . --redact -q
-              LINT_CMD: from §14 task_runner.lint
-              ARCH_TEST_CMD: from §20 backend_arch_tool runner + frontend arch:check
-              UNIT_TEST_CMD: from §13 unit_tests runner
-              INTEGRATION_TEST_CMD: from §13 integration_tests runner
-              API_TEST_CMD: from §13 api_testing_tool.runner
-              CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
-              E2E_TEST_CMD: from §13 regression_command.e2e_only
-
-        End with: "Plan Part C (§15–§20 + companion files) complete. Waiting for final review."
-
-  - id: review-plan-c
+  - id: review-plan-c2
     type: gate
     message: |
-      ━━ REVIEW PLAN PART C (§15–§20 + COMPANION FILES) ━━
+      ━━ REVIEW PLAN PART C2 (§17–§20 + conventions) ━━
 
-      §15–§20:
-        [ ] §15 Edge cases: 10 specific scenarios with detection/response/recovery?
-            Are they domain-specific (not generic "upstream failure")?
-        [ ] §16 Constraints: exactly 10? Each specific to this codebase with consequence?
-        [ ] §17 Done criteria: aligned with the 9 implement checks?
-        [ ] §18 Self-critique: honest? Early warning signs defined for each weak point?
-        [ ] §19 ADRs: one per aggregate boundary? Per locking strategy? Per stack choice?
-        [ ] §20 Arch test inventory: populated after arch tests generated?
-
-      Companion files:
-        [ ] api-contract.yaml: all §8 endpoints present? Error envelope as $component?
-        [ ] data-model.sql: schema matches §12? Teardown SQL included?
-        [ ] backend-interfaces: signatures match §4? Zero infra imports?
-        [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
-        [ ] conventions.md: naming patterns filled in for this stack?
-        [ ] CLAUDE.md: ≤150 lines? All template sections filled (no [PLACEHOLDER] text)?
-            §16 constraints verbatim? Names from §2 and §4? Regression commands listed?
-        [ ] Arch test files: pass on empty codebase?
-        [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
-
-      Edit any file directly before approving.
+      [ ] §17 Done criteria: aligned with the 10 implement checks?
+      [ ] §18 Self-critique: honest? Early warning signs defined?
+      [ ] §19 ADRs: one per aggregate boundary? Per locking strategy? Per stack choice?
+      [ ] §20 Arch test inventory: populated after arch tests generated?
+      [ ] Arch test files: pass on empty codebase?
+      [ ] conventions.md: naming patterns filled in for this stack?
     options: [approve, revise]
     on_revise:
-      goto: plan-part-c
+      goto: plan-part-c2
+
+  # ── PHASE 3C3: COMPANION FILES ─────────────────────────────────
+  # High risk — many files, each with detailed requirements.
+  - id: plan-part-c3
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§20 of plan.md are approved. Produce companion files only.
+
+        docs/spec/api-contract.yaml
+          OpenAPI 3.1. Error envelope as $component referenced everywhere.
+          Every endpoint from §8. CORS + token delivery as top comment block.
+          Cache-control response headers for cacheable endpoints.
+
+        docs/spec/data-model.sql
+          DDL from §12. Migration strategy as top comment block.
+          Each table: comment stating aggregate and bounded context.
+          Each index: comment stating which use case it supports.
+          Include teardown SQL for test database setup (schema drop + recreate).
+
+        docs/spec/backend-interfaces.[ext]
+          Domain layer signatures only — no implementation bodies.
+          Aggregate roots, value objects, domain events, repository interfaces.
+          Zero infrastructure imports.
+
+        docs/spec/frontend-interfaces.[ext]
+          Four error types as discriminated union (tags match §7 exactly).
+          Auth state type consistent with §8 token_delivery.
+          One typed async function per endpoint — Result<T,E>, never throws.
+
+        .gitignore (copy from boilerplate and verify):
+          The boilerplate .gitignore covers common patterns.
+          After copying, verify that any project-specific build output
+          directories, generated files, or secret file patterns are added.
+          The .env file must be listed. Only .env.example is committed.
+
+        CLAUDE.md (update, max 150 lines):
+          Use ddd-clean-arch/templates/claude-md-template.md as the structure.
+          Fill in every placeholder from plan.md:
+            [PROJECT_NAME]       → from project-brief.md Project name
+            What this is         → from §1 requirements scope + out_of_scope
+            Stack                → from §14 stack + §13 api_testing_tool + e2e_testing_tool
+            Architecture         → from §6 modules + future_extraction_candidates
+            Module boundaries    → from §6 modules (owns + does_not_own per module)
+            Ubiquitous language  → from §2 + §4 (aggregate roots, events, value objects, repos)
+            What NOT to do       → from §16 verbatim (all 10 constraints, do not paraphrase)
+            Test conventions     → from §13 (all frameworks, locations, runners)
+            Regression commands  → from §13 regression_command (all three)
+            Definition of done   → from §17 verbatim
+          The output must be ≤150 lines. If it exceeds 150 lines, condense the
+          Architecture and Module boundaries sections — never cut §16 or §17.
+
+        scripts/ci-local.sh (fill in the COMMANDS section):
+          Populate the command variables at the top of scripts/ci-local.sh
+          using the values from plan.md §13 and §14:
+            SECRET_SCAN_CMD: gitleaks detect --source . --redact -q
+            LINT_CMD: from §14 task_runner.lint
+            ARCH_TEST_CMD: from §20 backend_arch_tool runner + frontend arch:check
+            UNIT_TEST_CMD: from §13 unit_tests runner
+            INTEGRATION_TEST_CMD: from §13 integration_tests runner
+            API_TEST_CMD: from §13 api_testing_tool.runner
+            CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
+            E2E_TEST_CMD: from §13 regression_command.e2e_only
+
+        End with: "Plan Part C3 (companion files) complete. Waiting for final review."
+
+  - id: review-plan-c3
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C3 (COMPANION FILES) ━━
+
+      [ ] api-contract.yaml: all §8 endpoints present? Error envelope as $component?
+      [ ] data-model.sql: schema matches §12? Teardown SQL included?
+      [ ] backend-interfaces: signatures match §4? Zero infra imports?
+      [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
+      [ ] conventions.md: naming patterns filled in for this stack?
+      [ ] CLAUDE.md: ≤150 lines? All template sections filled? §16 verbatim?
+      [ ] .gitignore: .env listed? Project-specific patterns added?
+      [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c3
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   - id: tasks
@@ -442,8 +470,35 @@ steps:
       [ ] Each "Do NOT" guard is specific to that task?
       [ ] No task touches more than 5 files or more than 1 aggregate?
       [ ] All Depends-on references are to earlier tasks?
+
+      Approving proceeds to task dependency graph validation before implementation.
     options: [approve, reject]
     on_reject: abort
+
+  # ── PHASE 4.5: TASK DEPENDENCY GRAPH VALIDATION ────────────────
+  # Verify the task graph before starting implementation.
+  # Catches circular dependencies, missing references, and ordering issues.
+  - id: validate-tasks
+    type: shell
+    command: "bash scripts/validate-tasks.sh"
+
+  - id: review-validate-tasks
+    type: gate
+    message: |
+      Review the task dependency graph validation results above.
+
+      ERRORS must be fixed before implementation starts:
+        - Circular dependencies
+        - References to non-existent tasks
+
+      WARNINGS are advisory:
+        - Task ordering issues (depends-on appears after dependent task)
+
+      If there are errors, select "revise" to fix tasks.md.
+      If clean, select "approve" to start implementation.
+    options: [approve, revise]
+    on_revise:
+      goto: tasks
 
   # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
   - id: implement_loop
@@ -502,8 +557,11 @@ steps:
       - id: should_retrospect
         type: if
         condition: >
-          {{ steps.check_remaining.output.done_count | int > 0 and
-             steps.check_remaining.output.done_count | int % 10 == 0 }}
+          {{ steps.check_remaining.output.done_count | int > 0 and (
+             (steps.check_remaining.output.done_count | int >= (steps.check_remaining.output.first_retro_threshold | int) and
+              steps.check_remaining.output.done_count | int % (steps.check_remaining.output.retro_interval | int) == 0) or
+             (steps.check_remaining.output.done_count | int == steps.check_remaining.output.first_retro_threshold | int)
+           ) }}
         then:
           - id: run_retrospect
             command: speckit.retrospect
@@ -522,6 +580,14 @@ steps:
       - id: implement_one
         command: speckit.implement
         integration: claude
+        input:
+          args: >
+            Run with --parallel flag to batch independent tasks.
+            In parallel mode: find all TODO tasks whose dependencies are DONE,
+            group them by dependency level, and implement each task in the
+            same batch sequentially. After the batch, report completion.
+            In single-task mode (no --parallel): implement only the first TODO task.
+            Always check Depends-on before starting.
 
       - id: review-implement
         type: gate
@@ -529,8 +595,9 @@ steps:
           Review the completion report for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] All 9 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan)?
+          [ ] All 10 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget)?
           [ ] Check [C] regression: zero new failures in existing test suite?
+          [ ] Check [J] performance budget: within §10 budget?
           [ ] Test file committed alongside implementation?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
 
