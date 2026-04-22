@@ -126,7 +126,7 @@ steps:
     input:
       args: >
         Read project-brief.md and .specify/specs/[feature]/spec.md.
-        Use plan-template.md.
+        Use ddd-clean-arch/templates/plan-template.md.
 
         Produce ONLY sections §1 through §10 of plan.md:
           §1  Requirements
@@ -525,7 +525,7 @@ steps:
     integration: claude
     input:
       args: >
-        Read plan.md and use tasks-template.md.
+        Read plan.md and use ddd-clean-arch/templates/tasks-template.md.
 
         Produce one task per aggregate (domain layer), one per aggregate
         (infra layer), one per endpoint group (api layer), then shared,

@@ -32,8 +32,6 @@ Print:
 
 ━━ STEP 2: START DEV ENVIRONMENT ━━━━━━━
 
-━━ STEP 2: START DEV ENVIRONMENT ━━━━━━━
-
 Check if the backend and frontend are running on the dev ports from
 plan.md §14 task_runner.dev. If not: start now.
 

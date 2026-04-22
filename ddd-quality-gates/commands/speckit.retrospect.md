@@ -9,8 +9,10 @@ Reports alignment and waits for decisions.
 
 ━━ SECTION 1: PROGRESS ━━━━━━━━━━━━━━━━━
 
-DONE: [N] | TODO: [N] | Total: [N] | Progress: [N]%
+DONE: [N] | TODO: [N] | IN_PROGRESS: [N] | ABANDONED: [N] | Total: [N] | Progress: [N]%
 
+Count all four task states from tasks.md:
+  DONE, TODO, IN_PROGRESS, ABANDONED.
 List all spec changes from DONE tasks ("Spec changes applied" lines).
 Cross-check: are all in plan.md?
   UNSYNCED: TASK-[N] recorded "[change]" but plan.md §[section] still old value.

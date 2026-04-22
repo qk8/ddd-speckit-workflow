@@ -45,7 +45,15 @@ the next task's Type. Do not read plan.md end to end:
   e2e             → §13 e2e_tests + e2e_testing_tool + regression_command,
                     §8 all endpoints, §17
 
-Find the first task in tasks.md where Status is TODO.
+Check for IN_PROGRESS tasks first:
+  Scan tasks.md for any task with Status: IN_PROGRESS.
+  If found:
+    Print: "IN_PROGRESS task detected: TASK-[N] — [title]"
+    Print: "This task was left active from a previous session."
+    Print: "Continuing with this task."
+    Keep Status as IN_PROGRESS (do not change it).
+    Continue to TASK PLAN below with this task.
+  If no IN_PROGRESS task: Find the first task in tasks.md where Status is TODO.
 
 Check all Depends-on tasks. If any is not DONE:
   Print: BLOCKED: TASK-[N] — incomplete dependencies: [list]
