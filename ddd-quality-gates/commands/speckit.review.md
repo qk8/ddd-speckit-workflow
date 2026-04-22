@@ -1,4 +1,8 @@
-Read CLAUDE.md and .specify/memory/conventions.md.
+Locate the current feature by scanning .specify/specs/ for the first
+feature directory. Read from that directory:
+  - plan.md (complete)
+  - tasks.md (complete)
+Also read CLAUDE.md and .specify/memory/conventions.md from the repo root.
 
 This command reviews design quality — not tests (implement does that),
 not spec compliance (verify does that).

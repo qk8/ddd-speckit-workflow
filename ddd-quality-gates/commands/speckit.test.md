@@ -1,4 +1,8 @@
-Read CLAUDE.md and the current feature's plan.md §13 (testing strategy).
+Locate the current feature by scanning .specify/specs/ for the first
+feature directory. Read from that directory:
+  - plan.md (complete)
+  - tasks.md (complete)
+Also read CLAUDE.md from the repo root.
 
 This command runs a targeted test session or debug session on demand —
 independently of the implement loop.
