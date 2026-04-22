@@ -24,11 +24,11 @@ Then read ONLY these plan.md sections based on task Type:
 
   backend-domain  → §2, §4 (aggregate in scope only), §6 domain rules,
                     §7 validation + error taxonomy,
-                    §13 unit_tests (location, framework, coverage_focus),
+                    §13 unit_tests (location, framework, coverage_focus) + regression_command,
                     §16, §17
   backend-infra   → §4 (aggregate in scope), §6 infra rules,
                     §12 (table in scope), migration_strategy,
-                    §13 integration_tests (location, framework),
+                    §13 integration_tests (location, framework) + regression_command,
                     §13 test_data_strategy,
                     §16, §17
   backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope),
@@ -37,19 +37,19 @@ Then read ONLY these plan.md sections based on task Type:
                     §13 test_data_strategy,
                     §16, §17
   shared          → §14 contract + change_detection, §3,
-                    §13 contract_testing,
+                    §13 contract_testing + regression_command,
                     §16, §17
                     + full api-contract + both interface files
   frontend-data   → §7, §8 (endpoints called), §11 correlation header,
                     §14 data layer + auth_flow + observability,
-                    §13 unit_tests,
+                    §13 unit_tests + regression_command,
                     §16, §17
   frontend-feature→ §7 user-facing errors, §14 ui + feature + client state +
                     form_validation + component_library,
-                    §13 e2e_tests + e2e_testing_tool + regression_command,
+                    §13 e2e_tests + regression_command,
                     §13 e2e_data_setup + test_data_strategy,
                     §16, §17
-  e2e             → §13 e2e_tests + e2e_testing_tool + regression_command,
+  e2e             → §13 e2e_tests + regression_command,
                     §13 e2e_data_setup + test_data_strategy,
                     §8 all endpoints, §17
 

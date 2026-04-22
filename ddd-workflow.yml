@@ -638,15 +638,17 @@ steps:
                           Use only if you know what was completed in the last session.
                 abandon  — Mark it ABANDONED and skip to the next TODO task.
                           Use if the partial work is unrecoverable.
-            options: [restart, abandon]
+            options: [restart, continue, abandon]
             on_restart:
               type: shell
               command: >
-                bash -c "sed -i 's/^Status: IN_PROGRESS/Status: TODO/' .specify/specs/*/tasks.md"
+                sed -i 's/^Status: IN_PROGRESS/Status: TODO/' "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+            on_continue:
+              type: noop
             on_abandon:
               type: shell
               command: >
-                bash -c "sed -i 's/^Status: IN_PROGRESS/Status: ABANDONED/' .specify/specs/*/tasks.md"
+                sed -i 's/^Status: IN_PROGRESS/Status: ABANDONED/' "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
 
       - id: check_abandoned
         type: if
