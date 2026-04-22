@@ -34,7 +34,7 @@ the next task's Type. Do not read plan.md end to end:
                     + docs/spec/api-contract.yaml full
                     + docs/spec/backend-interfaces.[ext] and frontend-interfaces.[ext]
   frontend-data   → §7 error taxonomy, §8 (endpoints this module calls),
-                    §11 correlation_id_header_name,
+                    §8 correlation_id_header_name,
                     §14 data layer + auth_flow + frontend_observability,
                     §13 unit_tests, §16, §17
                     + docs/spec/frontend-interfaces.[ext] for the relevant context

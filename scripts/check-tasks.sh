@@ -32,7 +32,11 @@ if [ "$ABANDONED_COUNT" -gt 0 ]; then
   echo "WARNING: $ABANDONED_COUNT ABANDONED task(s) — review and clean up partial files." >&2
 fi
 
-[ "$TODO_COUNT" -gt 0 ] && HAS_TODO="true" || HAS_TODO="false"
+if [ "$TODO_COUNT" -gt 0 ] || [ -n "$IN_PROGRESS" ]; then
+  HAS_TODO="true"
+else
+  HAS_TODO="false"
+fi
 
 # Adaptive retrospective cadence based on total task count and complexity
 # Complexity is read from project-brief.md; defaults to "medium"
