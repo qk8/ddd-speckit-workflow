@@ -252,6 +252,29 @@ A task cannot be marked DONE until every check passes.
     Identify exactly which change broke the existing test.
     Fix the regression, then re-run the full regression suite.
     Print: "REGRESSION FOUND AND FIXED — [test name]: [root cause and fix]"
+
+  REGRESSION UNFIXABLE — ROLLBACK:
+  If the regression cannot be fixed after 2 reasonable attempts:
+    1. List all files created or modified in this task:
+       - Files from Scope.Creates (new files)
+       - Files from Scope.Modifies (modified files)
+    2. Record them in the completion report under "ROLLBACK FILES:"
+    3. Print rollback steps:
+         1. git checkout -- [each modified file]
+         2. rm [each created file]
+         3. Update tasks.md:
+            Status: TODO
+            Rollback note: "regression: [test name] broke — [brief cause]"
+         4. Re-validate dependency graph (check-tasks.sh must still pass)
+    4. Execute the rollback steps.
+    5. Do NOT mark the task DONE. Leave it as TODO with the rollback note.
+       The next session will need to either fix the root cause or update
+       the task scope in tasks.md before retrying.
+    6. In the completion report, print:
+         ROLLBACK APPLIED — [N] files restored/removed.
+         Task left as TODO with rollback note.
+         Regression: [which test broke and why it couldn't be fixed]
+
   This check exists because every new task can break existing features.
   Running only new tests is not sufficient.
 
@@ -362,6 +385,18 @@ A task cannot be marked DONE until every check passes.
   If Type is backend-domain, backend-infra, shared, frontend-data, or e2e:
     Skip check [J]. N/A.
 
+[K] API CONTRACT ENFORCEMENT — backend-api and shared tasks only
+  Run: bash scripts/validate-api-contract.sh
+  Required: PASS. If DRIFT DETECTED:
+    Print: "CONTRACT DRIFT: [details]"
+    Fix the endpoint to match the contract. Do not weaken the contract
+    to match incorrect implementation.
+    If the contract is genuinely wrong: record in Spec learnings.
+    Do NOT mark DONE until contract matches or learnings are recorded.
+
+  If Type is backend-domain, backend-infra, frontend-data, frontend-feature, or e2e:
+    Skip check [K]. N/A.
+
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
@@ -390,8 +425,12 @@ Checks:
   [H] Browser verify:  PASS (screenshot: [path]) | headless only | N/A
   [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
   [J] Perf budget:     PASS | WARNING — [details] | N/A
+  [K] Contract:        PASS | DRIFT — [details] | N/A
 
 Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
+
+ROLLBACK FILES: [list of files restored/removed | none]
+ROLLBACK NOTE: [rollback note from tasks.md | none]
 
 ━━ SPEC LEARNINGS ━━━━━━━━━━━━━━━━━━━━━━
   A) Spec decision wrong/impractical?    [yes — description | none]
@@ -411,6 +450,8 @@ Update tasks.md for TASK-[N]:
   Spec changes applied: [list | none]
   Perf warning: [Check [J] warning text | none]
     (Record any performance budget warnings here so retrospect can read them.)
+  Rollback note: [regression note | none]
+    (If this task was rolled back and retried, record the reason.)
 
 # Recovery note for the next session if this task was previously ABANDONED:
 # If the task was previously ABANDONED and this is a restart, verify that

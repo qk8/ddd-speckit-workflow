@@ -32,6 +32,21 @@ Budget plausible: yes | uncertain | likely violated
 Basis: [measured data from tasks.md Perf warnings | no data yet]
 Recommendation: [none | run a load test | revisit budget]
 
+━━ SECTION 2B: ROLLBACKS ━━━━━━━━━━━━━
+
+Read tasks.md DONE entries for "Rollback note:" lines:
+  grep -B5 "Rollback note:" tasks.md | grep "TASK-\[" to extract per-task rollback notes.
+
+If any Rollback note exists in tasks.md:
+  ROLLBACK: [N] task(s) were rolled back due to unfixable regressions.
+  List: TASK-[N] — [rollback text from tasks.md]
+
+These tasks should be reviewed:
+  - Was the task scope incorrect?
+  - Did a spec assumption prove wrong?
+  - Should the task be split into smaller sub-tasks?
+Recommendation: [none | revise task scope | add spec clarification]
+
 ━━ SECTION 3: EDGE CASE COVERAGE ━━━━━━
 
 For each FAILURE in plan.md §15:

@@ -8,9 +8,10 @@ workflow:
     Full spec-driven development cycle with DDD and Clean Architecture.
     All project context is read from project-brief.md — no CLI duplication.
     Phases: clarify → spec → plan A (§1-10) → plan B (§11-14) →
-    plan C1 (§15-16) → plan C2 (§17-20 + conventions) → plan C3 (companion files)
-    → tasks → validate dependency graph → implement loop
-    (batched parallel tasks, 10 checks, TDD) → adaptive retrospective → final verify.
+    plan C1 (§15-16) → plan C2 (§17-20 + conventions) → plan C3a (api-contract)
+    → plan C3b (data-model) → plan C3c (interfaces) → plan C3d (gitignore+CLAUDE+ci)
+    → tasks (with integration tasks) → validate dependency graph → implement loop
+    (batched parallel tasks, 11 checks, TDD, rollback) → adaptive retrospective → final verify.
 
 requires:
   speckit_version: ">=0.7.2"
@@ -357,25 +358,79 @@ steps:
     on_revise:
       goto: plan-part-c2
 
-  # ── PHASE 3C3: COMPANION FILES ─────────────────────────────────
-  # High risk — many files, each with detailed requirements.
-  - id: plan-part-c3
+  # ── PHASE 3C3A: API CONTRACT ───────────────────────────────────
+  # Critical path — this file is the source of truth for all downstream tasks.
+  # If this fails, only C3b/C3c/C3d need revision (not the whole plan).
+  - id: plan-part-c3a
     command: speckit.plan
     integration: claude
     input:
       args: >
-        §1–§20 of plan.md are approved. Produce companion files only.
+        §1–§20 of plan.md are approved. Produce ONLY docs/spec/api-contract.yaml.
 
-        docs/spec/api-contract.yaml
-          OpenAPI 3.1. Error envelope as $component referenced everywhere.
-          Every endpoint from §8. CORS + token delivery as top comment block.
-          Cache-control response headers for cacheable endpoints.
+        OpenAPI 3.1. Error envelope as $component referenced everywhere.
+        Every endpoint from §8. CORS + token delivery as top comment block.
+        Cache-control response headers for cacheable endpoints.
 
-        docs/spec/data-model.sql
-          DDL from §12. Migration strategy as top comment block.
-          Each table: comment stating aggregate and bounded context.
-          Each index: comment stating which use case it supports.
-          Include teardown SQL for test database setup (schema drop + recreate).
+        End with: "Plan Part C3a (api-contract.yaml) complete. Waiting for review."
+
+  - id: review-plan-c3a
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C3a (api-contract.yaml) ━━
+
+      [ ] All §8 endpoints present with correct HTTP methods and paths?
+      [ ] Error envelope as $component referenced everywhere?
+      [ ] CORS + token delivery documented in top comment block?
+      [ ] Cache-control headers on cacheable endpoints?
+
+      If anything is wrong, edit api-contract.yaml and revise.
+      This is the source of truth for implementation — get it right.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c3a
+
+  # ── PHASE 3C3B: DATA MODEL ─────────────────────────────────────
+  # Independent of C3a — only depends on §12 from plan.md.
+  - id: plan-part-c3b
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§20 of plan.md are approved. Produce ONLY docs/spec/data-model.sql.
+
+        DDL from §12. Migration strategy as top comment block.
+        Each table: comment stating aggregate and bounded context.
+        Each index: comment stating which use case it supports.
+        Include teardown SQL for test database setup (schema drop + recreate).
+
+        End with: "Plan Part C3b (data-model.sql) complete. Waiting for review."
+
+  - id: review-plan-c3b
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C3b (data-model.sql) ━━
+
+      [ ] Schema matches §12 tables and column types?
+      [ ] Each table has aggregate + bounded context comment?
+      [ ] Each index names its supporting use case?
+      [ ] Teardown SQL included for test DB setup?
+
+      Edit data-model.sql and revise if needed.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c3b
+
+  # ── PHASE 3C3C: BACKEND + FRONTEND INTERFACES ──────────────────
+  # Depends on C3a (api-contract) — error types and API signatures.
+  - id: plan-part-c3c
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§20 of plan.md are approved. Produce ONLY:
+          docs/spec/backend-interfaces.[ext]
+          docs/spec/frontend-interfaces.[ext]
 
         docs/spec/backend-interfaces.[ext]
           Domain layer signatures only — no implementation bodies.
@@ -386,6 +441,34 @@ steps:
           Four error types as discriminated union (tags match §7 exactly).
           Auth state type consistent with §8 token_delivery.
           One typed async function per endpoint — Result<T,E>, never throws.
+
+        End with: "Plan Part C3c (interfaces) complete. Waiting for review."
+
+  - id: review-plan-c3c
+    type: gate
+    message: |
+      ━━ REVIEW PLAN PART C3c (interfaces) ━━
+
+      [ ] backend-interfaces: signatures match §4? Zero infra imports?
+      [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
+      [ ] frontend-interfaces: one typed function per §8 endpoint?
+
+      Edit interfaces and revise if needed.
+    options: [approve, revise]
+    on_revise:
+      goto: plan-part-c3c
+
+  # ── PHASE 3C3D: GITIGNORE + CLAUDE.MD + CI-LOCAL.SH ────────────
+  # Independent of each other — all downstream from plan.md.
+  - id: plan-part-c3d
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        §1–§20 of plan.md are approved. Produce ONLY:
+          .gitignore
+          CLAUDE.md
+          scripts/ci-local.sh
 
         .gitignore (copy from boilerplate and verify):
           The boilerplate .gitignore covers common patterns.
@@ -421,24 +504,20 @@ steps:
             CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
             E2E_TEST_CMD: from §13 regression_command.e2e_only
 
-        End with: "Plan Part C3 (companion files) complete. Waiting for final review."
+        End with: "Plan Part C3d (gitignore, CLAUDE.md, ci-local.sh) complete. Waiting for final review."
 
-  - id: review-plan-c3
+  - id: review-plan-c3d
     type: gate
     message: |
-      ━━ REVIEW PLAN PART C3 (COMPANION FILES) ━━
+      ━━ REVIEW PLAN PART C3d (gitignore, CLAUDE.md, ci-local.sh) ━━
 
-      [ ] api-contract.yaml: all §8 endpoints present? Error envelope as $component?
-      [ ] data-model.sql: schema matches §12? Teardown SQL included?
-      [ ] backend-interfaces: signatures match §4? Zero infra imports?
-      [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
-      [ ] conventions.md: naming patterns filled in for this stack?
       [ ] CLAUDE.md: ≤150 lines? All template sections filled? §16 verbatim?
       [ ] .gitignore: .env listed? Project-specific patterns added?
+      [ ] ci-local.sh: all command variables populated from plan.md?
       [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
     options: [approve, revise]
     on_revise:
-      goto: plan-part-c3
+      goto: plan-part-c3d
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   - id: tasks
@@ -450,7 +529,33 @@ steps:
 
         Produce one task per aggregate (domain layer), one per aggregate
         (infra layer), one per endpoint group (api layer), then shared,
-        frontend-data, frontend-feature, e2e — in that order.
+        then integration tasks, then frontend-data, frontend-feature, e2e —
+        in that order.
+
+        AFTER producing shared/frontend-data/frontend-feature/e2e tasks,
+        read plan.md §3 (Bounded contexts). For each bounded context relationship
+        (shared kernel, ACL, open host service, publisher-subscriber),
+        produce an integration task:
+
+          ## TASK-[N]
+          Title: [Context A] → [Context B] integration
+          Type: integration
+          Depends on: [all domain + infra + api tasks for both contexts]
+          Scope:
+            Creates:
+              - tests/integration/[contextA]_[contextB]_IntegrationTest.[ext]
+            Modifies:
+              - none
+          Acceptance criteria:
+            - [Test verifies that an event/command from Context A correctly
+              triggers the expected behavior in Context B through the ACL/shared kernel]
+          Do NOT:
+            - [Do not implement domain logic — only write the integration test]
+
+        Task order must be:
+          1. backend-domain → 2. backend-infra → 3. backend-api →
+          4. shared → 5. integration (cross-context) →
+          6. frontend-data → 7. frontend-feature → 8. e2e
 
         Rules:
           - Acceptance criteria must name exact classes from plan.md.
@@ -465,7 +570,8 @@ steps:
     message: |
       Review .specify/specs/[feature]/tasks.md
 
-      [ ] Task order: domain → infra → api → shared → frontend-data → frontend-feature → e2e
+      [ ] Task order: domain → infra → api → shared → integration → frontend-data → frontend-feature → e2e
+      [ ] Integration tasks: one per bounded context relationship (shared kernel, ACL, publisher-subscriber)?
       [ ] Acceptance criteria verifiable (name exact classes/methods from plan.md)?
       [ ] Each "Do NOT" guard is specific to that task?
       [ ] No task touches more than 5 files or more than 1 aggregate?
@@ -595,9 +701,10 @@ steps:
           Review the completion report for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] All 10 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget)?
+          [ ] All 11 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget, contract)?
           [ ] Check [C] regression: zero new failures in existing test suite?
           [ ] Check [J] performance budget: within §10 budget?
+          [ ] Check [K] contract enforcement: API matches api-contract.yaml?
           [ ] Test file committed alongside implementation?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
 

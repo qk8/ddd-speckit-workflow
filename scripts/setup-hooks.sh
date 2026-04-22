@@ -4,6 +4,7 @@
 # Installs pre-commit hooks:
 #   1. Secret scanner (gitleaks) — blocks commits that contain credentials
 #   2. Linter — blocks commits with lint errors
+#   3. Naming validation — blocks commits with ubiquitous language violations
 #
 # Run once per developer per machine after cloning.
 
@@ -86,6 +87,19 @@ if ! $LINT_CMD > /tmp/lint-out.txt 2>&1; then
 fi
 echo "  ✓ Lint passed"
 
+# 3. NAMING VALIDATION
+echo "→ Naming validation..."
+if [ -f "\$REPO_ROOT/scripts/check-naming.sh" ] && [ -f "\$REPO_ROOT/plan.md" ]; then
+  if ! bash "\$REPO_ROOT/scripts/check-naming.sh" > /tmp/naming-out.txt 2>&1; then
+    echo "BLOCKED: Naming validation failed."
+    cat /tmp/naming-out.txt
+    exit 1
+  fi
+  echo "  ✓ Naming consistent"
+elif [ -f "\$REPO_ROOT/scripts/check-naming.sh" ]; then
+  echo "  ⚠ plan.md not found — naming validation skipped"
+fi
+
 echo "── pre-commit passed ──────────────────────────────"
 echo ""
 HOOK
@@ -117,5 +131,5 @@ fi
 
 echo ""
 echo "=== Done ==="
-echo "Hook blocks commits with: secrets (gitleaks) | lint errors"
+echo "Hook blocks commits with: secrets (gitleaks) | lint errors | naming violations"
 echo "Emergency bypass (avoid): git commit --no-verify"

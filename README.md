@@ -18,6 +18,8 @@ scripts/
   setup-hooks.sh                           ← One-time pre-commit hook setup (run once per machine)
   check-tasks.sh                           ← Task progress helper (used by workflow)
   validate-tasks.sh                        ← Task dependency graph validation (used by workflow)
+  check-naming.sh                          ← Ubiquitous language validation (used by pre-commit hook)
+  validate-api-contract.sh                 ← API contract enforcement (Check [K])
   ci-local.sh                              ← Run full CI pipeline locally (--fast | --e2e-only)
 ddd-clean-arch/                            ← Preset
   preset.yml
@@ -26,7 +28,7 @@ ddd-clean-arch/                            ← Preset
     tasks-template.md                      ← Structured backlog format
     constitution-template.md              ← Layer rules and constraints
   commands/
-    speckit.implement.md                   ← Build override (10 checks: TDD + regression + security + browser + perf budget)
+    speckit.implement.md                   ← Build override (11 checks: TDD + regression + security + browser + perf budget + contract)
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/
@@ -78,6 +80,8 @@ cp /path/to/boilerplate/.gitignore .
 mkdir -p scripts .claude
 cp /path/to/boilerplate/scripts/check-tasks.sh scripts/
 cp /path/to/boilerplate/scripts/validate-tasks.sh scripts/
+cp /path/to/boilerplate/scripts/check-naming.sh scripts/
+cp /path/to/boilerplate/scripts/validate-api-contract.sh scripts/
 cp /path/to/boilerplate/scripts/setup-mcp.sh scripts/
 cp /path/to/boilerplate/scripts/setup-hooks.sh scripts/
 cp /path/to/boilerplate/scripts/ci-local.sh scripts/
@@ -91,9 +95,10 @@ chmod +x scripts/*.sh
 bash scripts/setup-hooks.sh
 ```
 
-Installs two pre-commit hooks that run on every `git commit`:
+Installs three pre-commit hooks that run on every `git commit`:
 - **gitleaks** — blocks commits that contain secrets or credentials
 - **Linter** — blocks commits with lint errors (auto-detected from project config)
+- **Naming validation** — blocks commits with ubiquitous language violations (compares code names against plan.md §2)
 
 Also creates `.gitleaks.toml` with the default ruleset.
 If gitleaks produces a false positive, add an allowlist entry to `.gitleaks.toml`.
@@ -126,7 +131,7 @@ specify workflow list-runs
 specify workflow resume <run-id>
 ```
 
-## The 10 quality checks
+## The 11 quality checks
 
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
@@ -140,6 +145,7 @@ specify workflow resume <run-id>
 | [H] Browser verification | Headless E2E + optional Playwright MCP visual replay | frontend-feature, e2e |
 | [I] Secret scan | gitleaks — no credentials or secrets in committed files | All |
 | [J] Performance budget | p95 response time / LCP within §10 budget | backend-api, frontend-feature |
+| [K] Contract enforcement | API endpoints match api-contract.yaml | backend-api, shared |
 
 ### TDD and regression (checks [B] + [C])
 
@@ -156,6 +162,7 @@ This means every task automatically verifies all previously implemented features
 | `backend-infra` | Integration test (real DB) | Testcontainers |
 | `backend-api` | API test (full stack, running server) | REST Assured / Playwright API / pytest-httpx |
 | `shared` | Contract test | Generated type diffing |
+| `integration` | Integration test (cross-context) | Context-specific test framework |
 | `frontend-data` | Unit test | Vitest / Jest |
 | `frontend-feature` | E2E test (single feature) | Playwright |
 | `e2e` | E2E test (cross-feature journey) | Playwright |
