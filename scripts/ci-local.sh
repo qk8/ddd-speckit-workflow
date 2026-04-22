@@ -84,7 +84,7 @@ if $E2E_ONLY; then
   run_stage 7 "E2E tests (headless)" "$E2E_TEST_CMD"
 else
   run_stage 1 "Secret scan (gitleaks)"   "$SECRET_SCAN_CMD" || { print_summary; exit 1; }
-  run_stage 2 "Lint + arch tests"        "${LINT_CMD:+$LINT_CMD && }${ARCH_TEST_CMD}" || { print_summary; exit 1; }
+  run_stage 2 "Lint + arch tests"        "${LINT_CMD}${ARCH_TEST_CMD:+${LINT_CMD:+ && }$ARCH_TEST_CMD}" || { print_summary; exit 1; }
   run_stage 3 "Unit tests"               "$UNIT_TEST_CMD"        || { print_summary; exit 1; }
   run_stage 4 "Integration tests"        "$INTEGRATION_TEST_CMD" || { print_summary; exit 1; }
   run_stage 5 "API tests"                "$API_TEST_CMD"         || { print_summary; exit 1; }

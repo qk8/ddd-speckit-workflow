@@ -43,8 +43,6 @@ This keeps context window available for the actual drift analysis.
 
 ━━ TEST SUITE ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━ TEST SUITE ━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 Run the appropriate regression command from plan.md §13 regression_command:
   For scopes 1-3 (partial): regression_command.api_only
   For scope 4 (full):       regression_command.all

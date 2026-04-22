@@ -83,7 +83,7 @@ If yes and Playwright MCP is available: replay and take screenshots.
 ━━ MODE: --target ━━━━━━━━━━━━━━━━━━━━━━━
 
 Find test files related to the user's named feature, aggregate, or endpoint.
-Use plan.md §13 task_file_ownership and the test locations to find the files.
+Use plan.md §13 e2e_tests.location and the test locations to find the files.
 
 Run only those test files. Print output.
 Then run the regression suite (api_only at minimum) to confirm no wider impact.
@@ -98,7 +98,7 @@ Summary:
 
 STEP A — REPRODUCE IN TEST SUITE
   First, try to reproduce the bug by running the existing test for the
-  affected feature (derive from plan.md §13 task_file_ownership).
+  affected feature (derive from plan.md §13 e2e_tests.location).
   If an existing test catches the bug: it is already a regression.
   Print: "Bug reproduced by existing test: [test name]"
 

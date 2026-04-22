@@ -4,7 +4,8 @@ feature directory. Read from that directory:
   - tasks.md (complete)
 Also read CLAUDE.md from the repo root.
 
-Run every 10 DONE tasks. Does not implement or fix anything.
+Run on adaptive cadence (check-tasks.sh): simple=15, medium=10, complex=5 DONE tasks.
+Does not implement or fix anything.
 Reports alignment and waits for decisions.
 
 ━━ SECTION 1: PROGRESS ━━━━━━━━━━━━━━━━━

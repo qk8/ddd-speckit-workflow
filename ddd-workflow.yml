@@ -499,7 +499,7 @@ steps:
             LINT_CMD: from §14 task_runner.lint
             ARCH_TEST_CMD: from §20 backend_arch_tool runner + frontend arch:check
             UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)
-            INTEGRATION_TEST_CMD: from §13 integration_tests runner
+            INTEGRATION_TEST_CMD: from §13 regression_command.api_only (includes integration tests)
             API_TEST_CMD: from §13 api_testing_tool.runner
             CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
             E2E_TEST_CMD: from §13 regression_command.e2e_only
