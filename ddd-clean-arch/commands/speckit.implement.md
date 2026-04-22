@@ -356,7 +356,7 @@ A task cannot be marked DONE until every check passes.
     Skip check [H]. N/A.
 
 [I] SECRET SCANNING — all tasks
-  Run gitleaks on all files staged or modified in this task:
+  Run gitleaks on the entire working tree:
     gitleaks detect --source . --redact -q
   Required: no secrets detected.
   If gitleaks is not installed: print a warning and remind the user to run
