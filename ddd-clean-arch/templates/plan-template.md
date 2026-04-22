@@ -490,7 +490,6 @@ api_testing_tool:
 
 e2e_testing_tool:
   selected: playwright
-  runner: npx playwright test --project=e2e
   location: [frontend-module]/tests/e2e/
   browsers: [chromium]  # add firefox and webkit only if cross-browser coverage is required
   headless_in_ci: yes

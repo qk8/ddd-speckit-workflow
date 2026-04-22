@@ -31,8 +31,7 @@ Then read ONLY these plan.md sections based on task Type:
                     §13 integration_tests (location, framework) + regression_command,
                     §13 test_data_strategy,
                     §16, §17
-  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope),
-                    §11 correlation ID,
+  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope, §8 correlation_id_header_name),
                     §13 api_tests + api_testing_tool + regression_command,
                     §13 test_data_strategy,
                     §16, §17
@@ -40,7 +39,7 @@ Then read ONLY these plan.md sections based on task Type:
                     §13 contract_testing + regression_command,
                     §16, §17
                     + full api-contract + both interface files
-  frontend-data   → §7, §8 (endpoints called), §11 correlation header,
+  frontend-data   → §7, §8 (endpoints called, §8 correlation_id_header_name),
                     §14 data layer + auth_flow + observability,
                     §13 unit_tests + regression_command,
                     §16, §17

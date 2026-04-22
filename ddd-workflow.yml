@@ -468,6 +468,7 @@ steps:
       args: >
         §1–§20 of plan.md are approved. Produce ONLY:
           .gitignore
+          .env.example
           CLAUDE.md
           scripts/ci-local.sh
 
@@ -476,6 +477,14 @@ steps:
           After copying, verify that any project-specific build output
           directories, generated files, or secret file patterns are added.
           The .env file must be listed. Only .env.example is committed.
+
+        .env.example (create from project-brief.md):
+          List every environment variable the project needs, with placeholder
+          values (no real secrets). Derive keys from:
+            project-brief.md §14 local_dev_setup.environment_variables
+            any infrastructure URLs from project-brief.md
+          Format: KEY=placeholder_value (one per line, no blank lines between entries).
+          Commit this file. Do NOT commit .env or .env.local.
 
         CLAUDE.md (update, max 150 lines):
           Use ddd-clean-arch/templates/claude-md-template.md as the structure.
