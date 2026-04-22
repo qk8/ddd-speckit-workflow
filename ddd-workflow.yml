@@ -312,7 +312,7 @@ steps:
         .specify/memory/conventions.md.
 
         §17 Definition of done
-            Concrete verifiable criteria. Must align with the 10 checks in speckit.implement.
+            Concrete verifiable criteria. Must align with the 11 checks in speckit.implement.
             Include: test file committed, regression suite green, secret scan clean.
 
         §18 Self-critique (mandatory — do not soften)
@@ -348,7 +348,7 @@ steps:
     message: |
       ━━ REVIEW PLAN PART C2 (§17–§20 + conventions) ━━
 
-      [ ] §17 Done criteria: aligned with the 10 implement checks?
+      [ ] §17 Done criteria: aligned with the 11 implement checks?
       [ ] §18 Self-critique: honest? Early warning signs defined?
       [ ] §19 ADRs: one per aggregate boundary? Per locking strategy? Per stack choice?
       [ ] §20 Arch test inventory: populated after arch tests generated?
@@ -481,7 +481,7 @@ steps:
           Fill in every placeholder from plan.md:
             [PROJECT_NAME]       → from project-brief.md Project name
             What this is         → from §1 requirements scope + out_of_scope
-            Stack                → from §14 stack + §13 api_testing_tool + e2e_testing_tool
+            Stack                → from project-brief.md stack fields + §13 api_testing_tool + e2e_testing_tool
             Architecture         → from §6 modules + future_extraction_candidates
             Module boundaries    → from §6 modules (owns + does_not_own per module)
             Ubiquitous language  → from §2 + §4 (aggregate roots, events, value objects, repos)
@@ -498,7 +498,7 @@ steps:
             SECRET_SCAN_CMD: gitleaks detect --source . --redact -q
             LINT_CMD: from §14 task_runner.lint
             ARCH_TEST_CMD: from §20 backend_arch_tool runner + frontend arch:check
-            UNIT_TEST_CMD: from §13 unit_tests runner
+            UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)
             INTEGRATION_TEST_CMD: from §13 integration_tests runner
             API_TEST_CMD: from §13 api_testing_tool.runner
             CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
@@ -636,7 +636,7 @@ steps:
                           Use only if you know what was completed in the last session.
                 abandon  — Mark it ABANDONED and skip to the next TODO task.
                           Use if the partial work is unrecoverable.
-            options: [restart, continue, abandon]
+            options: [restart, abandon]
             on_restart:
               type: shell
               command: >
@@ -645,7 +645,6 @@ steps:
               type: shell
               command: >
                 bash -c "sed -i 's/^Status: IN_PROGRESS/Status: ABANDONED/' .specify/specs/*/tasks.md"
-            # on_continue: do nothing, implement_one will pick it up
 
       - id: check_abandoned
         type: if

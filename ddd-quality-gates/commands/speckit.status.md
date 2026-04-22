@@ -11,6 +11,7 @@ Do not implement or modify anything.
   backend-infra     |      |         |      |           |         |
   backend-api       |      |         |      |           |         |
   shared            |      |         |      |           |         |
+  integration       |      |         |      |           |         |
   frontend-data     |      |         |      |           |         |
   frontend-feature  |      |         |      |           |         |
   e2e               |      |         |      |           |         |
@@ -18,7 +19,7 @@ Do not implement or modify anything.
   TOTAL             |      |         |      |           |         |
 
 Status definitions:
-  DONE      — all 9 checks passed, test file committed
+  DONE      — all 11 checks passed, test file committed
   IN_PROG   — currently being worked on (set at task confirmation)
               If IN_PROG is present: a session may have been interrupted.
               Run /speckit.retrospect or check-tasks.sh for details.
