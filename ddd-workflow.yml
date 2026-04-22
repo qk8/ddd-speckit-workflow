@@ -219,11 +219,12 @@ steps:
                   Form: "As a [user], I [action sequence] and verify [outcome]"
               - e2e_tests.location and naming_convention must be set
               - test_data_strategy:
-                  approach: api_seeding | db_seeding | fixture_files
-                  factory_location: [path where factory/builder classes live]
-                  teardown_mechanism: [how test data is cleaned up — transaction_rollback |
-                    explicit_delete | db_reset | isolated_schema]
-                  isolation_rule: each test creates its own data; tests pass in any order
+                  approach: [test_containers_per_test | shared_db_with_cleanup | factory_functions]
+                  factory_location: [path — e.g. src/test/java/fixtures/ or tests/fixtures/]
+              - e2e_data_setup:
+                  strategy: [api_seeding | db_seeding | before_each_hook]
+                  cleanup: [after_each | after_all | none_if_isolated_db]
+                  isolation_guarantee: [each_test_independent | run_in_isolation_only]
               - e2e_data_setup.strategy: [how E2E tests set up and tear down their data]
               - flaky_test_protocol:
                   quarantine_label: [label or annotation to mark flaky tests]
@@ -501,7 +502,7 @@ steps:
             UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)
             INTEGRATION_TEST_CMD: from §13 regression_command.api_only (includes integration tests)
             API_TEST_CMD: from §13 api_testing_tool.runner
-            CONTRACT_TEST_CMD: from §13 contract_testing runner (or leave empty)
+            CONTRACT_TEST_CMD: from §13 regression_command.e2e_only (or leave empty if not applicable)
             E2E_TEST_CMD: from §13 regression_command.e2e_only
 
         End with: "Plan Part C3d (gitignore, CLAUDE.md, ci-local.sh) complete. Waiting for final review."
@@ -578,8 +579,9 @@ steps:
       [ ] All Depends-on references are to earlier tasks?
 
       Approving proceeds to task dependency graph validation before implementation.
-    options: [approve, reject]
-    on_reject: abort
+    options: [approve, revise]
+    on_revise:
+      goto: tasks
 
   # ── PHASE 4.5: TASK DEPENDENCY GRAPH VALIDATION ────────────────
   # Verify the task graph before starting implementation.

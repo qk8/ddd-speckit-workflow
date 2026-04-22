@@ -78,7 +78,7 @@ Print: total tests, passed, failed, duration.
 If any test fails that was passing before: latent regression.
   State which test fails and which recent task likely introduced it.
 
-FLAKY TEST AUDIT: scan tasks/backlog.md DONE entries and
+FLAKY TEST AUDIT: scan .specify/specs/[feature]/tasks.md DONE entries and
 .specify/memory/conventions.md decision log for any mention of
 "flaky", "quarantine", "retry", or "sleep".
   For each quarantined test: is it still in quarantine? Is the ticket still open?

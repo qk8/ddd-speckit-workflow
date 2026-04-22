@@ -251,6 +251,7 @@ A task cannot be marked DONE until every check passes.
     For backend-infra tasks:    plan.md §13 regression_command.api_only
     For backend-api tasks:      plan.md §13 regression_command.api_only
     For shared tasks:           plan.md §13 regression_command.api_only
+    For integration tasks:      plan.md §13 regression_command.api_only
     For frontend-data tasks:    plan.md §13 regression_command.api_only
     For frontend-feature tasks: plan.md §13 regression_command.all
     For e2e tasks:              plan.md §13 regression_command.all
