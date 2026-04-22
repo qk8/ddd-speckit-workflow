@@ -33,7 +33,7 @@ For each bounded context from §3:
   CONTEXT: [name] | Aggregates: [list]
     backend-domain: [N]/[N] | backend-infra: [N]/[N] | backend-api: [N]/[N]
     frontend-data: [N]/[N]  | frontend-feature: [N]/[N]
-    Status: NOT STARTED | IN PROGRESS ([N]%) | COMPLETE
+    Status: NOT STARTED | IN_PROGRESS ([N]%) | COMPLETE
 
 ━━ WHAT IS UNBLOCKED NOW ━━━━━━━━━━━━━━━
 
