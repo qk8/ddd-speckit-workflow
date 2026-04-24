@@ -314,9 +314,9 @@ A task cannot be marked DONE until every check passes.
 
 [F] MIGRATION TEST — backend-infra tasks only
   If Type is backend-infra and a migration file was created:
-    Apply migration to test database (tool from plan.md §12 migration_strategy).
-    Verify every table, column type, nullability, and index from §12 exists.
-    Print schema diff. Required: matches §12 exactly.
+    Apply migration to test database (tool from plan.md §12 migration_strategy.tool).
+    Verify every table, column type, nullability, and index from §12 TABLE definitions exists.
+    Print schema diff. Required: matches §12 TABLE definitions exactly.
     If mismatch: fix migration and re-run. Do not mark DONE.
 
 [G] ERROR HANDLING ASSERTIONS — backend-api and frontend-data tasks only
@@ -438,7 +438,7 @@ Do NOT constraint: [restate] → RESPECTED — [how]
 
 Checks:
   [A] Arch tests:      PASS
-  [B] New tests:       PASS ([N] cases, stability-checked)
+  [B] New tests:       PASS ([N] cases, stability-checked) | FLAKY — [fix applied]
   [C] Regression:      PASS ([total N] tests, 0 new failures)
   [D] Linter:          PASS
   [E] Dep scan:        PASS | BLOCKED — [details]
