@@ -225,7 +225,6 @@ steps:
                   strategy: [api_seeding | db_seeding | before_each_hook]
                   cleanup: [after_each | after_all | none_if_isolated_db]
                   isolation_guarantee: [each_test_independent | run_in_isolation_only]
-              - e2e_data_setup.strategy: [how E2E tests set up and tear down their data]
               - flaky_test_protocol:
                   quarantine_label: [label or annotation to mark flaky tests]
                   max_time_in_quarantine: [e.g. "2 weeks" — after this, fix or delete]
