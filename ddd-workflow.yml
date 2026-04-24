@@ -511,7 +511,7 @@ steps:
             UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)
             INTEGRATION_TEST_CMD: from §13 regression_command.api_only (includes integration tests)
             API_TEST_CMD: from §13 api_testing_tool.runner
-            CONTRACT_TEST_CMD: from §13 regression_command.e2e_only (or leave empty if not applicable)
+            CONTRACT_TEST_CMD: from §13 regression_command.api_only (or leave empty if not applicable)
             E2E_TEST_CMD: from §13 regression_command.e2e_only
 
         End with: "Plan Part C3d (gitignore, CLAUDE.md, ci-local.sh) complete. Waiting for final review."
