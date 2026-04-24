@@ -38,7 +38,9 @@ Then read ONLY these plan.md sections based on task Type:
   shared          → §14 contract + change_detection, §3,
                     §13 contract_testing + regression_command,
                     §16, §17
-                    + full api-contract + both interface files
+                    + docs/spec/api-contract.yaml (full) +
+                      docs/spec/backend-interfaces.[ext] +
+                      docs/spec/frontend-interfaces.[ext]
   integration     → §3 (bounded contexts involved), §4 (aggregates on both sides),
                     §6 (module boundaries between contexts), §7,
                     §13 integration_tests + regression_command, §16, §17
