@@ -37,7 +37,7 @@ Task order:
 4. shared          (contract types, generated code — after API contract is stable)
 5. integration     (cross-context boundary tests — one task per bounded context relationship)
 6. frontend-data   (data layer module — one task per bounded context)
-7. frontend-feature) (feature components with Playwright E2E TDD — one task per major feature)
+7. frontend-feature (feature components with Playwright E2E TDD — one task per major feature)
 8. e2e             (cross-feature journey tests — after all dependent features are DONE)
 
 ─────────────────────────────────────────────────────────────────────────
