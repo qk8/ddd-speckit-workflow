@@ -15,10 +15,10 @@ ACCEPTED MODES (pass directly after the command, or wait to be asked):
   --debug [desc]  reproduce and diagnose a specific bug
 
 Examples:
-  /project:test --regression
-  /project:test --fast
-  /project:test --target "OrderAggregate"
-  /project:test --debug "invoice list not loading"
+  /speckit.test --regression
+  /speckit.test --fast
+  /speckit.test --target "OrderAggregate"
+  /speckit.test --debug "invoice list not loading"
 
 If no mode is given, print the list above and ask: "Which mode?"
 Do NOT infer the mode from context. If the user's intent is ambiguous,
