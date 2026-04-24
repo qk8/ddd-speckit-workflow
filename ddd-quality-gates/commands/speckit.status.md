@@ -5,7 +5,7 @@ Do not implement or modify anything.
 
 ━━ TASK PROGRESS ━━━━━━━━━━━━━━━━━━━━━━━
 
-  Type              | DONE | IN_PROG | TODO | ABANDONED | BLOCKED | Total
+  Type              | DONE | IN_PROGRESS | TODO | ABANDONED | BLOCKED | Total
   ──────────────────────────────────────────────────────────────────────
   backend-domain    |      |         |      |           |         |
   backend-infra     |      |         |      |           |         |
@@ -20,8 +20,8 @@ Do not implement or modify anything.
 
 Status definitions:
   DONE      — all 11 checks passed, test file committed
-  IN_PROG   — currently being worked on (set at task confirmation)
-              If IN_PROG is present: a session may have been interrupted.
+  IN_PROGRESS   — currently being worked on (set at task confirmation)
+              If IN_PROGRESS is present: a session may have been interrupted.
               Run /speckit.retrospect or check-tasks.sh for details.
   TODO      — not started, dependencies met or pending
   ABANDONED — interrupted; partial files may exist on disk
