@@ -41,7 +41,7 @@ plan.md §14 task_runner.dev. If not: start now.
 
   DEV SERVER FAILURE PROTOCOL: if startup fails, print the full error,
   diagnose the cause, and fix it before running any tests.
-  Verify with: curl -f http://localhost:[port][health_readiness_path]
+  Verify with: curl -f http://localhost:[port][plan.md §11 health_checks.readiness.path]
   Do NOT proceed if the server is not healthy.
 
 Print: "Dev environment: [already running | started — backend:[port] frontend:[port]]"
