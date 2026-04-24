@@ -301,7 +301,7 @@ A task cannot be marked DONE until every check passes.
   Running only new tests is not sufficient.
 
 [D] LINTER
-  Run lint command from CLAUDE.md. Required: no errors.
+  Run lint command from plan.md §14 task_runner.lint. Required: no errors.
 
 [E] DEPENDENCY VULNERABILITY SCAN
   Run scanning tool from plan.md §9 dependency_security.scanning_tool.
@@ -443,7 +443,7 @@ Checks:
   [D] Linter:          PASS
   [E] Dep scan:        PASS | BLOCKED — [details]
   [F] Migration:       PASS | N/A
-  [G] Observability:   PASS | N/A
+  [G] Error handling:  PASS | N/A
   [H] Browser verify:  PASS (screenshot: [path]) | headless only | N/A
   [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
   [J] Perf budget:     PASS | WARNING — [details] | N/A
