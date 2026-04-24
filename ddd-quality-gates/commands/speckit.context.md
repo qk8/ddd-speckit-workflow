@@ -49,8 +49,11 @@ Then read ONLY these plan.md sections based on task Type:
                     §14 frontend_architecture + frontend_auth_flow,
                     §13 unit_tests + regression_command,
                     §16, §17
-  frontend-feature→ §7 user-facing errors, §14 ui + feature + client state +
-                    form_validation + component_library,
+  frontend-feature→ §7 user-facing errors, §14 frontend_architecture.layers.ui +
+                    frontend_architecture.layers.feature +
+                    state_management +
+                    form_validation_alignment +
+                    component_library,
                     §13 e2e_tests + regression_command,
                     §13 e2e_data_setup + test_data_strategy,
                     §16, §17
