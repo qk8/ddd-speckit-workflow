@@ -88,7 +88,7 @@ else
   run_stage 3 "Unit tests"               "$UNIT_TEST_CMD"        || { print_summary; exit 1; }
   run_stage 4 "Integration tests"        "$INTEGRATION_TEST_CMD" || { print_summary; exit 1; }
   run_stage 5 "API tests"                "$API_TEST_CMD"         || { print_summary; exit 1; }
-  run_stage 6 "Contract tests"           "$CONTRACT_TEST_CMD"
+  run_stage 6 "Contract tests"           "$CONTRACT_TEST_CMD" || { print_summary; exit 1; }
 
   if ! $FAST; then
     run_stage 7 "E2E tests (headless)"   "$E2E_TEST_CMD"
