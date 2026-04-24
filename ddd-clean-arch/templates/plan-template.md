@@ -235,8 +235,7 @@ cors:
   exposed_headers:  # include correlation ID header name
   rationale:
 
-correlation_id_header_name: [e.g. X-Correlation-Id]
-  # used in: CORS exposed_headers, backend logs, frontend error reports
+correlation_id_header_name: [e.g. X-Correlation-Id] # used in: CORS exposed_headers, backend logs, frontend error reports
 
 endpoints:
   ENDPOINT: [METHOD] [/path]
