@@ -52,7 +52,7 @@ Run: plan.md §13 regression_command.all
 Print full output.
 
 FLAKY TEST DETECTION: if any test fails, before diagnosing code issues,
-run the failing test alone 5 more times to confirm it is a real failure
+re-run the failing test 5 more times to confirm it is a real failure
 and not a flaky test. If it passes on some runs: it is flaky.
   → Quarantine it per plan.md §13 flaky_test_protocol
   → Do not treat a flaky failure as a code bug
@@ -151,7 +151,9 @@ STEP C — FIX AND VERIFY
        Add a test case to the relevant test file that would have caught this bug.
        The test case must fail before the fix and pass after.
     3. Run the test file to confirm fix + new test case pass.
-    4. Run regression suite (plan.md §13 regression_command.api_only or all)
+    4. Run regression suite:
+       - For backend/domain/API fixes: plan.md §13 regression_command.api_only
+       - For frontend/E2E fixes: plan.md §13 regression_command.all
        to confirm no new failures introduced by the fix.
     5. Print regression result.
 
