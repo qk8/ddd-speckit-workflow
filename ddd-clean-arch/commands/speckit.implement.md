@@ -181,8 +181,8 @@ Wait until ready. API tests and E2E tests need it to fail meaningfully.
        database not running, or compilation error?
     5. Fix the startup issue first.
     6. Only proceed once the dev server responds to a health check:
-       curl -f http://localhost:[backend_port]/health/ready
-       (path from plan.md §11 health_checks.readiness.path)
+       curl -f http://localhost:[backend_port]/[§11 health_checks.readiness.path]
+       (e.g. /health/ready, /health, /actuator/health — from plan.md §11)
     Print: "Dev server started and healthy — proceeding."
 
 TEST DATA ISOLATION — enforce before writing test code:
