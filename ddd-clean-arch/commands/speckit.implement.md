@@ -485,6 +485,102 @@ A task cannot be marked DONE until every check passes.
   After verification, print: "ANTI-HALLUCINATION: all imports verified"
   or list the specific imports that failed verification.
 
+[N] CROSS-CUTTING CONCERN AUDIT — backend-api and shared tasks only
+  If this task creates or modifies any endpoint, audit ALL endpoints
+  in the codebase for consistency:
+
+  1. Auth: Is every endpoint covered by auth middleware — or explicitly
+     opted out with a comment explaining why?
+  2. Logging: Is every endpoint covered by request logging?
+  3. Error handling: Is every error propagated to a single error handler,
+     or are there silent catch blocks?
+  4. Response format: Is there a consistent error response shape across
+     all endpoints per §7 error taxonomy?
+  5. Transactions: Are DB transactions used consistently for endpoints
+     that perform more than one write?
+
+  For each gap: state the file, the gap, and the fix.
+  Fix all gaps. Do not proceed until consistent.
+
+  If Type is backend-domain, backend-infra, frontend-data,
+  frontend-feature, or e2e:
+    Skip check [N]. N/A.
+
+[O] SECURITY HARDENING — backend-api, frontend-data, frontend-feature tasks
+  If this task touches any user-facing code, verify every security
+  requirement from plan.md §9 is implemented:
+
+  1. Input validation: Is every user-supplied input validated at the
+     system boundary? (HTTP request body, query params, headers,
+     cookies, file uploads)
+  2. Output escaping: Is all user data escaped before rendering in HTML?
+  3. SQL injection: Are all database queries parameterized?
+     (No string concatenation in SQL)
+  4. CSRF: Are state-changing endpoints protected against CSRF?
+  5. Rate limiting: Are auth endpoints (login, register, password reset)
+     rate-limited?
+  6. HTTP security headers: Are Content-Security-Policy, X-Frame-Options,
+     X-Content-Type-Options set?
+  7. Sensitive data: Is PII not logged? Are secrets not in source code?
+     Are tokens not stored in localStorage?
+  8. Error messages: Do error messages NOT reveal internal paths,
+     library names, or stack traces to clients?
+
+  For each item: PASS, FAIL, or N-A.
+  If any FAIL: fix it. Do not proceed until all PASS or N-A.
+
+  If Type is backend-domain, backend-infra, or shared:
+    Skip check [O]. N/A.
+
+[P] TEST QUALITY REVIEW — all tasks
+  Review each test in the test file from Step 1:
+
+  1. Behavior vs implementation: Does each test assert on observable
+     behavior (HTTP status, response shape, database state, UI text)
+     rather than internal details (mock call counts, private method
+     invocation order, internal variable values)?
+  2. False confidence: Would this test still pass if the implementation
+     was wrong? (e.g., testing a helper function that is not the
+     system under test)
+  3. Mock strategy:
+     - NEVER mocks the system under test
+     - NEVER mocks standard library functions (unless testing
+       time-dependent behavior)
+     - ALWAYS mocks external HTTP calls
+     - ALWAYS uses a real test database for integration tests
+  4. Determinism: No Math.random(), no fixed sleep(), no time-dependent
+     assertions without fake timers
+
+  For each failing check: fix the test. Do not weaken the test to
+  make it pass.
+
+  Print: "TEST QUALITY: [N] tests, all behavior-focused"
+
+[Q] RESILIENCE TESTING — backend-api and backend-infra tasks only
+  If this task creates or modifies any endpoint or infrastructure
+  component, verify the system degrades gracefully under these
+  failure scenarios:
+
+  1. Database connection drops mid-request — returns proper error,
+     not a 500 crash
+  2. External API returns 503 — returns proper error to client
+  3. External API times out — does not hang indefinitely
+  4. Request body is malformed JSON — returns 400 with clear message
+  5. Request body exceeds size limit — returns 413
+  6. Concurrent duplicate submissions — handled by idempotency
+  7. Auth token is valid but user was deleted mid-session — returns
+     401, not a 500
+
+  For each scenario: verify the correct error response is returned
+  (not a 500 crash), the error is logged with correct severity,
+  and the system remains available for other requests.
+
+  If any scenario is not tested: add the test now.
+
+  If Type is backend-domain, frontend-data, frontend-feature,
+  shared, or e2e:
+    Skip check [Q]. N/A.
+
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
