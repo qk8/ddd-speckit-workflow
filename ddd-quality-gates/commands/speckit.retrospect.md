@@ -93,7 +93,9 @@ SECRET SCANNING AUDIT:
   Also verify: are all .env files in .gitignore?
                does .env.example exist with placeholder values only?
 
-Near-violations in DONE task Spec Learnings related to constraints? List any.
+Near-violations in DONE task completion reports related to constraints?
+  Scan "Spec changes applied" in DONE tasks for any constraint concerns.
+  List any.
 
 ━━ SECTION 7: RECOMMENDATIONS ━━━━━━━━
 
