@@ -63,7 +63,7 @@ while IFS= read -r line; do
   if $IN_SECTION2 && [[ "$line" =~ ^###\ (.+) ]]; then
     term="${BASH_REMATCH[1]}"
     # Clean up: remove trailing descriptions after |
-    term=$(echo "$term" | sed 's| *|.*||' | xargs)
+    term=$(echo "$term" | sed 's/ *|.*//' | xargs)
     if [ -n "$term" ]; then
       TERMS["$term"]=1
     fi
