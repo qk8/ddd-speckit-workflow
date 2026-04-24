@@ -256,8 +256,7 @@ steps:
         [ ] api_testing_tool selected correctly for the backend language?
         [ ] All three regression_command variants defined (all / api_only / e2e_only)?
         [ ] e2e_tests.coverage_focus: every critical user journey listed?
-        [ ] test_data_strategy.teardown_mechanism chosen and documented?
-        [ ] e2e_data_setup.strategy defined?
+         [ ] e2e_data_setup.strategy defined?
         [ ] flaky_test_protocol.max_time_in_quarantine set?
         [ ] E2E test owner and pipeline decided?
 
