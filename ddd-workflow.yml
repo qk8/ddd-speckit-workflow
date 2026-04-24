@@ -708,6 +708,26 @@ steps:
             In single-task mode (no --parallel): implement only the first TODO task.
             Always check Depends-on before starting.
 
+            After implementation, check plan.md §15 highest_risk_paths.
+            If the task touches any path listed there, run this adversarial
+            hardening prompt on the implementation:
+
+            "Review the code you just wrote for this critical module.
+            Assume the following catastrophic scenario happens simultaneously:
+            1. The database connection drops mid-transaction.
+            2. An idempotency key is evicted or never created.
+            3. The client retries the request 5 times within 100ms.
+            4. A downstream service returns a 503 halfway through.
+
+            Rewrite the implementation to guarantee:
+            - Database ACID compliance (transactions with proper rollback)
+            - Idempotency (duplicate requests produce exactly one effect)
+            - Exponential backoff with jitter on retries
+            - Graceful degradation (partial failures don't corrupt state)
+
+            Then write a test that simulates this exact scenario.
+            If the test fails, fix the implementation and re-test."
+
       - id: review-implement
         type: gate
         message: |
@@ -723,6 +743,7 @@ steps:
           [ ] Test correctness: each test name proves its acceptance criterion (not stale or unrelated)?
           [ ] Test correctness: [B] new tests PASS (not FLAKY) with correct assertions (HTTP status, response shape, field names)?
           [ ] Test correctness: factory/fixture used for test data isolation, no hand-constructed domain objects?
+          [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
 
           Approve to continue to the next task.
           Revise to send the task back to implementation for test fixes.
