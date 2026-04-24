@@ -480,7 +480,7 @@ steps:
         .env.example (create from project-brief.md):
           List every environment variable the project needs, with placeholder
           values (no real secrets). Derive keys from:
-            project-brief.md §14 local_dev_setup.environment_variables
+            plan.md §14 local_dev_setup.environment_variables
             any infrastructure URLs from project-brief.md
           Format: KEY=placeholder_value (one per line, no blank lines between entries).
           Commit this file. Do NOT commit .env or .env.local.
