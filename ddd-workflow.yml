@@ -197,7 +197,7 @@ steps:
           §11 Reliability & observability
               Correlation ID header name must match §8 correlation_id_header_name exactly.
               Health check paths must not overlap with API endpoint paths from §8.
-              Circuit breakers only for external deps listed in §8 integrations.
+              Circuit breakers only for external deps listed in §1 requirements.
 
           §12 Data design
               Tables must reflect §4 aggregate boundaries — one table per aggregate root
