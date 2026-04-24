@@ -81,5 +81,16 @@ CONSTRAINTS TO WATCH (§16):
   [constraints this task could plausibly violate]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+TASK SUMMARY (confirm before coding):
+  What I will build: [one sentence from task title + acceptance criteria]
+  Files I will create: [from Scope.Creates]
+  Files I will modify: [from Scope.Modifies]
+  Files I will NOT touch: [adjacent files that should remain unchanged]
+  Definition of done: [checkable conditions from task]
+  Assumptions I am making: [list, or "none"]
+
+Wait for user confirmation before implementing.
+Do NOT write any code until the user confirms this summary is correct.
+
 Context ready. Run /speckit.implement to begin.
 Do not implement from this command.

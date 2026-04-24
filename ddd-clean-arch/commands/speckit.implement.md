@@ -436,6 +436,55 @@ A task cannot be marked DONE until every check passes.
   If Type is backend-domain, backend-infra, frontend-data, frontend-feature, or e2e:
     Skip check [K]. N/A.
 
+[M] FAILURE MODE COVERAGE
+  Read plan.md §15 EDGE CASES & FAILURE MODES. For each FAILURE entry:
+
+  1. Search the codebase for handlers/validators related to this failure.
+     Look in:
+     - Domain classes (invariants that prevent this failure)
+     - API layer (input validation that catches this failure)
+     - Frontend (input guards that prevent this failure)
+     - Error handling (§7 error taxonomy)
+
+  2. If the failure is addressed in tests: print "COVERED: [name] — test file"
+  3. If the failure is addressed in code but not tested: print "PARTIALLY: [name] — code exists, add test"
+  4. If the failure is NOT addressed: print "MISSING: [name] — implement now"
+
+  For each MISSING failure: implement the handling now. Do not proceed
+  until all failures are either COVERED or PARTIALLY covered.
+
+  Print: "§15 FAILURE MODES: [N] covered, [N] partially, [N] missed"
+
+[L] ANTI-HALLUCINATION CHECK
+  Before committing, verify every external library import and API call:
+
+  1. For every import from a third-party library:
+     - Confirm the package exists in the project's dependencies
+     - Confirm the imported symbol (function/class/constant) actually
+       exists in that package at the version specified in package.json
+       (or equivalent)
+     - If unsure: stop, write the exact import statement, and verify
+       against the official documentation URL
+
+  2. For every method call on a third-party library:
+     - Confirm the method signature matches the package's documented
+       API (parameter types, return type)
+     - Do NOT assume a method exists because a similar one does
+
+  3. For every HTTP API call:
+     - Confirm the endpoint path matches the api-contract.yaml
+     - Confirm the request/response shapes match the contract schema
+
+  4. For every database query:
+     - Confirm table/column names match §12 TABLE definitions
+     - Confirm parameterized queries are used (no string concatenation)
+
+  If ANY verification fails: fix the code. Do NOT use @ts-ignore,
+  eslint-disable, or equivalent to suppress errors.
+
+  After verification, print: "ANTI-HALLUCINATION: all imports verified"
+  or list the specific imports that failed verification.
+
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
