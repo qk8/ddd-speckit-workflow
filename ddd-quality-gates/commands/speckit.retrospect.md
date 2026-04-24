@@ -53,7 +53,13 @@ Recommendation: [none | revise task scope | add spec clarification]
 ━━ SECTION 4: EDGE CASE COVERAGE ━━━━━━
 
 For each FAILURE in plan.md §15:
-  FAILURE: [name] | Addressed: yes | no | partially
+  1. Search the codebase for handlers/validators related to this failure.
+     Look in: domain classes (invariants), API layer (validation),
+     frontend (input guards), error handling (§7).
+  2. If found in tests: Addressed = yes
+  3. If found in code but not tested: Addressed = partially
+  4. If not found: Addressed = no
+  FAILURE: [name] | Addressed: [yes | no | partially]
   Evidence: [file:line | not yet implemented] | Risk: [consequence]
 
 Covered: [N] / [total]
