@@ -30,6 +30,7 @@ Based on the scope chosen, load ONLY the relevant plan.md sections:
     Read §7 (error taxonomy + envelope), §8 (the specific endpoint block only),
     §8 correlation_id_header_name,
     docs/spec/api-contract.yaml (the specific endpoint only),
+    docs/spec/backend-interfaces.[ext] (the aggregate interface for this endpoint),
     docs/spec/frontend-interfaces.[ext] (the function for this endpoint only)
 
   Scope 4 (full codebase):
