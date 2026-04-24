@@ -43,10 +43,10 @@ the next task's Type. Do not read plan.md end to end:
                     + docs/spec/frontend-interfaces.[ext] for the relevant context
   frontend-feature→ §7 user-facing error behavior,
                     §14 frontend_architecture.layers.ui +
-                    frontend_architecture.layers.feature +
-                    state_management +
-                    form_validation_alignment +
-                    component_library,
+                    frontend_architecture.layers.feature,
+                    §14 state_management +
+                    §14 form_validation_alignment +
+                    §14 component_library,
                     §13 e2e_tests + regression_command, §16, §17
   e2e             → §13 e2e_tests + regression_command,
                     §8 all endpoints, §17
