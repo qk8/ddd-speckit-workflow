@@ -20,7 +20,7 @@ DONE_COUNT=$(grep -c "^Status: DONE$" "$TASKS_FILE" || true)
 TODO_COUNT=$(grep -c "^Status: TODO$" "$TASKS_FILE" || true)
 IN_PROGRESS=$(grep -B1 "^Status: IN_PROGRESS$" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | head -1 | sed 's/^## //' || true)
 ABANDONED_COUNT=$(grep -c "^Status: ABANDONED$" "$TASKS_FILE" || true)
-TOTAL_TASKS=$(grep -c "^## TASK-\[" "$TASKS_FILE" || true)
+TOTAL_TASKS=$(grep -c "^## TASK-" "$TASKS_FILE" || true)
 
 if [ -n "$IN_PROGRESS" ]; then
   echo "WARNING: Status: IN_PROGRESS found — previous session interrupted." >&2
