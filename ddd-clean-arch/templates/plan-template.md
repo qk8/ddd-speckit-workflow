@@ -500,12 +500,14 @@ regression_command:
   # Defined here once and referenced by speckit.implement check [C] and [H],
   # speckit.verify, speckit.retrospect, and speckit.test.
   # Derive from the monorepo tool in §14.
-  all:       # runs everything: arch + unit + integration + API + E2E
+  all:       # runs everything: arch + unit + integration + API + contract + E2E
              # e.g. "pnpm test" | "gradle test" | "npm run test:all"
   api_only:  # faster: arch + unit + integration + API tests only, no browser
              # e.g. "pnpm test:api" | "gradle test -x e2e" | "npm run test:backend"
-  e2e_only:  # browser tests only — used by check [H] and speckit.test REGRESSION_E2E
+  e2e_only:  # browser tests only — used by check [H] and speckit.test --e2e
              # e.g. "npx playwright test --project=e2e" | "npm run test:e2e"
+  contract_only:  # contract tests only — used when API contract changes
+                 # e.g. "pnpm test:contract" | "gradle test --tests '*ContractTest*'"
 
 # ── TEST PYRAMID ───────────────────────────────────────────────
 
