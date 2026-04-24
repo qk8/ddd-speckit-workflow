@@ -32,6 +32,9 @@ the next task's Type. Do not read plan.md end to end:
                     §13 contract_testing + regression_command, §16, §17
                     + docs/spec/api-contract.yaml full
                     + docs/spec/backend-interfaces.[ext] and frontend-interfaces.[ext]
+  integration     → §3 (bounded contexts involved), §4 (aggregates on both sides),
+                    §6 (module boundaries between contexts), §7,
+                    §13 integration_tests + regression_command, §16, §17
   frontend-data   → §7 error taxonomy, §8 (endpoints this module calls),
                     §8 correlation_id_header_name,
                     §11 frontend_observability,

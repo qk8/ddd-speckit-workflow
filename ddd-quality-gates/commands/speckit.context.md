@@ -39,6 +39,9 @@ Then read ONLY these plan.md sections based on task Type:
                     §13 contract_testing + regression_command,
                     §16, §17
                     + full api-contract + both interface files
+  integration     → §3 (bounded contexts involved), §4 (aggregates on both sides),
+                    §6 (module boundaries between contexts), §7,
+                    §13 integration_tests + regression_command, §16, §17
   frontend-data   → §7, §8 (endpoints called, §8 correlation_id_header_name),
                     §11 frontend_observability,
                     §14 frontend_architecture + frontend_auth_flow,
