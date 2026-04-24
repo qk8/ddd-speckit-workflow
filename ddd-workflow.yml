@@ -720,11 +720,17 @@ steps:
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
           [ ] Test file committed alongside implementation?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+          [ ] Test correctness: each test name proves its acceptance criterion (not stale or unrelated)?
+          [ ] Test correctness: [B] new tests PASS (not FLAKY) with correct assertions (HTTP status, response shape, field names)?
+          [ ] Test correctness: factory/fixture used for test data isolation, no hand-constructed domain objects?
 
           Approve to continue to the next task.
+          Revise to send the task back to implementation for test fixes.
           Stop to pause the workflow (resume with: specify workflow resume <run-id>)
-        options: [approve, stop]
+        options: [approve, revise, stop]
         on_stop: abort
+        on_revise:
+          goto: implement_one
 
   # ── PHASE 6: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
