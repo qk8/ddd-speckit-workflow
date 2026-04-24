@@ -142,6 +142,16 @@ and will run in regression for every future task.
     Cover: generated types match the api-contract.yaml schema;
     breaking changes in the schema fail the test.
 
+  TYPE: integration
+    Write an INTEGRATION TEST for cross-context boundaries.
+    Location: plan.md §13 integration_tests.location
+    Framework: plan.md §13 integration_tests.framework (with Testcontainers or equivalent)
+    Cover:
+      - The bounded context boundary defined in §3 for the involved contexts
+      - Event/command flow between contexts matches §4 domain events
+      - Shared kernel types (§14 contract_sharing) are compatible on both sides
+      - Failure in one context does not crash the other (resilience pattern from §11)
+
   TYPE: frontend-data
     Write a UNIT TEST for the data layer module.
     Framework: plan.md §13 unit_tests.framework
