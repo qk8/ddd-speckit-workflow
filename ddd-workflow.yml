@@ -694,8 +694,7 @@ steps:
               Approve when all blocking issues are resolved.
             options: [approve, revise]
             on_revise:
-              type: shell
-              command: echo "Reviewing retrospect findings. Make spec changes in plan.md and tasks.md, then run /speckit.retrospect again."
+              goto: run_retrospect
 
       - id: implement_one
         command: speckit.implement
