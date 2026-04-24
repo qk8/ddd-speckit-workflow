@@ -306,6 +306,20 @@ A task cannot be marked DONE until every check passes.
 [D] LINTER
   Run lint command from plan.md §14 task_runner.lint. Required: no errors.
 
+  If errors/warnings found:
+    1. Do NOT suppress them with @ts-ignore, eslint-disable, or equivalent.
+    2. Analyze the ROOT CAUSE — is it a type mismatch, a missing import, a
+       logic error, or an outdated interface?
+    3. Fix the underlying logic. If the linter flags a type that no longer
+       exists because of a recent refactor, update the type definition, not
+       the usage.
+    4. If the project uses an autofix command (e.g., tsc --noEmit, biome --fix,
+       eslint --fix), run it first before manual fixes.
+    5. Re-run the linter. Repeat until clean.
+
+  If the linter has no autofix: try the most common autofix flag first
+  (e.g., --fix, --auto-fix, format --write), fall back to manual fixes.
+
 [E] DEPENDENCY VULNERABILITY SCAN
   Run scanning tool from plan.md §9 dependency_security.scanning_tool.
   Required: no CRITICAL or HIGH CVEs in direct dependencies.
