@@ -5,8 +5,7 @@
 #
 # Checks:
 #   1. Every endpoint defined in api-contract.yaml exists in code
-#   2. HTTP methods match
-#   3. Response status codes match
+#   2. HTTP methods match (case-insensitive)
 #
 # Output: PASS or DRIFT: [details]
 # Exit code: 0 = PASS, 1 = DRIFT DETECTED
