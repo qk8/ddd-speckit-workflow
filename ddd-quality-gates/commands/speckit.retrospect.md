@@ -80,6 +80,7 @@ For each WEAK_POINT in plan.md §18:
 
 Run arch tests from §20. PASS = layer rules are mechanically enforced.
 Also run: plan.md §13 regression_command.all
+If contract_only is defined: also run plan.md §13 regression_command.contract_only
 Print: total tests, passed, failed, duration.
 If any test fails that was passing before: latent regression.
   State which test fails and which recent task likely introduced it.
