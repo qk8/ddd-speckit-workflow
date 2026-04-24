@@ -792,8 +792,8 @@ database_migrations:
   failed_migration_recovery:
 
 ci_local_script: scripts/ci-local.sh
-  # Path to the CI-local script. Populated in Phase 3C.
-  # Commands are filled in from plan.md §13 and §14 values.
+# Path to the CI-local script. Populated in Phase 3C.
+# Commands are filled in from plan.md §13 and §14 values.
 
 ─────────────────────────────────
 §15 EDGE CASES & FAILURE MODES
