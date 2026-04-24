@@ -163,7 +163,7 @@ steps:
       [ ] §9 CSP: consistent with token delivery (cookie domain if httpOnly)?
       [ ] §10 End-to-end budget: realistic? Backend p95 derived from it?
 
-      PREVIEW — §13 api_testing_tool (decided in Plan B, but depends on §8):
+      PREVIEW — §13 api_testing_tool (not yet produced; decision in Plan B):
         Based on the backend_language in project-brief.md, the API testing tool
         will be selected in Plan B as:
           Java        → REST Assured  (runs via mvn test / gradle test)
@@ -232,7 +232,7 @@ steps:
               - E2E test owner and which CI pipeline runs them
 
           §14 Monorepo & developer experience
-              Frontend cache invalidation must align with §8 cache-control + §10 caching.
+              Frontend cache invalidation must align with §8 cache-control + §10 PERFORMANCE & SCALABILITY (caching).
               local_dev_setup.steps must be runnable by a new engineer in under 15 minutes.
               Include: ci_local_script: scripts/ci-local.sh (to be created in Phase 3C).
 
