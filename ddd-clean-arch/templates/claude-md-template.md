@@ -10,8 +10,8 @@
 backend:  [language] / [framework] / [database]
 frontend: [language] / [framework]
 monorepo: [tool]
-api_test: [rest-assured | playwright-api | pytest-httpx]
-e2e_test: playwright
+api_testing_tool.selected: [rest-assured | playwright-api | pytest-httpx]
+e2e_testing_tool.selected: playwright
 
 ## Architecture
 [One paragraph. Names every module from §6. States the dependency direction:
