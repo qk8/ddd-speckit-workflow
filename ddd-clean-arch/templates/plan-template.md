@@ -685,23 +685,11 @@ ci_execution_order:
 ─────────────────────────────────
 
 monorepo_tool:
-monorepo_tool_rationale:
-monorepo_tool_does_not_handle:
-
-build_graph:
-  [package] depends_on: [packages | none]
 
 task_runner:
   lint:
   test:
-  build:
   dev:  # starts both backend and frontend
-
-shared_packages:
-  - name:
-    contents:
-    rationale:  # must reduce duplication without tight coupling
-    consumers:
 
 contract_sharing:
   strategy: openapi_codegen | graphql_sdl_codegen | manual | duplicated
@@ -759,9 +747,6 @@ component_library:
   name:
   rationale:
 
-rendering_strategy: CSR | SSR | SSG | hybrid
-rendering_rationale:
-
 local_dev_setup:
   new_engineer_target_minutes: 15
   steps:
@@ -769,27 +754,6 @@ local_dev_setup:
   environment_variables:
     committed: .env.example with all keys, no values
     gitignored: .env.local
-  environment_parity:
-
-ci_cd:
-  backend_pipeline:
-    triggers:
-    stages:
-    independently_deployable: yes
-  frontend_pipeline:
-    triggers:
-    stages:
-    independently_deployable: yes
-  shared_gates:  # keep minimal
-  rollback_backend:
-  rollback_frontend:
-  contract_compatibility_window:
-
-database_migrations:
-  workflow:
-  production_run:
-  zero_downtime_guarantee: yes | no
-  failed_migration_recovery:
 
 ci_local_script: scripts/ci-local.sh
 # Path to the CI-local script. Populated in Phase 3C.
