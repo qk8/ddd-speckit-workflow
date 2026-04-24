@@ -10,7 +10,7 @@ It asks: is this code well-designed and free of hidden problems?
 
 Ask: "Which task(s) to review?" (task number, file path, or "last task")
 Resolve to a list of files. Read each file fully.
-Read from plan.md: §2, §4, §6, §7, §16.
+Read from plan.md: §2, §4, §6.
 
 ━━ DIMENSION 1: UBIQUITOUS LANGUAGE ━━━━
 
@@ -53,7 +53,7 @@ Compare code against .specify/memory/conventions.md.
 Answer with specific file:line references:
   1. Method >20 lines that could be extracted? [file:line — how]
   2. Conditional branch purpose unclear without comments? [file:line — why complex]
-  3. Test that could pass for the wrong reason? [test file:line — what missing]
+  3. Public function with ambiguous success/failure contract? [file:line — what unclear]
   4. Error handling silently swallowing exception? [file:line — what lost]
   5. Magic number/string/unexplained constant? [file:line — where it should be]
 
