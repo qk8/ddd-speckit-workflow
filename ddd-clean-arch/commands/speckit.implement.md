@@ -306,8 +306,8 @@ A task cannot be marked DONE until every check passes.
     Print schema diff. Required: matches §12 exactly.
     If mismatch: fix migration and re-run. Do not mark DONE.
 
-[G] OBSERVABILITY ASSERTIONS — backend-api and frontend-data tasks only
-  Verify that the test file from Step 1 already asserts observability.
+[G] ERROR HANDLING ASSERTIONS — backend-api and frontend-data tasks only
+  Verify that the test file from Step 1 already asserts error handling.
   If any assertion is missing: add it to the test file now (not optional).
 
   If Type is backend-api, verify the API test asserts:
