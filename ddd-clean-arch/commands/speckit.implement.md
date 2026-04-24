@@ -25,8 +25,7 @@ the next task's Type. Do not read plan.md end to end:
   backend-infra   → §4 (aggregate in scope), §6 infra rules,
                     §12 (table in scope), migration_strategy,
                     §13 integration_tests + regression_command, §16, §17
-  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope),
-                    §11 correlation ID,
+  backend-api     → §6 app + delivery rules, §7 full, §8 (endpoint in scope, §8 correlation_id_header_name),
                     §13 api_tests + regression_command, §16, §17
                     + docs/spec/api-contract.yaml for the endpoint(s) in scope
   shared          → §14 contract_sharing + change_detection, §3,
