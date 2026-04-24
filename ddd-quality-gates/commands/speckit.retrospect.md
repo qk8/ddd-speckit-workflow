@@ -87,9 +87,12 @@ FLAKY TEST AUDIT: scan .specify/specs/[feature]/tasks.md DONE entries and
     Action required: fix or delete with documented justification.
 
 SECRET SCANNING AUDIT:
-  Run: gitleaks detect --source . --redact -q
-  Required: no secrets detected.
-  If found: SECURITY: secret found in [file] — rotate the credential immediately.
+  If gitleaks is installed:
+    Run: gitleaks detect --source . --redact -q
+    Required: no secrets detected.
+    If found: SECURITY: secret found in [file] — rotate the credential immediately.
+  Else:
+    Print: "WARNING: gitleaks not installed — skipping secret scan."
   Also verify: are all .env files in .gitignore?
                does .env.example exist with placeholder values only?
 
