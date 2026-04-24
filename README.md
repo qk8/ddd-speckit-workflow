@@ -205,7 +205,8 @@ check [H] runs headless only — all other checks are unaffected.
 
 | Mode | Use when |
 |------|----------|
-| `API_TEST` | Backend issue, no UI needed |
-| `BROWSER_TEST` | UI interaction, form, navigation |
-| `BROWSER_DEBUG` | Unknown bug — opens browser + DevTools |
-| `FULL_JOURNEY` | End-to-end scenario verification |
+| `--regression` | Run full test suite (all layers including browser) |
+| `--fast` | Run arch + unit + integration + API tests (no browser) |
+| `--e2e` | Run browser E2E tests only |
+| `--target [name]` | Run tests for a specific feature, aggregate, or endpoint |
+| `--debug [desc]` | Reproduce and diagnose a specific bug |
