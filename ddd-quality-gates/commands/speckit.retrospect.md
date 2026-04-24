@@ -35,7 +35,7 @@ Budget plausible: yes | uncertain | likely violated
 Basis: [measured data from tasks.md Perf warnings | no data yet]
 Recommendation: [none | run a load test | revisit budget]
 
-━━ SECTION 2B: ROLLBACKS ━━━━━━━━━━━━━
+━━ SECTION 3: ROLLBACKS ━━━━━━━━━━━━━━
 
 Read tasks.md DONE entries for "Rollback note:" lines:
   grep -B5 "Rollback note:" tasks.md | grep "TASK-\[" to extract per-task rollback notes.
@@ -50,7 +50,7 @@ These tasks should be reviewed:
   - Should the task be split into smaller sub-tasks?
 Recommendation: [none | revise task scope | add spec clarification]
 
-━━ SECTION 3: EDGE CASE COVERAGE ━━━━━━
+━━ SECTION 4: EDGE CASE COVERAGE ━━━━━━
 
 For each FAILURE in plan.md §15:
   FAILURE: [name] | Addressed: yes | no | partially
@@ -59,7 +59,7 @@ For each FAILURE in plan.md §15:
 Covered: [N] / [total]
 Uncovered high-risk: [name — consequence]
 
-━━ SECTION 4: SELF-CRITIQUE REALITY CHECK
+━━ SECTION 5: SELF-CRITIQUE REALITY CHECK
 
 For each WEAK_POINT in plan.md §18:
   Status: not_manifested | early_signs | actively_problematic
@@ -70,7 +70,7 @@ For each WEAK_POINT in plan.md §18:
   Key dep lost: any external dependency NOT behind a port?
     VIOLATION: [dependency] not behind a port — replacement expensive.
 
-━━ SECTION 5: TEST SUITE HEALTH ━━━━━━━━
+━━ SECTION 6: TEST SUITE HEALTH ━━━━━━━━
 
 Run arch tests from §20. PASS = layer rules are mechanically enforced.
 Also run: plan.md §13 regression_command.all
@@ -95,7 +95,7 @@ SECRET SCANNING AUDIT:
 
 Near-violations in DONE task Spec Learnings related to constraints? List any.
 
-━━ SECTION 6: RECOMMENDATIONS ━━━━━━━━
+━━ SECTION 7: RECOMMENDATIONS ━━━━━━━━
 
 MUST DO (before continuing):
   - [action]: [reason]
