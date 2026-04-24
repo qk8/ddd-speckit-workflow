@@ -178,7 +178,7 @@ steps:
     on_revise:
       goto: plan-part-a
 
-  # ── PHASE 3B: PLAN — RELIABILITY + DATA + OPERATIONS (§11–§20) + FILES
+  # ── PHASE 3B: PLAN — RELIABILITY + DATA + TESTING + DEVEX (§11–§14)
   # ── PHASE 3B: §11–§14 (reliability, data, testing, devex) ───────
   # Split from the original monolithic pass to avoid context window degradation.
   # §11-14 are dense structural decisions that reference §1-10 heavily.
