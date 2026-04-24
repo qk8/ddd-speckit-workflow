@@ -117,6 +117,47 @@ steps:
     options: [approve, reject]
     on_reject: abort
 
+  - id: audit-spec
+    type: prompt
+    integration: claude
+    input:
+      args: >
+        Read .specify/specs/[feature]/spec.md. Then produce an adversarial
+        audit with exactly these sections:
+
+        ### Hidden Requirements
+        [Requirements implied by the spec but not stated — e.g., auth
+        is implied if there are user roles; pagination is implied if
+        there are list endpoints]
+
+        ### Contradictions
+        [Any two requirements that cannot both be true simultaneously]
+
+        ### Ambiguities
+        [Any phrase a developer could interpret two different ways]
+
+        ### Missing Edge Cases
+        [Empty states, error states, concurrent access, scale limits,
+        clock skew, malformed input]
+
+        ### Security Surfaces
+        [Any feature that introduces a security surface not addressed
+        in the spec]
+
+        Print the audit. Do NOT modify spec.md yet. The human will
+        review and decide what to add.
+
+  - id: review-audit
+    type: gate
+    message: |
+      Review the adversarial spec audit above.
+      Edit spec.md to resolve every item: add missing requirements,
+      clarify ambiguities, document contradictions resolved.
+      Approve when the spec is unambiguous and complete.
+    options: [approve, revise]
+    on_revise:
+      goto: audit-spec
+
   # ── PHASE 3A: PLAN — DOMAIN + ARCHITECTURE (§1–§10) ──────────
   # Split into two passes to avoid context window overflow.
   # Pass A covers the decisions that affect everything else.
