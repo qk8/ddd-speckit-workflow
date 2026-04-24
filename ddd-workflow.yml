@@ -329,8 +329,9 @@ steps:
               TypeScript backend → [module]/.dependency-cruiser.cjs
               Other → closest available static analysis tool config
               Frontend → [frontend-module]/.dependency-cruiser.cjs
-            Run arch tests on empty codebase. Must pass.
-            Populate §20 after generating arch test files.
+            Run arch tests against the generated files only (no business logic yet).
+            The arch tests must pass with zero violations on an empty domain.
+            Populate §20 with the actual test file paths and tool names.
 
         .specify/memory/conventions.md
             Naming: use cases, repositories, events, value objects, test classes.
