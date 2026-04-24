@@ -34,7 +34,8 @@ the next task's Type. Do not read plan.md end to end:
                     + docs/spec/backend-interfaces.[ext] and frontend-interfaces.[ext]
   frontend-data   → §7 error taxonomy, §8 (endpoints this module calls),
                     §8 correlation_id_header_name,
-                    §14 data layer + auth_flow + frontend_observability,
+                    §11 frontend_observability,
+                    §14 frontend_architecture + frontend_auth_flow,
                     §13 unit_tests + regression_command, §16, §17
                     + docs/spec/frontend-interfaces.[ext] for the relevant context
   frontend-feature→ §7 user-facing error behavior,
