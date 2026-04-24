@@ -76,9 +76,10 @@ E2E tests:    playwright | location: [path pattern] | headless in CI, visible wi
 Arch tests:   [ArchUnit | dependency-cruiser] | location: [path] | runs in CI lint stage
 
 Regression commands:
-  all:      [plan.md §13 regression_command.all]
-  api_only: [plan.md §13 regression_command.api_only]
-  e2e_only: [plan.md §13 regression_command.e2e_only]
+  all:          [plan.md §13 regression_command.all]
+  api_only:     [plan.md §13 regression_command.api_only]
+  e2e_only:     [plan.md §13 regression_command.e2e_only]
+  contract_only: [plan.md §13 regression_command.contract_only]
 
 Local CI:   bash scripts/ci-local.sh
 
