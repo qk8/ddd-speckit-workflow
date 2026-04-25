@@ -4,7 +4,7 @@ feature directory. Read from that directory:
   - tasks.md (complete)
 Also read CLAUDE.md from the repo root.
 
-Run on adaptive cadence (check-tasks.sh): simple=15, medium=10, complex=5 DONE tasks.
+Run on adaptive cadence (check-tasks.sh, values from ddd-clean-arch/preset.yml cadence section).
 Does not implement or fix anything.
 Reports alignment and waits for decisions.
 

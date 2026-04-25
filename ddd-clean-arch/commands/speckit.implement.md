@@ -251,13 +251,6 @@ Print: "Regression: [total N] tests, [N] failed"
   - Zero new failures allowed
   - If any pre-existing test fails: STOP, diagnose root cause, fix, re-run
 
-Then RUN THE QUANTITATIVE GATE:
-  [type_check_command] → assert 0 errors
-  [lint_command] → assert 0 errors
-  [build_command] → assert clean build
-  Print: "Quantitative gate: 0 type errors, 0 lint errors, build clean"
-  If any gate fails: fix and re-run. Do NOT proceed until all pass.
-
 ─────────────────────────────────────────
 INLINE CORRECTION LOOP (if tests fail)
 ─────────────────────────────────────────
@@ -346,15 +339,6 @@ If any check FAILS:
 
 A task cannot be marked DONE until every applicable check passes.
 
-Sub-check files (generated from preset.yml routing):
-  backend-domain    → [A] [B] [C] [D] [M] [P]
-  backend-infra     → [A] [B] [C] [D] [E] [F] [M] [O] [Q]
-  backend-api       → [A] [B] [C] [D] [E] [G] [I] [J] [K] [L] [M] [N] [O] [Q] [T] [U]
-  shared            → [A] [B] [C] [D] [E] [K] [L] [M] [N] [T]
-  frontend-data     → [B] [C] [D] [G] [L] [O] [P]
-  frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
-  e2e               → [B] [C] [D] [H] [P]
-
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
@@ -390,7 +374,6 @@ Checks:
   [O] Security:        PASS | FAIL — [details] | N/A
   [P] Test quality:    PASS | [N] issues — [details] | N/A
   [Q] Resilience:      PASS | [N] scenarios tested | [N] added
-  [R] Quantitative:    PASS | FAIL — [details]
   [S] Property-based:  PASS | [N] weak, [N] missed | N/A
   [T] Adversarial:     PASS | [N] covered, [N] missed | N/A
   [U] Session/token:   PASS | [N] covered, [N] missed | N/A

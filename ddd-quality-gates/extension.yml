@@ -21,7 +21,6 @@ commands:
   - speckit.verify
   - speckit.review
   - speckit.code-review
-  - speckit.correction
   - speckit.retrospect
   - speckit.status
   - speckit.context

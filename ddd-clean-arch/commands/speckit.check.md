@@ -11,16 +11,4 @@ This command:
    - Records result
 4. Prints results summary: "CHECK [X] NAME: PASS | FAIL — details"
 
-─────────────────────────────────────────
-ROUTING TABLE (from preset.yml)
-─────────────────────────────────────────
-  backend-domain    → [A] [B] [C] [D] [M] [P]
-  backend-infra     → [A] [B] [C] [D] [E] [F] [M] [O] [Q]
-  backend-api       → [A] [B] [C] [D] [E] [G] [I] [J] [K] [L] [M] [N] [O] [Q] [T] [U]
-  shared            → [A] [B] [C] [D] [E] [K] [L] [M] [N] [T]
-  frontend-data     → [B] [C] [D] [G] [L] [O] [P]
-  frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
-  e2e               → [B] [C] [D] [H] [P]
-─────────────────────────────────────────
-
 Run only the checks in the applicable set. Do not run checks outside the set.

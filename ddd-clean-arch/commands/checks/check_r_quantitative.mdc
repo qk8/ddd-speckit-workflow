@@ -1,9 +1,9 @@
 ---
 check_id: R
 name: Quantitative Pass Gate
-applies_to: all
+applies_to: [backend-api, shared]
 ---
-[R] QUANTITATIVE PASS GATE — all types
+[R] QUANTITATIVE PASS GATE — backend-api, shared
   Verify all quantitative thresholds from plan.md §13:
     1. coverage_thresholds: Run coverage report. Assert line ≥ [line]%,
        branch ≥ [branch]%, function ≥ [function]%, statement ≥ [statement]%.

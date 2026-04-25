@@ -8,10 +8,22 @@ set -euo pipefail
 SPECS_DIR=".specify/specs"
 FEATURE_DIR=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | head -n 1)
 
+# Read cadence defaults from preset.yml (single source of truth)
+PRESET_FILE="ddd-clean-arch/preset.yml"
+DEFAULT_RETRO_INTERVAL=10
+DEFAULT_FIRST_RETRO_THRESHOLD=5
+if [ -f "$PRESET_FILE" ]; then
+  DEFAULT_RETRO_INTERVAL=$(awk '/^    medium:/{print $2; exit}' "$PRESET_FILE" || true)
+  [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL=10
+  DEFAULT_FIRST_RETRO_THRESHOLD=$(awk '/^  first_retro_threshold:/{print $2; exit}' "$PRESET_FILE" || true)
+  [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD=5
+fi
+
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "has_todo=false"; echo "done_count=0"; echo "todo_count=0"
   echo "in_progress="; echo "abandoned_count=0"; echo "total_tasks=0"
-  echo "complexity=medium"; echo "retro_interval=10"; echo "first_retro_threshold=5"
+  echo "complexity=medium"; echo "retro_interval=$DEFAULT_RETRO_INTERVAL"; echo "first_retro_threshold=$DEFAULT_FIRST_RETRO_THRESHOLD"
+  echo "retro_trigger=false"
   exit 0
 fi
 
@@ -50,22 +62,21 @@ if [ -f "project-brief.md" ]; then
   esac
 fi
 
-# Determine retrospective interval based on complexity and total tasks
-RETRO_INTERVAL=10
+# Determine retrospective interval based on complexity — read from preset.yml
+RETRO_INTERVAL="$DEFAULT_RETRO_INTERVAL"
 case "$COMPLEXITY" in
   simple)
-    if [ "$TOTAL_TASKS" -lt 30 ]; then RETRO_INTERVAL=15; fi
-    ;;
-  medium)
-    RETRO_INTERVAL=10
+    PRESET_SIMPLE=$(awk '/^  retro_interval:/{found=1} found && /simple:/{print $2; exit}' "$PRESET_FILE")
+    [ -n "$PRESET_SIMPLE" ] && RETRO_INTERVAL="$PRESET_SIMPLE"
     ;;
   complex)
-    RETRO_INTERVAL=5
+    PRESET_COMPLEX=$(awk '/^  retro_interval:/{found=1} found && /complex:/{print $2; exit}' "$PRESET_FILE")
+    [ -n "$PRESET_COMPLEX" ] && RETRO_INTERVAL="$PRESET_COMPLEX"
     ;;
 esac
 
-# First retrospective always triggers at >= 5 tasks (early feedback)
-FIRST_RETRO_THRESHOLD=5
+# First retrospective threshold — read from preset.yml
+FIRST_RETRO_THRESHOLD="$DEFAULT_FIRST_RETRO_THRESHOLD"
 
 # Determine if retrospective should trigger
 # Triggers at first_retro_threshold, then every retro_interval tasks thereafter

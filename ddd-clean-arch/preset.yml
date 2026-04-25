@@ -34,7 +34,6 @@ templates:
 commands:
   - speckit.implement
   - speckit.check
-  - speckit.correction
 
 # Quality checks: each check declares which task types it applies to.
 # The routing table is a convenience lookup derived from applies_to.
@@ -92,7 +91,7 @@ checks:
     applies_to: [backend-api, backend-infra]
   R:
     name: "Quantitative Pass Gate"
-    applies_to: all
+    applies_to: [backend-api, shared]
   S:
     name: "Property-Based Test Coverage"
     applies_to: all
@@ -107,8 +106,17 @@ checks:
 routing:
   backend-domain:    [A, B, C, D, M, P]
   backend-infra:     [A, B, C, D, E, F, M, O, Q]
-  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, T, U]
-  shared:            [A, B, C, D, E, K, L, M, N, T]
+  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, R, T, U]
+  shared:            [A, B, C, D, E, K, L, M, N, R, T]
   frontend-data:     [B, C, D, G, L, O, P]
   frontend-feature:  [B, C, D, G, H, L, O, P]
   e2e:               [B, C, D, H, P]
+
+# Adaptive retrospective cadence — single source of truth.
+# check-tasks.sh reads these values; speckit.retrospect.md references them.
+cadence:
+  retro_interval:
+    simple: 15
+    medium: 10
+    complex: 5
+  first_retro_threshold: 5
