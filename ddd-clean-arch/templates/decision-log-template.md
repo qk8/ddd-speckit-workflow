@@ -6,5 +6,7 @@ decisions:
     decision: ""
     alternatives_considered:
       - ""
+      - ""
+      - ""
     reason: ""
     impact: ""

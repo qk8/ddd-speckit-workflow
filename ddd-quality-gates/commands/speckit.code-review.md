@@ -1,6 +1,8 @@
 # speckit.code-review
 
-Phase 7 — Code Review Checklist Gate.
+Code Review Checklist Gate.
+
+Run after all tasks are complete (before final verify). Perform a structured,
 
 Run after all tasks are complete (before final verify). Perform a structured,
 item-by-item self-review of all code written in this session. For every item

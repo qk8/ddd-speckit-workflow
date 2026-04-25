@@ -531,7 +531,9 @@ steps:
               These tasks were interrupted and left with partial files on disk.
               Review them in tasks.md and clean up any partial files before continuing.
               Approve to continue with the next TODO task (ABANDONED tasks are skipped).
-            options: [approve]
+            options: [approve, revise]
+            on_revise:
+              goto: tasks
 
       - id: should_retrospect
         type: if
@@ -635,7 +637,7 @@ steps:
       [ ] All correctness items: PASS
       [ ] All performance items: PASS or N/A
       [ ] All maintainability items: PASS
-      [ ] All accessibility items: PASS, N/A, or not applicable
+      [ ] All accessibility items: PASS, N/A
       [ ] REVIEW_REPORT.md produced
 
       Approve to continue to final verify.

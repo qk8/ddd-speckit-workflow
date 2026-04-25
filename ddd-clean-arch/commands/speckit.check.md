@@ -42,7 +42,7 @@ CHECKS
     If a test fails intermittently across runs with no code change:
       1. Quarantine the test immediately (disable with a clear marker).
       2. Log in TEST_AUDIT_LOG.md:
-           entry_id: TAUDIT-001
+           entry_id: [next sequential, e.g. TAUDIT-001]
            test_file: [path]
            test_name: [name]
            classification: FLAWED | FLAKY | TRIVIALLY_PASSING
