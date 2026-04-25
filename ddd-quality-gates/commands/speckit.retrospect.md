@@ -23,7 +23,10 @@ Cross-check: are all in plan.md?
 plan.md §10: end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
 
 Read tasks.md DONE entries for "Perf warning:" lines:
-  grep -B5 "Perf warning:" tasks.md | grep "TASK-\[" to extract per-task perf warnings.
+  Use awk to extract the full task entry containing "Perf warning:" — awk
+  reads tasks.md, tracks the current TASK-[N] header, and prints the entry
+  when "Perf warning:" is found anywhere within it:
+    awk '/TASK-\[/ { task=$0; header=1 } header && /Perf warning:/ { print task; found=1 } header && /^###/ && found { exit }' tasks.md
   backend-api tasks with perf warnings: list each endpoint, measured p95, budget.
   frontend-feature tasks with perf warnings: list each page, measured LCP, budget.
 
@@ -38,7 +41,9 @@ Recommendation: [none | run a load test | revisit budget]
 ━━ SECTION 3: ROLLBACKS ━━━━━━━━━━━━━━
 
 Read tasks.md DONE entries for "Rollback note:" lines:
-  grep -B5 "Rollback note:" tasks.md | grep "TASK-\[" to extract per-task rollback notes.
+  Use awk to extract the full task entry containing "Rollback note:" — same
+  pattern as the Perf warning extraction above:
+    awk '/TASK-\[/ { task=$0; header=1 } header && /Rollback note:/ { print task; found=1 } header && /^###/ && found { exit }' tasks.md
 
 If any Rollback note exists in tasks.md:
   ROLLBACK: [N] task(s) were rolled back due to unfixable regressions.

@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+# ── Resolve to repository root ──────────────────────────────────
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO_ROOT"
+
 # ── Locate api-contract.yaml ────────────────────────────────────
 CONTRACT_FILE=""
 for dir in . .specify/specs/*; do

@@ -44,6 +44,21 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+join_cmds() {
+  # Join non-empty arguments with ' && '. Ignores empty args.
+  local result=""
+  for arg in "$@"; do
+    if [ -n "$arg" ]; then
+      if [ -n "$result" ]; then
+        result="$result && $arg"
+      else
+        result="$arg"
+      fi
+    fi
+  done
+  echo "$result"
+}
+
 FAILED_STAGES=()
 START_TIME=$(date +%s)
 
@@ -84,7 +99,7 @@ if $E2E_ONLY; then
   run_stage 7 "E2E tests (headless)" "$E2E_TEST_CMD"
 else
   run_stage 1 "Secret scan (gitleaks)"   "$SECRET_SCAN_CMD" || { print_summary; exit 1; }
-  run_stage 2 "Lint + arch tests"        "${LINT_CMD}${ARCH_TEST_CMD:+${LINT_CMD:+ && }$ARCH_TEST_CMD}" || { print_summary; exit 1; }
+  run_stage 2 "Lint + arch tests"        "$(join_cmds "$LINT_CMD" "$ARCH_TEST_CMD")" || { print_summary; exit 1; }
   run_stage 3 "Unit tests"               "$UNIT_TEST_CMD"        || { print_summary; exit 1; }
   run_stage 4 "Integration tests"        "$INTEGRATION_TEST_CMD" || { print_summary; exit 1; }
   run_stage 5 "API tests"                "$API_TEST_CMD"         || { print_summary; exit 1; }
