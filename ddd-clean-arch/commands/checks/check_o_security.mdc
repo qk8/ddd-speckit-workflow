@@ -1,0 +1,27 @@
+---
+check_id: O
+name: Security Hardening
+applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
+---
+[O] SECURITY HARDENING — backend-api, frontend-data, frontend-feature tasks
+  If this task touches any user-facing code, verify every security
+  requirement from plan.md §9 is implemented:
+
+  1. Input validation: Is every user-supplied input validated at the
+     system boundary? (HTTP request body, query params, headers,
+     cookies, file uploads)
+  2. Output escaping: Is all user data escaped before rendering in HTML?
+  3. SQL injection: Are all database queries parameterized?
+     (No string concatenation in SQL)
+  4. CSRF: Are state-changing endpoints protected against CSRF?
+  5. Rate limiting: Are auth endpoints (login, register, password reset)
+     rate-limited?
+  6. HTTP security headers: Are Content-Security-Policy, X-Frame-Options,
+     X-Content-Type-Options set?
+  7. Sensitive data: Is PII not logged? Are secrets not in source code?
+     Are tokens not stored in localStorage?
+  8. Error messages: Do error messages NOT reveal internal paths,
+     library names, or stack traces to clients?
+
+  For each item: PASS, FAIL, or N-A.
+  If any FAIL: fix it. Do not proceed until all PASS or N-A.

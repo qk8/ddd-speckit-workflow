@@ -1,0 +1,11 @@
+---
+check_id: F
+name: Migration Test
+applies_to: [backend-infra]
+---
+[F] MIGRATION TEST — backend-infra tasks only
+  If Type is backend-infra and a migration file was created:
+    Apply migration to test database (tool from plan.md §12 migration_strategy.tool).
+    Verify every table, column type, nullability, and index from §12 TABLE definitions exists.
+    Print schema diff. Required: matches §12 TABLE definitions exactly.
+    If mismatch: fix migration and re-run. Do not mark DONE.

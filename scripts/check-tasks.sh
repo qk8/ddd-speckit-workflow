@@ -67,6 +67,17 @@ esac
 # First retrospective always triggers at >= 5 tasks (early feedback)
 FIRST_RETRO_THRESHOLD=5
 
+# Determine if retrospective should trigger
+# Triggers at first_retro_threshold, then every retro_interval tasks thereafter
+RETRO_TRIGGER=false
+if [ "$DONE_COUNT" -ge "$FIRST_RETRO_THRESHOLD" ]; then
+  if [ "$DONE_COUNT" -eq "$FIRST_RETRO_THRESHOLD" ]; then
+    RETRO_TRIGGER=true
+  elif [ $(( DONE_COUNT % RETRO_INTERVAL )) -eq 0 ]; then
+    RETRO_TRIGGER=true
+  fi
+fi
+
 echo "has_todo=$HAS_TODO"
 echo "done_count=$DONE_COUNT"
 echo "todo_count=$TODO_COUNT"
@@ -76,4 +87,5 @@ echo "total_tasks=$TOTAL_TASKS"
 echo "complexity=$COMPLEXITY"
 echo "retro_interval=$RETRO_INTERVAL"
 echo "first_retro_threshold=$FIRST_RETRO_THRESHOLD"
+echo "retro_trigger=$RETRO_TRIGGER"
 echo "feature_dir=$FEATURE_DIR"

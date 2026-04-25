@@ -1,0 +1,13 @@
+---
+check_id: K
+name: API Contract Enforcement
+applies_to: [backend-api, shared]
+---
+[K] API CONTRACT ENFORCEMENT — backend-api and shared tasks only
+  Run: bash scripts/validate-api-contract.sh
+  Required: PASS. If DRIFT DETECTED:
+    Print: "CONTRACT DRIFT: [details]"
+    Fix the endpoint to match the contract. Do not weaken the contract
+    to match incorrect implementation.
+    If the contract is genuinely wrong: record in Spec learnings.
+    Do NOT mark DONE until contract matches or learnings are recorded.

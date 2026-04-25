@@ -1,0 +1,8 @@
+---
+check_id: A
+name: Architectural Tests
+applies_to: [backend-domain, backend-infra, backend-api]
+---
+[A] ARCHITECTURAL TESTS
+  Run arch test command from plan.md §20.
+  Required: PASS. If fail: fix the layer violation. Do not skip.

@@ -537,10 +537,7 @@ steps:
 
       - id: should_retrospect
         type: if
-        condition: >
-          {{ steps.check_remaining.output.done_count | int >= (steps.check_remaining.output.first_retro_threshold | int) and
-             (steps.check_remaining.output.done_count | int == steps.check_remaining.output.first_retro_threshold or
-              steps.check_remaining.output.done_count | int % (steps.check_remaining.output.retro_interval | int) == 0) }}
+        condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
         then:
           - id: run_retrospect
             type: prompt

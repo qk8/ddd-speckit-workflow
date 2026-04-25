@@ -1,0 +1,33 @@
+---
+check_id: U
+name: Session & Token Security
+applies_to: [backend-api]
+---
+[U] SESSION & TOKEN SECURITY — backend-api tasks only
+  If this task touches authentication, tokens, or sessions, verify:
+
+  1. JWT algorithm enforcement:
+     - alg: none attack → 401 (NEVER succeeds)
+     - HMAC (HS256) token when RS256 expected → 401
+     - Token with modified payload (user ID changed) → signature validation catches it
+
+  2. Refresh token rotation:
+     - Consumed refresh token used again → 401 + entire token family invalidated
+     - New access token from step b is also invalidated
+
+  3. Token leakage:
+     - Search all log output for JWT pattern → zero matches
+     - Token values never appear in logs, error messages, or response bodies
+
+  4. Cookie security (if cookie-based sessions):
+     - Set-Cookie header includes HttpOnly, Secure, SameSite=Strict (or Lax with justification)
+     - No token stored in localStorage
+
+  5. Session fixation:
+     - New session created after authentication → different session ID
+     - Session ID not predictable or guessable
+
+  For each item: PASS, FAIL, or N/A.
+  For every FAIL: fix immediately. Do not proceed.
+
+  Print: "SESSION & TOKEN SECURITY: [N] covered, [N] missed"

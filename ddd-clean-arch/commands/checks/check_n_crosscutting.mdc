@@ -1,0 +1,21 @@
+---
+check_id: N
+name: Cross-Cutting Concern Audit
+applies_to: [backend-api, shared]
+---
+[N] CROSS-CUTTING CONCERN AUDIT — backend-api and shared tasks only
+  If this task creates or modifies any endpoint, audit ALL endpoints
+  in the codebase for consistency:
+
+  1. Auth: Is every endpoint covered by auth middleware — or explicitly
+     opted out with a comment explaining why?
+  2. Logging: Is every endpoint covered by request logging?
+  3. Error handling: Is every error propagated to a single error handler,
+     or are there silent catch blocks?
+  4. Response format: Is there a consistent error response shape across
+     all endpoints per §7 error taxonomy?
+  5. Transactions: Are DB transactions used consistently for endpoints
+     that perform more than one write?
+
+  For each gap: state the file, the gap, and the fix.
+  Fix all gaps. Do not proceed until consistent.

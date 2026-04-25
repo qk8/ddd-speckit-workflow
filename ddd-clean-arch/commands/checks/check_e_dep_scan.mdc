@@ -1,0 +1,13 @@
+---
+check_id: E
+name: Dependency Vulnerability Scan
+applies_to: [backend-domain, backend-infra, backend-api, shared]
+---
+[E] DEPENDENCY VULNERABILITY SCAN
+  Run scanning tool from plan.md §9 dependency_security.scanning_tool.
+  Required: no CRITICAL or HIGH CVEs in direct dependencies.
+  If found:
+    Print: SECURITY BLOCK — [CVE ID]: [package] [severity]
+    Do not mark DONE. User must update the dependency or document an accepted
+    risk in plan.md §9 with justification and remediation deadline.
+  If tool not installed: install it now. Add to CI. Document in plan.md §9.

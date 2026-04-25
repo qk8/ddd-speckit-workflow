@@ -35,3 +35,80 @@ commands:
   - speckit.implement
   - speckit.check
   - speckit.correction
+
+# Quality checks: each check declares which task types it applies to.
+# The routing table is a convenience lookup derived from applies_to.
+checks:
+  A:
+    name: "Architectural Tests"
+    applies_to: [backend-domain, backend-infra, backend-api]
+  B:
+    name: "New Tests Pass"
+    applies_to: all
+  C:
+    name: "Regression Suite"
+    applies_to: all
+  D:
+    name: "Linter"
+    applies_to: all
+  E:
+    name: "Dependency Vulnerability Scan"
+    applies_to: [backend-domain, backend-infra, backend-api, shared]
+  F:
+    name: "Migration Test"
+    applies_to: [backend-infra]
+  G:
+    name: "Error Handling Assertions"
+    applies_to: [backend-api, frontend-data]
+  H:
+    name: "Browser Verification"
+    applies_to: [frontend-feature, e2e]
+  I:
+    name: "Secret Scanning"
+    applies_to: all
+  J:
+    name: "Performance Budget"
+    applies_to: [backend-api, frontend-feature]
+  K:
+    name: "API Contract Enforcement"
+    applies_to: [backend-api, shared]
+  L:
+    name: "Anti-Hallucination Check"
+    applies_to: all
+  M:
+    name: "Failure Mode Coverage"
+    applies_to: all
+  N:
+    name: "Cross-Cutting Concern Audit"
+    applies_to: [backend-api, shared]
+  O:
+    name: "Security Hardening"
+    applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
+  P:
+    name: "Test Quality Review"
+    applies_to: all
+  Q:
+    name: "Resilience Testing"
+    applies_to: [backend-api, backend-infra]
+  R:
+    name: "Quantitative Pass Gate"
+    applies_to: all
+  S:
+    name: "Property-Based Test Coverage"
+    applies_to: all
+  T:
+    name: "Adversarial Input Testing"
+    applies_to: [backend-api, shared]
+  U:
+    name: "Session & Token Security"
+    applies_to: [backend-api]
+
+# Derived routing table — single source of truth for which checks apply to each type.
+routing:
+  backend-domain:    [A, B, C, D, M, P]
+  backend-infra:     [A, B, C, D, E, F, M, O, Q]
+  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, T, U]
+  shared:            [A, B, C, D, E, K, L, M, N, T]
+  frontend-data:     [B, C, D, G, L, O, P]
+  frontend-feature:  [B, C, D, G, H, L, O, P]
+  e2e:               [B, C, D, H, P]

@@ -1,0 +1,18 @@
+---
+check_id: S
+name: Property-Based Test Coverage
+applies_to: all
+---
+[S] PROPERTY-BASED TEST COVERAGE
+  Read plan.md §13 property_based_tests.invariants. For each invariant:
+    1. Search the codebase for property-based tests that assert this invariant.
+       Look in test files for patterns like fc.property, fc.assert, property(,
+       prop_(, or framework-specific equivalents.
+    2. If found with ≥ [min_generations] generations: print "COVERED: [name] — [file]"
+    3. If found with < [min_generations] generations: print "WEAK: [name] — [N] generations < [min]"
+    4. If not found: print "MISSING: [name] — add property-based test"
+
+  For each MISSING invariant: write the property-based test now.
+  Do not proceed until all invariants are COVERED.
+
+  Print: "PROPERTY-BASED: [N] covered, [N] weak, [N] missed"

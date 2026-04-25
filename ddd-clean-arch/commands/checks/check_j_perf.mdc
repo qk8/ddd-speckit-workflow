@@ -1,0 +1,19 @@
+---
+check_id: J
+name: Performance Budget
+applies_to: [backend-api, frontend-feature]
+---
+[J] PERFORMANCE BUDGET — backend-api and frontend-feature tasks only
+  For backend-api:
+    Run a quick load test with plan.md §10 backend_p95 budget:
+      ab -n 100 -c 10 [API endpoint from §8]
+    Compare LCP against backend budget from §10.
+    If p95 exceeds budget: print WARNING — "p95=[N]ms exceeds budget [budget]ms"
+    Note in completion report for retrospect review.
+
+  For frontend-feature:
+    Run the E2E test headlessly, measure LCP via Playwright MCP:
+      Evaluate: () => document.querySelector('body')?.getBoundingClientRect()
+    Compare LCP against frontend budget from §10.
+    If LCP exceeds budget: print WARNING — "LCP=[N]ms exceeds budget [budget]ms"
+    Note in completion report for retrospect review.

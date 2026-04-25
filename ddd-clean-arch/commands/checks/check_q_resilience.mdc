@@ -1,0 +1,38 @@
+---
+check_id: Q
+name: Resilience Testing
+applies_to: [backend-api, backend-infra]
+---
+[Q] RESILIENCE TESTING — backend-api and backend-infra tasks only
+  If this task creates or modifies any endpoint or infrastructure
+  component, verify the system degrades gracefully under these
+  failure scenarios:
+
+  1. Database connection drops mid-request — returns proper error,
+     not a 500 crash
+  2. External API returns 503 — returns proper error to client
+  3. External API times out — does not hang indefinitely
+  4. Request body is malformed JSON — returns 400 with clear message
+  5. Request body exceeds size limit — returns 413
+  6. Concurrent duplicate submissions — handled by idempotency
+  7. Auth token is valid but user was deleted mid-session — returns
+     401, not a 500
+  8. Circuit breaker OPEN — requests fail fast with CircuitOpenError,
+     not queued behind timeout
+  9. Circuit breaker HALF-OPEN — single probe request allowed through,
+     success closes breaker, failure reopens it
+  10. Memory under sustained load — heap growth ≤50% of baseline after
+      warmup; no unbounded cache growth
+  11. Session fixation — new session created after authentication
+      has a different session ID; session ID is not predictable
+  12. Refresh token replay — consumed refresh token rejected, entire
+      token family invalidated
+  13. Cascading failure — downstream service unavailable, circuit
+      breaker prevents cascade, system remains available for
+      non-affected endpoints
+
+  For each scenario: verify the correct error response is returned
+  (not a 500 crash), the error is logged with correct severity,
+  and the system remains available for other requests.
+
+  If any scenario is not tested: add the test now.

@@ -1,0 +1,35 @@
+---
+check_id: H
+name: Browser Verification
+applies_to: [frontend-feature, e2e]
+---
+[H] BROWSER VERIFICATION — frontend-feature and e2e tasks only
+  Run the E2E test file headlessly first:
+    Command: plan.md §13 regression_command.e2e_only
+    Required: all tests pass headlessly.
+    This proves the feature works without a visible browser and will pass in CI.
+
+  If Playwright MCP is available (local Claude Code):
+    Replay the E2E test scenario using Playwright MCP visible browser.
+    This adds human-visible confirmation that the UI looks correct.
+    Take a screenshot at the final state of the happy path.
+    Save to: docs/test-results/[YYYY-MM-DD]-TASK-[N]-[feature].png
+    Read browser console output -- flag any errors or unhandled rejections.
+
+    If the headless test passes but the visible browser reveals a visual bug
+    not caught by the test assertions (broken layout, wrong color, overlapping
+    elements): note it in the completion report. It is not a blocker unless
+    it prevents the user from completing the action.
+
+    If the headless test fails:
+      DEBUG PROTOCOL:
+      1. Take a screenshot of the failure state.
+      2. Use Chrome DevTools MCP to read console errors and network requests.
+      3. Find the correlation ID in any failed API response.
+         Use it to locate the corresponding backend log entry.
+      4. Trace the root cause to its source layer.
+      5. Fix. Re-run headless E2E only. Then re-run check [C] regression suite.
+
+  If Playwright MCP is not available (web sandbox):
+    Headless only. Print warning: "Playwright MCP not available -- visual
+    verification skipped. All headless E2E tests pass."

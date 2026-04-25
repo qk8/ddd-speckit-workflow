@@ -1,0 +1,28 @@
+---
+check_id: P
+name: Test Quality Review
+applies_to: all
+---
+[P] TEST QUALITY REVIEW — all tasks
+  Review each test in the test file from Step 1:
+
+  1. Behavior vs implementation: Does each test assert on observable
+     behavior (HTTP status, response shape, database state, UI text)
+     rather than internal details (mock call counts, private method
+     invocation order, internal variable values)?
+  2. False confidence: Would this test still pass if the implementation
+     was wrong? (e.g., testing a helper function that is not the
+     system under test)
+  3. Mock strategy:
+     - NEVER mocks the system under test
+     - NEVER mocks standard library functions (unless testing
+       time-dependent behavior)
+     - ALWAYS mocks external HTTP calls
+     - ALWAYS uses a real test database for integration tests
+  4. Determinism: No Math.random(), no fixed sleep(), no time-dependent
+     assertions without fake timers
+
+  For each failing check: fix the test. Do not weaken the test to
+  make it pass.
+
+  Print: "TEST QUALITY: [N] tests, all behavior-focused"
