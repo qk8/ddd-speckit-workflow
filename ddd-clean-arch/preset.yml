@@ -33,3 +33,4 @@ templates:
 # Command overrides: replace Spec Kit's default speckit.implement.
 commands:
   - speckit.implement
+  - speckit.check
