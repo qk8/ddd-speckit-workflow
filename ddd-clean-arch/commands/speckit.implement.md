@@ -240,10 +240,24 @@ Rules (non-negotiable):
 - Spec conflict found → stop and report. Never resolve unilaterally.
 
 ─────────────────────────────────────────
-STEP 3 — RUN ALL CHECKS
+STEP 3 — RUN RELEVANT CHECKS
 ─────────────────────────────────────────
-Run every check in order. Print full output.
-A task cannot be marked DONE until every check passes.
+Determine which checks apply to this task type, then run them in order.
+Print: "Applicable checks for [type]: [list]"
+A task cannot be marked DONE until every applicable check passes.
+
+  backend-domain    → [A] [B] [C] [D] [M] [P]
+  backend-infra     → [A] [B] [C] [D] [E] [F] [M] [O] [Q]
+  backend-api       → [A] [B] [C] [D] [E] [G] [I] [J] [K] [L] [M] [N] [O] [Q]
+  shared            → [A] [B] [C] [D] [E] [K] [L] [M] [N] [O]
+  frontend-data     → [B] [C] [D] [G] [L] [O] [P]
+  frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
+  e2e               → [B] [C] [D] [H] [P]
+─────────────────────────────────────────
+All types           → [C] [D] [I]
+─────────────────────────────────────────
+
+Run only the checks in the applicable set. Do not run checks outside the set.
 
 [A] ARCHITECTURAL TESTS
   Run arch test command from plan.md §20.
@@ -382,9 +396,7 @@ A task cannot be marked DONE until every check passes.
     Headless only. Print warning: "Playwright MCP not available — visual
     verification skipped. All headless E2E tests pass."
 
-  If Type is backend-domain, backend-infra, shared, or frontend-data:
-    Skip check [H]. N/A.
-
+ 
 [I] SECRET SCANNING — all tasks
   Run gitleaks on the entire working tree:
     gitleaks detect --source . --redact -q
@@ -421,10 +433,7 @@ A task cannot be marked DONE until every check passes.
     If LCP exceeds budget: print WARNING — "LCP=[N]ms exceeds budget [budget]ms"
     Note in completion report for retrospect review.
 
-  If Type is backend-domain, backend-infra, shared, frontend-data, or e2e:
-    Skip check [J]. N/A.
-
-[K] API CONTRACT ENFORCEMENT — backend-api and shared tasks only
+ [K] API CONTRACT ENFORCEMENT — backend-api and shared tasks only
   Run: bash scripts/validate-api-contract.sh
   Required: PASS. If DRIFT DETECTED:
     Print: "CONTRACT DRIFT: [details]"
@@ -433,10 +442,7 @@ A task cannot be marked DONE until every check passes.
     If the contract is genuinely wrong: record in Spec learnings.
     Do NOT mark DONE until contract matches or learnings are recorded.
 
-  If Type is backend-domain, backend-infra, frontend-data, frontend-feature, or e2e:
-    Skip check [K]. N/A.
-
-[M] FAILURE MODE COVERAGE
+ [M] FAILURE MODE COVERAGE
   Read plan.md §15 EDGE CASES & FAILURE MODES. For each FAILURE entry:
 
   1. Search the codebase for handlers/validators related to this failure.
@@ -502,11 +508,7 @@ A task cannot be marked DONE until every check passes.
   For each gap: state the file, the gap, and the fix.
   Fix all gaps. Do not proceed until consistent.
 
-  If Type is backend-domain, backend-infra, frontend-data,
-  frontend-feature, or e2e:
-    Skip check [N]. N/A.
-
-[O] SECURITY HARDENING — backend-api, frontend-data, frontend-feature tasks
+  [O] SECURITY HARDENING — backend-api, frontend-data, frontend-feature tasks
   If this task touches any user-facing code, verify every security
   requirement from plan.md §9 is implemented:
 
@@ -529,10 +531,7 @@ A task cannot be marked DONE until every check passes.
   For each item: PASS, FAIL, or N-A.
   If any FAIL: fix it. Do not proceed until all PASS or N-A.
 
-  If Type is backend-domain, backend-infra, or shared:
-    Skip check [O]. N/A.
-
-[P] TEST QUALITY REVIEW — all tasks
+  [P] TEST QUALITY REVIEW — all tasks
   Review each test in the test file from Step 1:
 
   1. Behavior vs implementation: Does each test assert on observable
@@ -577,11 +576,7 @@ A task cannot be marked DONE until every check passes.
 
   If any scenario is not tested: add the test now.
 
-  If Type is backend-domain, frontend-data, frontend-feature,
-  shared, or e2e:
-    Skip check [Q]. N/A.
-
-─────────────────────────────────────────
+  ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────
 

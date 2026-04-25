@@ -158,10 +158,10 @@ steps:
     on_revise:
       goto: audit-spec
 
-  # ── PHASE 3A: PLAN — DOMAIN + ARCHITECTURE (§1–§10) ──────────
-  # Split into two passes to avoid context window overflow.
-  # Pass A covers the decisions that affect everything else.
-  - id: plan-part-a
+  # ── PHASE 3: PLAN — CONSOLIDATED IN 3 BATCHES ──────────────────
+  # Batch 1: Core plan (§1–§16) — domain decisions, architecture,
+  # reliability, data, testing, devex, failure modes, constraints.
+  - id: plan-full
     command: speckit.plan
     integration: claude
     input:
@@ -169,7 +169,7 @@ steps:
         Read project-brief.md and .specify/specs/[feature]/spec.md.
         Use ddd-clean-arch/templates/plan-template.md.
 
-        Produce ONLY sections §1 through §10 of plan.md:
+        Produce sections §1 through §16 of plan.md:
           §1  Requirements
           §2  Ubiquitous language
           §3  Bounded contexts
@@ -183,295 +183,67 @@ steps:
               and CORS)
           §10 Performance & scalability (end-to-end budget first, then
               backend p95 derived from it)
+          §11 Reliability & observability (correlation ID from §8, health
+              checks, circuit breakers for external deps only)
+          §12 Data design (tables per aggregate root, indexes naming use cases,
+              migration teardown scripts)
+          §13 Testing strategy (api_testing_tool selected from backend_language,
+              all three regression commands, e2e coverage focus, test data
+              strategy, flaky test protocol, e2e data setup, E2E owner/pipeline)
+          §14 Monorepo & developer experience (cache invalidation, local
+              dev setup, ci_local_script: scripts/ci-local.sh)
+          §15 Edge cases & failure modes (minimum 10 domain-specific scenarios
+              with detection/response/recovery — not generic "upstream failure")
+          §16 Architectural constraints (exactly 10, specific to this
+              codebase — form: "Never [action] because [consequence]")
 
-        Do NOT produce §11 onwards yet.
+        Do NOT produce §17 onwards yet.
         Do NOT produce companion files yet.
-        End with: "Plan Part A complete (§1–§10). Waiting for review."
+        End with: "Plan full (§1–§16) complete. Waiting for review."
 
-  - id: review-plan-a
+  - id: review-plan
     type: gate
     message: |
-      ━━ REVIEW PLAN PART A (§1–§10) ━━
+      ━━ REVIEW PLAN (§1–§16) ━━
 
-      [ ] §2 Ubiquitous language: exact names you want in code?
-      [ ] §4 Aggregates: invariants correct? Concurrency strategy right per aggregate?
-      [ ] §4 Aggregates: idempotency mechanisms specified?
-      [ ] §7 Error taxonomy: four types defined? Envelope shape correct?
-      [ ] §8 API: every endpoint present? Auth correct on each?
-      [ ] §8 Token delivery: security trade-off acceptable?
-      [ ] §8 CORS: consistent with security requirements?
-      [ ] §9 CSP: connect-src includes API origin?
-      [ ] §9 CSP: consistent with token delivery (cookie domain if httpOnly)?
-      [ ] §10 End-to-end budget: realistic? Backend p95 derived from it?
-
-      PREVIEW — §13 api_testing_tool (not yet produced; decision in Plan B):
-        Based on the backend_language in project-brief.md, the API testing tool
-        will be selected in Plan B as:
-          Java        → REST Assured  (runs via mvn test / gradle test)
-          TypeScript  → Playwright API (runs via npx playwright test --project=api)
-          Python      → pytest + httpx (runs via pytest tests/api/)
-        If this is not the right tool for your project, note it now so Plan B
-        uses the correct selection.
+      §2 Ubiquitous language: exact names you want in code?
+      §4 Aggregates: invariants correct? Concurrency strategy right per aggregate? Idempotency mechanisms specified?
+      §7 Error taxonomy: four types defined? Envelope shape correct?
+      §8 API: every endpoint present? Auth correct on each? Token delivery acceptable? CORS consistent?
+      §9 CSP: connect-src includes API origin? Consistent with token delivery (cookie domain if httpOnly)?
+      §10 End-to-end budget realistic? Backend p95 derived from it?
+      §11 Correlation ID matches §8? Health checks don't conflict with API routes? Circuit breakers only for external deps?
+      §12 Tables match §4 aggregates? Indexes name their use case? Migration teardown scripts included?
+      §13 api_testing_tool correct for backend language? All three regression commands defined? e2e coverage covers all critical journeys? Test data strategy and flaky test protocol set?
+      §14 local_dev_setup steps runnable in under 15 minutes?
+      §15 10 specific failure scenarios with detection/response/recovery?
+      §16 Exactly 10 constraints, each specific to this codebase with consequence?
 
       Edit plan.md directly before approving.
       These decisions propagate through everything that follows.
     options: [approve, revise]
     on_revise:
-      goto: plan-part-a
+      goto: plan-full
 
-  # ── PHASE 3B: PLAN — RELIABILITY + DATA + TESTING + DEVEX (§11–§14)
-  # ── PHASE 3B: §11–§14 (reliability, data, testing, devex) ───────
-  # Split from the original monolithic pass to avoid context window degradation.
-  # §11-14 are dense structural decisions that reference §1-10 heavily.
-  # §15-20 + companion files come in phase 3C after these are reviewed.
-  - id: plan-part-b
+  # Batch 2: Companion files — api-contract.yaml, data-model.sql, interfaces
+  # These are lightweight, self-contained, and only depend on approved plan.md.
+  - id: plan-artifacts
     command: speckit.plan
     integration: claude
     input:
       args: >
-        §1–§10 of plan.md are approved. Produce ONLY §11–§14 now.
-        All decisions must be consistent with §1–§10.
-        Call out any tension explicitly rather than silently contradicting
-        an earlier decision. Do NOT produce companion files yet.
+        §1–§16 of plan.md are approved. Produce companion files ONLY:
 
-        Produce:
-          §11 Reliability & observability
-              Correlation ID header name must match §8 correlation_id_header_name exactly.
-              Health check paths must not overlap with API endpoint paths from §8.
-              Circuit breakers only for external deps listed in §1 requirements.
+        docs/spec/api-contract.yaml
+          OpenAPI 3.1. Error envelope as $component referenced everywhere.
+          Every endpoint from §8. CORS + token delivery as top comment block.
+          Cache-control response headers for cacheable endpoints.
 
-          §12 Data design
-              Tables must reflect §4 aggregate boundaries — one table per aggregate root
-              unless denormalization is explicitly justified.
-              Indexes must each name the specific use case or query they support.
-              Migration strategy: include teardown scripts for test database setup.
-
-          §13 Testing strategy
-              - api_testing_tool: select based on backend_language
-                  Java → rest-assured (runner: mvn test or gradle test)
-                  TypeScript → playwright-api (runner: npx playwright test --project=api)
-                  Python → pytest-httpx (runner: pytest tests/api/)
-              - e2e_testing_tool: playwright (always)
-              - Define all three regression commands:
-                  regression_command.all (arch + unit + integration + api + e2e)
-                  regression_command.api_only (arch + unit + integration + api, no browser)
-                  regression_command.e2e_only (browser tests only, headless)
-              - e2e_tests.coverage_focus: list every critical user journey from spec.md
-                  Form: "As a [user], I [action sequence] and verify [outcome]"
-              - e2e_tests.location and naming_convention must be set
-              - test_data_strategy:
-                  approach: [test_containers_per_test | shared_db_with_cleanup | factory_functions]
-                  factory_location: [path — e.g. src/test/java/fixtures/ or tests/fixtures/]
-              - e2e_data_setup:
-                  strategy: [api_seeding | db_seeding | before_each_hook]
-                  cleanup: [after_each | after_all | none_if_isolated_db]
-                  isolation_guarantee: [each_test_independent | run_in_isolation_only]
-              - flaky_test_protocol:
-                  quarantine_label: [label or annotation to mark flaky tests]
-                  max_time_in_quarantine: [e.g. "2 weeks" — after this, fix or delete]
-                  quarantine_location: [separate file or tag]
-              - E2E test owner and which CI pipeline runs them
-
-          §14 Monorepo & developer experience
-              Frontend cache invalidation must align with §8 cache-control + §10 PERFORMANCE & SCALABILITY (caching).
-              local_dev_setup.steps must be runnable by a new engineer in under 15 minutes.
-              Include: ci_local_script: scripts/ci-local.sh (to be created in Phase 3C).
-
-        End with: "Plan Part B (§11–§14) complete. Waiting for review."
-
-  - id: review-plan-b
-    type: gate
-    message: |
-      ━━ REVIEW PLAN PART B (§11–§14) ━━
-
-      §11 Reliability:
-        [ ] Correlation ID header name matches §8 exactly?
-        [ ] Health check paths don't conflict with API routes?
-
-      §12 Data design:
-        [ ] Tables match §4 aggregates? Indexes each name their supporting use case?
-        [ ] Migration teardown scripts included for test DB setup?
-
-      §13 Testing:
-        [ ] api_testing_tool selected correctly for the backend language?
-        [ ] All three regression_command variants defined (all / api_only / e2e_only)?
-        [ ] e2e_tests.coverage_focus: every critical user journey listed?
-         [ ] e2e_data_setup.strategy defined?
-        [ ] flaky_test_protocol.max_time_in_quarantine set?
-        [ ] E2E test owner and pipeline decided?
-
-      §14 DevEx:
-        [ ] local_dev_setup.steps realistic and complete?
-        [ ] ci_local_script: scripts/ci-local.sh referenced in §14?
-
-      Edit plan.md directly before approving.
-    options: [approve, revise]
-    on_revise:
-      goto: plan-part-b
-
-  # ── PHASE 3C1: §15–§16 (edge cases + constraints) ─────────────
-  # Fast, low-risk — domain-specific edge cases and hard constraints.
-  - id: plan-part-c1
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        §1–§14 of plan.md are approved. Produce §15–§16 only.
-
-        §15 Edge cases & failure modes
-            Minimum 10 scenarios. Do not include concurrency conflicts (§4 covers those).
-            Focus on domain-specific scenarios. For each FAILURE: detection, response, recovery.
-            Be specific — "the payment provider returns a 429" not "upstream failure".
-
-        §16 Architectural constraints
-            Exactly 10. Specific to THIS codebase — not generic advice.
-            Form: "Never [specific action] because [specific consequence in this domain]."
-
-        End with: "Plan Part C1 (§15–§16) complete. Waiting for review."
-
-  - id: review-plan-c1
-    type: gate
-    message: |
-      ━━ REVIEW PLAN PART C1 (§15–§16) ━━
-
-      [ ] §15 Edge cases: 10 specific scenarios with detection/response/recovery?
-          Domain-specific (not generic "upstream failure")?
-      [ ] §16 Constraints: exactly 10? Each specific to this codebase with consequence?
-    options: [approve, revise]
-    on_revise:
-      goto: plan-part-c1
-
-  # ── PHASE 3C2: §17–§20 + conventions.md ────────────────────────
-  # Medium risk — DoD, self-critique, ADRs, arch tests, conventions.
-  - id: plan-part-c2
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        §1–§14 and §15–§16 of plan.md are approved. Produce §17–§20 and
-        .specify/memory/conventions.md.
-
-        §17 Definition of done
-            Concrete verifiable criteria. Must align with the 11 checks in speckit.implement.
-            Include: test file committed, regression suite green, secret scan clean.
-
-        §18 Self-critique (mandatory — do not soften)
-            The 3 weakest points. For each: problem, reason accepted, early warning signs,
-            what changes under 20x load / second team / key dependency lost.
-
-        §19 ADR log
-            One ADR per: aggregate boundary decision, locking strategy, tech stack selection,
-            bounded context boundary, token delivery, CORS policy, rendering strategy,
-            contract sharing strategy, and any irreversible decision.
-
-        §20 Architectural test inventory
-            Generate enforcement test files:
-              Java backend → [module]/src/test/java/arch/ArchitectureTest.java (ArchUnit)
-              TypeScript backend → [module]/.dependency-cruiser.cjs
-              Other → closest available static analysis tool config
-              Frontend → [frontend-module]/.dependency-cruiser.cjs
-            Run arch tests against the generated files only (no business logic yet).
-            The arch tests must pass with zero violations on an empty domain.
-            Populate §20 with the actual test file paths and tool names.
-
-        .specify/memory/conventions.md
-            Naming: use cases, repositories, events, value objects, test classes.
-            Method conventions: execute signature, factory vs constructor.
-            Error handling conventions per layer.
-            Frontend: component, hook, type naming. Error surface per error type.
-            Shared: commit format, TODO format.
-            Decision log section (empty — grows via /speckit.review).
-
-        End with: "Plan Part C2 (§17–§20 + conventions) complete. Waiting for review."
-
-  - id: review-plan-c2
-    type: gate
-    message: |
-      ━━ REVIEW PLAN PART C2 (§17–§20 + conventions) ━━
-
-      [ ] §17 Done criteria: aligned with the 11 implement checks?
-      [ ] §18 Self-critique: honest? Early warning signs defined?
-      [ ] §19 ADRs: one per aggregate boundary? Per locking strategy? Per stack choice?
-      [ ] §20 Arch test inventory: populated after arch tests generated?
-      [ ] Arch test files: pass on empty codebase?
-      [ ] conventions.md: naming patterns filled in for this stack?
-    options: [approve, revise]
-    on_revise:
-      goto: plan-part-c2
-
-  # ── PHASE 3C3A: API CONTRACT ───────────────────────────────────
-  # Critical path — this file is the source of truth for all downstream tasks.
-  # If this fails, only C3b/C3c/C3d need revision (not the whole plan).
-  - id: plan-part-c3a
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        §1–§20 of plan.md are approved. Produce ONLY docs/spec/api-contract.yaml.
-
-        OpenAPI 3.1. Error envelope as $component referenced everywhere.
-        Every endpoint from §8. CORS + token delivery as top comment block.
-        Cache-control response headers for cacheable endpoints.
-
-        End with: "Plan Part C3a (api-contract.yaml) complete. Waiting for review."
-
-  - id: review-plan-c3a
-    type: gate
-    message: |
-      ━━ REVIEW PLAN PART C3a (api-contract.yaml) ━━
-
-      [ ] All §8 endpoints present with correct HTTP methods and paths?
-      [ ] Error envelope as $component referenced everywhere?
-      [ ] CORS + token delivery documented in top comment block?
-      [ ] Cache-control headers on cacheable endpoints?
-
-      If anything is wrong, edit api-contract.yaml and revise.
-      This is the source of truth for implementation — get it right.
-    options: [approve, revise]
-    on_revise:
-      goto: plan-part-c3a
-
-  # ── PHASE 3C3B: DATA MODEL ─────────────────────────────────────
-  # Independent of C3a — only depends on §12 from plan.md.
-  - id: plan-part-c3b
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        §1–§20 of plan.md are approved. Produce ONLY docs/spec/data-model.sql.
-
-        DDL from §12. Migration strategy as top comment block.
-        Each table: comment stating aggregate and bounded context.
-        Each index: comment stating which use case it supports.
-        Include teardown SQL for test database setup (schema drop + recreate).
-
-        End with: "Plan Part C3b (data-model.sql) complete. Waiting for review."
-
-  - id: review-plan-c3b
-    type: gate
-    message: |
-      ━━ REVIEW PLAN PART C3b (data-model.sql) ━━
-
-      [ ] Schema matches §12 tables and column types?
-      [ ] Each table has aggregate + bounded context comment?
-      [ ] Each index names its supporting use case?
-      [ ] Teardown SQL included for test DB setup?
-
-      Edit data-model.sql and revise if needed.
-    options: [approve, revise]
-    on_revise:
-      goto: plan-part-c3b
-
-  # ── PHASE 3C3C: BACKEND + FRONTEND INTERFACES ──────────────────
-  # Depends on C3a (api-contract) — error types and API signatures.
-  - id: plan-part-c3c
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        §1–§20 of plan.md are approved. Produce ONLY:
-          docs/spec/backend-interfaces.[ext]
-          docs/spec/frontend-interfaces.[ext]
+        docs/spec/data-model.sql
+          DDL from §12. Migration strategy as top comment block.
+          Each table: comment stating aggregate and bounded context.
+          Each index: comment stating which use case it supports.
+          Include teardown SQL for test database setup (schema drop + recreate).
 
         docs/spec/backend-interfaces.[ext]
           Domain layer signatures only — no implementation bodies.
@@ -483,42 +255,74 @@ steps:
           Auth state type consistent with §8 token_delivery.
           One typed async function per endpoint — Result<T,E>, never throws.
 
-        End with: "Plan Part C3c (interfaces) complete. Waiting for review."
+        End with: "Plan artifacts (api-contract.yaml, data-model.sql, interfaces) complete. Waiting for review."
 
-  - id: review-plan-c3c
+  - id: review-plan-artifacts
     type: gate
     message: |
-      ━━ REVIEW PLAN PART C3c (interfaces) ━━
+      ━━ REVIEW PLAN ARTIFACTS ━━
 
-      [ ] backend-interfaces: signatures match §4? Zero infra imports?
-      [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
-      [ ] frontend-interfaces: one typed function per §8 endpoint?
+      api-contract.yaml:
+        [ ] All §8 endpoints present with correct HTTP methods and paths?
+        [ ] Error envelope as $component referenced everywhere?
+        [ ] CORS + token delivery documented in top comment block?
+        [ ] Cache-control headers on cacheable endpoints?
 
-      Edit interfaces and revise if needed.
+      data-model.sql:
+        [ ] Schema matches §12 tables and column types?
+        [ ] Each table has aggregate + bounded context comment?
+        [ ] Each index names its supporting use case?
+        [ ] Teardown SQL included for test DB setup?
+
+      interfaces:
+        [ ] backend-interfaces: signatures match §4? Zero infra imports?
+        [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
+        [ ] frontend-interfaces: one typed function per §8 endpoint?
+
+      If anything is wrong, edit the files and revise.
+      This is the source of truth for implementation — get it right.
     options: [approve, revise]
     on_revise:
-      goto: plan-part-c3c
+      goto: plan-artifacts
 
-  # ── PHASE 3C3D: GITIGNORE + CLAUDE.MD + CI-LOCAL.SH ────────────
-  # Independent of each other — all downstream from plan.md.
-  - id: plan-part-c3d
+  # Batch 3: DevEx files — gitignore, .env.example, CLAUDE.md, ci-local.sh, conventions.md
+  - id: plan-devex
     command: speckit.plan
     integration: claude
     input:
       args: >
-        §1–§20 of plan.md are approved. Produce ONLY:
-          .gitignore
-          .env.example
-          CLAUDE.md
-          scripts/ci-local.sh
+        §1–§16 of plan.md are approved. Produce §17–§20 and DevEx/config files:
 
-        .gitignore (copy from boilerplate and verify):
+        §17 Definition of done
+          Concrete verifiable criteria. Must align with the 15 checks in speckit.implement.
+          Include: test file committed, regression suite green, secret scan clean.
+
+        §18 Self-critique (mandatory — do not soften)
+          The 3 weakest points. For each: problem, reason accepted, early warning signs,
+          what changes under 20x load / second team / key dependency lost.
+
+        §19 ADR log
+          One ADR per: aggregate boundary decision, locking strategy, tech stack selection,
+          bounded context boundary, token delivery, CORS policy, rendering strategy,
+          contract sharing strategy, and any irreversible decision.
+
+        §20 Architectural test inventory
+          Generate enforcement test files:
+            Java backend → [module]/src/test/java/arch/ArchitectureTest.java (ArchUnit)
+            TypeScript backend → [module]/.dependency-cruiser.cjs
+            Other → closest available static analysis tool config
+            Frontend → [frontend-module]/.dependency-cruiser.cjs
+          Run arch tests against the generated files only (no business logic yet).
+          The arch tests must pass with zero violations on an empty domain.
+          Populate §20 with the actual test file paths and tool names.
+
+        .gitignore
           The boilerplate .gitignore covers common patterns.
           After copying, verify that any project-specific build output
           directories, generated files, or secret file patterns are added.
           The .env file must be listed. Only .env.example is committed.
 
-        .env.example (create from project-brief.md):
+        .env.example
           List every environment variable the project needs, with placeholder
           values (no real secrets). Derive keys from:
             plan.md §14 local_dev_setup.environment_variables
@@ -554,20 +358,35 @@ steps:
             CONTRACT_TEST_CMD: from §13 regression_command.contract_only (or leave empty if not defined)
             E2E_TEST_CMD: from §13 regression_command.e2e_only
 
-        End with: "Plan Part C3d (gitignore, CLAUDE.md, ci-local.sh) complete. Waiting for final review."
+        .specify/memory/conventions.md
+          Naming: use cases, repositories, events, value objects, test classes.
+          Method conventions: execute signature, factory vs constructor.
+          Error handling conventions per layer.
+          Frontend: component, hook, type naming. Error surface per error type.
+          Shared: commit format, TODO format.
+          Decision log section (empty — grows via /speckit.review).
 
-  - id: review-plan-c3d
+        End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete. Waiting for review."
+
+  - id: review-plan-devex
     type: gate
     message: |
-      ━━ REVIEW PLAN PART C3d (gitignore, CLAUDE.md, ci-local.sh) ━━
+      ━━ REVIEW PLAN DEVEX ━━
 
-      [ ] CLAUDE.md: ≤150 lines? All template sections filled? §16 verbatim?
-      [ ] .gitignore: .env listed? Project-specific patterns added?
-      [ ] ci-local.sh: all command variables populated from plan.md?
-      [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+      CLAUDE.md:
+        [ ] ≤150 lines? All template sections filled? §16 verbatim?
+      .gitignore:
+        [ ] .env listed? Project-specific patterns added?
+      ci-local.sh:
+        [ ] all command variables populated from plan.md?
+        [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+      conventions.md:
+        [ ] naming patterns filled in for this stack?
+
+      Edit files and revise if needed.
     options: [approve, revise]
     on_revise:
-      goto: plan-part-c3d
+      goto: plan-devex
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   - id: tasks
@@ -775,7 +594,7 @@ steps:
           Review the completion report for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] All 11 checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget, contract)?
+          [ ] All applicable checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget, contract, cross-cutting, security, test quality, resilience, anti-hallucination, failure modes)?
           [ ] Check [C] regression: zero new failures in existing test suite?
           [ ] Check [J] performance budget: within §10 budget?
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
