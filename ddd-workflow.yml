@@ -538,13 +538,12 @@ steps:
       - id: should_retrospect
         type: if
         condition: >
-          {{ steps.check_remaining.output.done_count | int > 0 and (
-             (steps.check_remaining.output.done_count | int >= (steps.check_remaining.output.first_retro_threshold | int) and
-              steps.check_remaining.output.done_count | int % (steps.check_remaining.output.retro_interval | int) == 0) or
-             (steps.check_remaining.output.done_count | int == steps.check_remaining.output.first_retro_threshold | int)
-           ) }}
+          {{ steps.check_remaining.output.done_count | int >= (steps.check_remaining.output.first_retro_threshold | int) and
+             (steps.check_remaining.output.done_count | int == steps.check_remaining.output.first_retro_threshold or
+              steps.check_remaining.output.done_count | int % (steps.check_remaining.output.retro_interval | int) == 0) }}
         then:
           - id: run_retrospect
+            type: prompt
             command: speckit.retrospect
             integration: claude
 
@@ -561,6 +560,7 @@ steps:
               goto: run_retrospect
 
       - id: implement_one
+        type: prompt
         command: speckit.implement
         integration: claude
         input:
