@@ -11,7 +11,9 @@ workflow:
     (api-contract.yaml + data-model.sql + interfaces) → plan-devex (§17–§20
     + DevEx files) → tasks (with integration tasks) → validate dependency graph
     → implement loop (batched parallel tasks, 17 checks via speckit.check, TDD,
-    rollback) → adaptive retrospective → final verify.
+    self-correction via speckit.correction) → adaptive retrospective → code-review
+    (Phase 7: security, correctness, performance, maintainability, accessibility)
+    → final verify.
 
 requires:
   speckit_version: ">=0.7.2"
@@ -594,7 +596,7 @@ steps:
           Review the completion report for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] All applicable checks passed (arch, new tests, regression, lint, dep scan, migration, observability, browser, secret scan, performance budget, contract, cross-cutting, security, test quality, resilience, anti-hallucination, failure modes)?
+          [ ] All applicable checks passed (17 checks via routing table: arch, new tests, regression, lint, dep scan, migration, error handling, browser, secret scan, performance budget, contract, anti-hallucination, failure modes, cross-cutting, security, test quality, resilience)?
           [ ] Check [C] regression: zero new failures in existing test suite?
           [ ] Check [J] performance budget: within §10 budget?
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
@@ -613,7 +615,36 @@ steps:
         on_revise:
           goto: implement_one
 
-  # ── PHASE 6: FINAL VERIFY ───────────────────────────────────────
+  # ── PHASE 7: CODE REVIEW CHECKLIST ──────────────────────────────
+  - id: code_review
+    command: speckit.code-review
+    integration: claude
+    input:
+      args: >
+        Run the full Phase 7 code review checklist.
+        Every item must be PASS, FAIL, or N/A.
+        For every FAIL: apply the fix immediately.
+        Produce REVIEW_REPORT.md documenting the outcome.
+
+  - id: review-code-review
+    type: gate
+    message: |
+      Review the code review checklist results.
+
+      [ ] All security items: PASS or N/A
+      [ ] All correctness items: PASS
+      [ ] All performance items: PASS or N/A
+      [ ] All maintainability items: PASS
+      [ ] All accessibility items: PASS, N/A, or not applicable
+      [ ] REVIEW_REPORT.md produced
+
+      Approve to continue to final verify.
+      Revise to send the checklist back for fixes.
+    options: [approve, revise]
+    on_revise:
+      goto: code_review
+
+  # ── PHASE 8: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
     command: speckit.verify
     integration: claude

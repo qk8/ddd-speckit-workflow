@@ -816,6 +816,10 @@ WEAK_POINT: [name]
 §19 ADR LOG
 ─────────────────────────────────
 
+# NOTE: For a living decision log (logged during implementation),
+# see DECISION_LOG.md. This section is for high-level architectural
+# decisions from the planning phase.
+
 # Only for: aggregate boundaries, locking strategies, tech stack,
 # bounded context patterns, token delivery, CORS, rendering strategy,
 # contract sharing, any irreversible decision.

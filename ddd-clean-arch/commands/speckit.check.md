@@ -38,12 +38,27 @@ CHECKS
   Required: all pass.
   If any fail: fix the implementation. Do not weaken the tests to make them pass.
 
-  FLAKY TEST WATCH: if a test passes on the first run but you suspect it
-  might be timing-dependent or state-dependent, run it 5 times consecutively:
-    [test runner command] --repeat=5  (or equivalent for the framework)
-  If it fails on any of those runs, it is already flaky.
-  Fix the root cause (explicit wait conditions, better test isolation)
-  before marking the task DONE. Do not mask flakiness with retries.
+  FLAKY TEST PROTOCOL:
+    If a test fails intermittently across runs with no code change:
+      1. Quarantine the test immediately (disable with a clear marker).
+      2. Log in TEST_AUDIT_LOG.md:
+           entry_id: TAUDIT-001
+           test_file: [path]
+           test_name: [name]
+           classification: FLAWED | FLAKY | TRIVIALLY_PASSING
+           symptom: [what happens]
+           root_cause: [suspected cause]
+           quarantined: true
+      3. A flaky test must be fixed or replaced before the task is DONE.
+      4. A flaky test is never counted in the passing total.
+      5. Never accept "probably fine." Never ignore.
+
+    If a test passes on the first run but you suspect it might be
+    timing-dependent or state-dependent, run it 5 times consecutively:
+      [test runner command] --repeat=5  (or equivalent for the framework)
+    If it fails on any of those runs, it is already flaky.
+    Fix the root cause (explicit wait conditions, better test isolation)
+    before marking the task DONE. Do not mask flakiness with retries.
 
 [C] REGRESSION SUITE — zero new failures allowed
   Run the full test suite (all tests, not just the new ones):

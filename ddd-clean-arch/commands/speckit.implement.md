@@ -239,6 +239,11 @@ Rules (non-negotiable):
 - Never implement any part of another task speculatively.
 - Spec conflict found → stop and report. Never resolve unilaterally.
 
+If tests fail after implementation:
+  1. Run /speckit.correction to triage (T/I/E/R) and attempt fixes.
+  2. Maximum 3 correction attempts. If all fail: FAILURE_REPORT.md generated.
+  3. Do NOT weaken tests to make them pass.
+
 ─────────────────────────────────────────
 STEP 3 — RUN QUALITY CHECKS
 ─────────────────────────────────────────
