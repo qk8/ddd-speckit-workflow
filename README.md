@@ -28,7 +28,8 @@ ddd-clean-arch/                            ← Preset
     tasks-template.md                      ← Structured backlog format
     constitution-template.md              ← Layer rules and constraints
   commands/
-    speckit.implement.md                   ← Build override (11 checks: TDD + regression + security + browser + perf budget + contract)
+    speckit.implement.md                   ← Build override (task plan + test writing + handoff to checks)
+    speckit.check.md                       ← 17 quality checks via routing table (TDD + regression + security + browser + perf budget + contract + anti-hallucination + failure modes + cross-cutting + test quality + resilience)
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/

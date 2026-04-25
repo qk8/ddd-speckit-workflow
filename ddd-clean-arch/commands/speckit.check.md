@@ -20,7 +20,7 @@ ROUTING TABLE
   frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
   e2e               → [B] [C] [D] [H] [P]
 ─────────────────────────────────────────
-All types           → [C] [D] [I]
+All types           → [B] [C] [D] [I] [M] [P]
 ─────────────────────────────────────────
 
 Run only the checks in the applicable set. Do not run checks outside the set.

@@ -258,7 +258,7 @@ Routing reference (full routing table is in /speckit.check):
   frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
   e2e               → [B] [C] [D] [H] [P]
 ─────────────────────────────────────────
-All types           → [C] [D] [I]
+All types           → [B] [C] [D] [I] [M] [P]
 ─────────────────────────────────────────
 
 ─────────────────────────────────────────
@@ -290,6 +290,12 @@ Checks:
   [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
   [J] Perf budget:     PASS | WARNING — [details] | N/A
   [K] Contract:        PASS | DRIFT — [details] | N/A
+  [L] Anti-hallucination: PASS | FAILED — [details]
+  [M] Failure modes:   PASS | PARTIAL — [N] missed | MISSING — [details]
+  [N] Cross-cutting:   PASS | GAP — [details] | N/A
+  [O] Security:        PASS | FAIL — [details] | N/A
+  [P] Test quality:    PASS | [N] issues — [details] | N/A
+  [Q] Resilience:      PASS | [N] scenarios tested | [N] added
 
 Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
 

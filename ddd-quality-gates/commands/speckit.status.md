@@ -19,7 +19,7 @@ Do not implement or modify anything.
   TOTAL             |      |         |      |           |         |
 
 Status definitions:
-  DONE      — all 11 checks passed, test file committed
+  DONE      — all 17 checks passed, test file committed
   IN_PROGRESS   — currently being worked on (set at task confirmation)
               If IN_PROGRESS is present: a session may have been interrupted.
               Run /speckit.retrospect or check-tasks.sh for details.

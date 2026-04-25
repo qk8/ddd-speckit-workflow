@@ -7,11 +7,11 @@ workflow:
   description: >
     Full spec-driven development cycle with DDD and Clean Architecture.
     All project context is read from project-brief.md — no CLI duplication.
-    Phases: clarify → spec → plan A (§1-10) → plan B (§11-14) →
-    plan C1 (§15-16) → plan C2 (§17-20 + conventions) → plan C3a (api-contract)
-    → plan C3b (data-model) → plan C3c (interfaces) → plan C3d (gitignore+CLAUDE+ci)
-    → tasks (with integration tasks) → validate dependency graph → implement loop
-    (batched parallel tasks, 11 checks, TDD, rollback) → adaptive retrospective → final verify.
+    Phases: clarify → spec → plan-full (§1–§16) → plan-artifacts
+    (api-contract.yaml + data-model.sql + interfaces) → plan-devex (§17–§20
+    + DevEx files) → tasks (with integration tasks) → validate dependency graph
+    → implement loop (batched parallel tasks, 17 checks via speckit.check, TDD,
+    rollback) → adaptive retrospective → final verify.
 
 requires:
   speckit_version: ">=0.7.2"
@@ -294,7 +294,7 @@ steps:
         §1–§16 of plan.md are approved. Produce §17–§20 and DevEx/config files:
 
         §17 Definition of done
-          Concrete verifiable criteria. Must align with the 15 checks in speckit.implement.
+          Concrete verifiable criteria. Must align with the 17 checks in speckit.check.
           Include: test file committed, regression suite green, secret scan clean.
 
         §18 Self-critique (mandatory — do not soften)
