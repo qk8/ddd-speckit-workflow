@@ -3,8 +3,6 @@
 Code Review Checklist Gate.
 
 Run after all tasks are complete (before final verify). Perform a structured,
-
-Run after all tasks are complete (before final verify). Perform a structured,
 item-by-item self-review of all code written in this session. For every item
 below, explicitly mark it PASS or FAIL, and for every FAIL, apply the fix
 before proceeding. Do not group-check. Each item is a distinct assertion.
