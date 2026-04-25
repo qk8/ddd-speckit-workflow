@@ -239,6 +239,26 @@ Rules (non-negotiable):
 - Never implement any part of another task speculatively.
 - Spec conflict found → stop and report. Never resolve unilaterally.
 
+After writing implementation, RUN THE TESTS and verify they pass:
+  [test runner command from plan.md §13]
+Print full output.
+  - All new tests must PASS
+  - Report: "Tests: [N] passed, [N] failed"
+  - If any test fails: run /speckit.correction (T/I/E/R triage, max 3 attempts)
+
+Then RUN THE FULL REGRESSION SUITE:
+  [regression_command.all from plan.md §13]
+Print: "Regression: [total N] tests, [N] failed"
+  - Zero new failures allowed
+  - If any pre-existing test fails: STOP, diagnose root cause, fix, re-run
+
+Then RUN THE QUANTITATIVE GATE:
+  [type_check_command] → assert 0 errors
+  [lint_command] → assert 0 errors
+  [build_command] → assert clean build
+  Print: "Quantitative gate: 0 type errors, 0 lint errors, build clean"
+  If any gate fails: fix and re-run. Do NOT proceed until all pass.
+
 If tests fail after implementation:
   1. Run /speckit.correction to triage (T/I/E/R) and attempt fixes.
   2. Maximum 3 correction attempts. If all fail: FAILURE_REPORT.md generated.

@@ -508,6 +508,55 @@ regression_command:
   contract_only:  # contract tests only — used when API contract changes
                  # e.g. "pnpm test:contract" | "gradle test --tests '*ContractTest*'"
 
+# ── COVERAGE THRESHOLDS ──────────────────────────────────────
+# Quantitative pass gate — all thresholds must be met before any commit proceeds.
+# Derived from the zero-defect engineering standard.
+
+coverage_thresholds:
+  line: 90        # ≥ 90% line coverage
+  branch: 90      # ≥ 90% branch coverage
+  function: 90    # ≥ 90% function coverage
+  statement: 90   # ≥ 90% statement coverage
+  # These are hard minimums. If any threshold is not met:
+  #   1. Identify uncovered lines via coverage report
+  #   2. Write tests for those paths
+  #   3. If a path cannot be reached, remove dead code — do not lower thresholds
+  #   4. Re-run coverage check
+
+# ── TYPE CHECKING ────────────────────────────────────────────
+# Zero errors required. Strict mode must be enabled.
+
+type_check_command:  # e.g. "tsc --noEmit" | "gradle typecheck" | "pyright src/"
+  required_errors: 0
+
+# ── LINTING ──────────────────────────────────────────────────
+# Zero errors required. Warnings are logged but do not block.
+
+lint_command:       # e.g. "pnpm lint" | "eslint src/ --max-warnings 0"
+  required_errors: 0
+
+# ── BUILD VERIFICATION ───────────────────────────────────────
+# Clean compilation required.
+
+build_command:       # e.g. "npm run build" | "gradle build" | "cargo build"
+  required_errors: 0
+
+# ── PROPERTY-BASED TESTS ─────────────────────────────────────
+# Property-based tests assert invariants that hold for ANY valid input.
+# These catch edge cases that example-based tests miss.
+
+property_based_tests:
+  tool:   # [fast-check | quickcheck | hypothesis | custom]
+  invariants:
+    # Define invariants derived from plan.md §2 (ubiquitous language) and §4 (aggregate rules).
+    # Each invariant must be testable with 100+ random generations.
+    # Examples:
+    #   - User.create(email).email == email.toLowerCase()
+    #   - PasswordHash(password) != password
+    #   - JWT.sign(payload).JWT.verify(token) == payload
+    #   - Pagination(total=N, size=P) returns exactly N unique records
+  min_generations: 100
+
 # ── TEST PYRAMID ───────────────────────────────────────────────
 
 unit_tests:
@@ -797,6 +846,13 @@ FAILURE: [name]
 
 A feature is complete when:
   - [ ] [concrete verifiable criterion]
+  - [ ] All new tests pass (check [B])
+  - [ ] Zero regression failures (check [C])
+  - [ ] Coverage ≥ [line]%/[branch]%/[function]% (plan.md §13 coverage_thresholds)
+  - [ ] 0 TypeScript/type errors (plan.md §13 type_check_command)
+  - [ ] 0 lint errors (plan.md §13 lint_command)
+  - [ ] Clean build (plan.md §13 build_command)
+  - [ ] All domain invariants have property-based tests (plan.md §13 property_based_tests)
 
 ─────────────────────────────────
 §18 SELF-CRITIQUE

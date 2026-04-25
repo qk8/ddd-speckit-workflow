@@ -20,7 +20,7 @@ ROUTING TABLE
   frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
   e2e               → [B] [C] [D] [H] [P]
 ─────────────────────────────────────────
-All types           → [B] [C] [D] [I] [M] [P]
+All types           → [B] [C] [D] [I] [M] [P] [R] [S]
 ─────────────────────────────────────────
 
 Run only the checks in the applicable set. Do not run checks outside the set.
@@ -338,3 +338,35 @@ CHECKS
   and the system remains available for other requests.
 
   If any scenario is not tested: add the test now.
+
+[R] QUANTITATIVE PASS GATE — all types
+  Verify all quantitative thresholds from plan.md §13:
+    1. coverage_thresholds: Run coverage report. Assert line ≥ [line]%,
+       branch ≥ [branch]%, function ≥ [function]%, statement ≥ [statement]%.
+       If any below threshold: print "COVERAGE BELOW THRESHOLD — [metric]: [value]% < [threshold]%"
+       Do not mark DONE. Write tests for uncovered paths or remove dead code.
+    2. type_check_command: Run [type_check_command]. Assert 0 errors.
+       If errors: print "TYPE ERRORS: [N] errors found"
+       Fix and re-run. Do not proceed.
+    3. lint_command: Run [lint_command]. Assert 0 errors.
+       If errors: print "LINT ERRORS: [N] errors found"
+       Fix and re-run. Do not proceed.
+    4. build_command: Run [build_command]. Assert clean build (0 errors).
+       If errors: print "BUILD ERRORS: [N] errors found"
+       Fix and re-run. Do not proceed.
+
+  Print: "QUANTITATIVE GATE: coverage [line]%/[branch]%/[function]%, 0 type errors, 0 lint errors, build clean"
+
+[S] PROPERTY-BASED TEST COVERAGE
+  Read plan.md §13 property_based_tests.invariants. For each invariant:
+    1. Search the codebase for property-based tests that assert this invariant.
+       Look in test files for patterns like fc.property, fc.assert, property(,
+       prop_(, or framework-specific equivalents.
+    2. If found with ≥ [min_generations] generations: print "COVERED: [name] — [file]"
+    3. If found with < [min_generations] generations: print "WEAK: [name] — [N] generations < [min]"
+    4. If not found: print "MISSING: [name] — add property-based test"
+
+  For each MISSING invariant: write the property-based test now.
+  Do not proceed until all invariants are COVERED.
+
+  Print: "PROPERTY-BASED: [N] covered, [N] weak, [N] missed"
