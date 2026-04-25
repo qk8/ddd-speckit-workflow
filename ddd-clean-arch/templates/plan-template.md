@@ -509,14 +509,52 @@ regression_command:
                  # e.g. "pnpm test:contract" | "gradle test --tests '*ContractTest*'"
 
 # ── COVERAGE THRESHOLDS ──────────────────────────────────────
-# Quantitative pass gate — all thresholds must be met before any commit proceeds.
+# Quantitative pass gate — thresholds are layer-specific, not flat.
 # Derived from the zero-defect engineering standard.
 
 coverage_thresholds:
-  line: 90        # ≥ 90% line coverage
-  branch: 90      # ≥ 90% branch coverage
-  function: 90    # ≥ 90% function coverage
-  statement: 90   # ≥ 90% statement coverage
+  # Layer-specific minimums. Each layer has its own line/branch/function targets.
+  # If a layer's coverage falls below its threshold, check [R] blocks the task.
+  layers:
+    business_logic:        # domain entities, use cases, domain services
+      line: 95
+      branch: 90
+      function: 95
+      path_pattern: [src/domain/**, src/application/**]
+    api_route_handlers:    # controllers, route handlers, middleware
+      line: 90
+      branch: 85
+      function: 90
+      path_pattern: [src/presentation/**, src/delivery/**]
+    ui_components:         # React/Vue/Svelte components
+      line: 80
+      branch: 75
+      function: 80
+      path_pattern: [src/components/**, src/features/**]
+    auth_middleware:       # auth guards, token services, permission checks
+      line: 95
+      branch: 90
+      function: 95
+      path_pattern: [src/auth/**, src/security/**]
+    repository_data_layer: # repository implementations, data adapters
+      line: 90
+      branch: 85
+      function: 90
+      path_pattern: [src/infrastructure/**/repository/**, src/infrastructure/**/data/**]
+    shared_modules:        # utilities, value objects, helpers
+      line: 85
+      branch: 80
+      function: 85
+      path_pattern: [src/shared/**, src/common/**]
+  # E2E critical paths: 100% coverage (all critical user journeys have test specs)
+  e2e_critical_paths: 100
+
+  # Global fallback: if a file doesn't match any layer pattern, use these.
+  fallback:
+    line: 90
+    branch: 85
+    function: 90
+
   # These are hard minimums. If any threshold is not met:
   #   1. Identify uncovered lines via coverage report
   #   2. Write tests for those paths

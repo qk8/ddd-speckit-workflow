@@ -14,8 +14,8 @@ ROUTING TABLE
 ─────────────────────────────────────────
   backend-domain    → [A] [B] [C] [D] [M] [P]
   backend-infra     → [A] [B] [C] [D] [E] [F] [M] [O] [Q]
-  backend-api       → [A] [B] [C] [D] [E] [G] [I] [J] [K] [L] [M] [N] [O] [Q]
-  shared            → [A] [B] [C] [D] [E] [K] [L] [M] [N] [O]
+  backend-api       → [A] [B] [C] [D] [E] [G] [I] [J] [K] [L] [M] [N] [O] [Q] [T] [U]
+  shared            → [A] [B] [C] [D] [E] [K] [L] [M] [N] [O] [T]
   frontend-data     → [B] [C] [D] [G] [L] [O] [P]
   frontend-feature  → [B] [C] [D] [G] [H] [L] [O] [P]
   e2e               → [B] [C] [D] [H] [P]
@@ -332,6 +332,19 @@ CHECKS
   6. Concurrent duplicate submissions — handled by idempotency
   7. Auth token is valid but user was deleted mid-session — returns
      401, not a 500
+  8. Circuit breaker OPEN — requests fail fast with CircuitOpenError,
+     not queued behind timeout
+  9. Circuit breaker HALF-OPEN — single probe request allowed through,
+     success closes breaker, failure reopens it
+  10. Memory under sustained load — heap growth ≤50% of baseline after
+      warmup; no unbounded cache growth
+  11. Session fixation — new session created after authentication
+      has a different session ID; session ID is not predictable
+  12. Refresh token replay — consumed refresh token rejected, entire
+      token family invalidated
+  13. Cascading failure — downstream service unavailable, circuit
+      breaker prevents cascade, system remains available for
+      non-affected endpoints
 
   For each scenario: verify the correct error response is returned
   (not a 500 crash), the error is logged with correct severity,
@@ -370,3 +383,75 @@ CHECKS
   Do not proceed until all invariants are COVERED.
 
   Print: "PROPERTY-BASED: [N] covered, [N] weak, [N] missed"
+
+[T] ADVERSARIAL INPUT TESTING — backend-api and shared tasks only
+  For every endpoint or public API in the task scope, verify these
+  adversarial input classes are handled correctly:
+
+  1. Unicode attacks:
+     - Null bytes in strings → rejected or stripped, never stored
+     - Right-to-left override characters (U+202E) → rejected or stripped
+     - Homoglyph characters (Cyrillic/Greek masquerading as Latin)
+     - Mixed bidirectional text → stored and retrieved byte-for-byte identical
+     - 10,000 emoji → either rejected at character limit or stored without corruption
+
+  2. Data truncation & boundary overflow:
+     - Value exactly at maximum field length → success
+     - Value 1 byte beyond varchar(N) limit → typed ValidationError, not database error
+     - Number.MAX_SAFE_INTEGER + 1 for integer fields → typed validation error
+     - Negative value for non-negative field → typed validation error
+     - Float for integer-only field → typed validation error
+
+  3. Null & undefined propagation:
+     - null for every required parameter, one at a time → typed validation error
+     - undefined for every required parameter, one at a time → typed validation error
+     - Empty object {} where populated object expected → typed validation error
+     - Empty array [] where non-empty array expected → typed validation error
+     - Error must name the specific invalid parameter (not generic TypeError)
+
+  4. SQL injection:
+     - "' OR '1'='1" in all string fields → treated as literal string
+     - "'; DROP TABLE users; --" → treated as literal string
+     - Null byte injection → no DDL executed, schema unchanged
+     - Verify all queries use parameterized statements (grep source for string concatenation)
+
+  5. Idempotency:
+     - Same request sent twice with identical body → exactly one side-effect
+     - Duplicate payment/order/notification → exactly one record created
+     - Second call returns same success response (not error, not duplicate)
+     - Idempotency key has unique database index
+
+  For each scenario: verify the correct response is returned
+  (400/413 for validation errors, not 500 crash).
+  For each missing handler: add the test now.
+
+  Print: "ADVERSARIAL INPUT: [N] covered, [N] missed"
+
+[U] SESSION & TOKEN SECURITY — backend-api tasks only
+  If this task touches authentication, tokens, or sessions, verify:
+
+  1. JWT algorithm enforcement:
+     - alg: none attack → 401 (NEVER succeeds)
+     - HMAC (HS256) token when RS256 expected → 401
+     - Token with modified payload (user ID changed) → signature validation catches it
+
+  2. Refresh token rotation:
+     - Consumed refresh token used again → 401 + entire token family invalidated
+     - New access token from step b is also invalidated
+
+  3. Token leakage:
+     - Search all log output for JWT pattern → zero matches
+     - Token values never appear in logs, error messages, or response bodies
+
+  4. Cookie security (if cookie-based sessions):
+     - Set-Cookie header includes HttpOnly, Secure, SameSite=Strict (or Lax with justification)
+     - No token stored in localStorage
+
+  5. Session fixation:
+     - New session created after authentication → different session ID
+     - Session ID not predictable or guessable
+
+  For each item: PASS, FAIL, or N/A.
+  For every FAIL: fix immediately. Do not proceed.
+
+  Print: "SESSION & TOKEN SECURITY: [N] covered, [N] missed"
