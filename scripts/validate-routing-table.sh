@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 # Usage: ./scripts/validate-routing-table.sh [preset.yml path]
+#        ./scripts/validate-routing-table.sh --fix [preset.yml path]
 # Validates routing table consistency:
 #   - All check IDs in routing: exist in checks: section
 #   - All check IDs in checks: appear in at least one routing: entry
 #   - commands/checks/check_[X]_[name].mdc files exist for all check IDs
 #   - Manual routing matches auto-derived values (drift detection)
+# --fix: regenerate routing section from auto-derived values
 # Exit 0 if valid, exit 1 if issues found.
 
 set -euo pipefail
+
+FIX_MODE=false
+if [ "${1:-}" = "--fix" ]; then
+  FIX_MODE=true
+  shift
+fi
 
 PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
@@ -63,6 +71,24 @@ if [ "$DRIFT_RC" -ne 0 ]; then
   echo "DRIFT: Manual routing diverges from auto-derived values"
   echo "$DRIFT_OUTPUT" | sed 's/^/  /'
   ERRORS=$((ERRORS + 1))
+fi
+
+# --fix: regenerate routing section from auto-derived values
+if [ "$FIX_MODE" = true ]; then
+  # Find the line number of "routing:"
+  ROUTING_LINE=$(grep -n '^routing:' "$PRESET_FILE" | head -1 | cut -d: -f1)
+  # Find the last routing entry line (last line with '[' array after routing:)
+  LAST_ENTRY_LINE=$(tail -n +"$ROUTING_LINE" "$PRESET_FILE" | grep -n '\[' | tail -1 | cut -d: -f1)
+  LAST_ENTRY_ABS=$((ROUTING_LINE + LAST_ENTRY_LINE - 1))
+  # Everything from LAST_ENTRY_ABS+1 to next top-level key is preserved (blank lines, comments)
+  {
+    head -n "$((ROUTING_LINE - 1))" "$PRESET_FILE"
+    ./scripts/derive-routing.sh "$PRESET_FILE"
+    tail -n +"$((LAST_ENTRY_ABS + 1))" "$PRESET_FILE"
+  } > "$PRESET_FILE.tmp"
+  mv "$PRESET_FILE.tmp" "$PRESET_FILE"
+  echo "FIXED: routing section regenerated"
+  exit 0
 fi
 
 if [ "$ERRORS" -eq 0 ]; then

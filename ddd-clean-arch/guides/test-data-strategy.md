@@ -1,8 +1,7 @@
 # Test Data Strategy Guide
 
-Every test must set up its own data and clean up after itself.
-Tests must never depend on data created by other tests.
-Tests must be runnable in any order and in parallel.
+**Canonical rules in plan-template.md §13 `test_data_strategy.forbidden`.**
+This guide covers the *how* — practical approach selection and implementation patterns.
 
 ## Approach Options
 
@@ -36,7 +35,5 @@ Tests must be runnable in any order and in parallel.
 
 ## Forbidden
 
-- Tests must never share state through static variables or module-level singletons
-- Tests must never read data written by a different test
-- Tests must never depend on test execution order
-- E2E tests must never reuse user accounts created by other tests
+See plan-template.md §13 `test_data_strategy.forbidden` for the complete list.
+Key rules: no shared state, no cross-test data reads, no execution-order dependency, no E2E account reuse.
