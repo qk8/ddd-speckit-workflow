@@ -11,11 +11,7 @@ cd "$REPO_ROOT"
 
 # Ensure .gitleaks.toml exists
 if [ ! -f "$REPO_ROOT/.gitleaks.toml" ]; then
-  cat > "$REPO_ROOT/.gitleaks.toml" << 'CFG'
-title = "gitleaks config"
-[extend]
-useDefault = true
-CFG
+  cp "$(dirname "$0")/gitleaks-base.toml" "$REPO_ROOT/.gitleaks.toml"
 fi
 
 # Check gitleaks is available

@@ -109,14 +109,9 @@ echo "→ Hook written to .git/hooks/pre-commit"
 
 # ── CREATE .gitleaks.toml IF MISSING ────────────────────────────────────────
 if [ ! -f "$REPO_ROOT/.gitleaks.toml" ]; then
-  cat > "$REPO_ROOT/.gitleaks.toml" << 'CFG'
-# gitleaks configuration
-# Docs: https://github.com/gitleaks/gitleaks#configuration
-
-title = "gitleaks config"
-
-[extend]
-useDefault = true
+  # Copy base config, then append extended comments and examples
+  cp "$(dirname "$0")/gitleaks-base.toml" "$REPO_ROOT/.gitleaks.toml"
+  cat >> "$REPO_ROOT/.gitleaks.toml" << 'CFG'
 
 # Add allowlist entries here for false positives.
 # Example:
