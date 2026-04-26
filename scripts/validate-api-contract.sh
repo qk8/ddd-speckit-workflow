@@ -201,13 +201,8 @@ for endpoint in "${ENDPOINTS[@]}"; do
 done
 
 # ── Summary ─────────────────────────────────────────────────────
-echo ""
-echo "━━━ Validation Result ━━━"
-if [ "$ERRORS" -gt 0 ]; then
-  echo "  DRIFT DETECTED: $ERRORS endpoint(s) mismatch."
-  echo "  Fix endpoints to match api-contract.yaml, or update the contract."
-  exit 1
-else
-  echo "  PASS — All endpoints in codebase match api-contract.yaml."
-  exit 0
-fi
+source scripts/print-result.sh \
+  "DRIFT DETECTED: $ERRORS endpoint(s) mismatch." \
+  "Fix endpoints to match api-contract.yaml, or update the contract." \
+  "none" \
+  "PASS — All endpoints in codebase match api-contract.yaml."

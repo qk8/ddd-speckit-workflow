@@ -156,17 +156,8 @@ if [ -n "$PATTERN_FILES" ]; then
 fi
 
 # ── Summary ─────────────────────────────────────────────────────
-echo ""
-echo "━━━ Validation Result ━━━"
-if [ "$ERRORS" -gt 0 ]; then
-  echo "  Errors: $ERRORS | Warnings: $WARNINGS"
-  echo "  Fix naming violations before committing."
-  exit 1
-elif [ "$WARNINGS" -gt 0 ]; then
-  echo "  Errors: 0 | Warnings: $WARNINGS"
-  echo "  Warnings are advisory — consider reviewing."
-  exit 0
-else
-  echo "  All checks passed. $ERRORS errors, $WARNINGS warnings."
-  exit 0
-fi
+source scripts/print-result.sh \
+  "Errors: $ERRORS | Warnings: $WARNINGS" \
+  "Fix naming violations before committing." \
+  "Errors: 0 | Warnings: $WARNINGS — Warnings are advisory — consider reviewing." \
+  "All checks passed. $ERRORS errors, $WARNINGS warnings."

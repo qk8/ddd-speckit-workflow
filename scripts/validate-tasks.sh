@@ -175,19 +175,9 @@ done
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
   echo "  Task ordering is correct."
 fi
-echo ""
-
 # ── Summary ──────────────────────────────────────────────────────
-echo "━━━ Validation Result ━━━"
-if [ "$ERRORS" -gt 0 ]; then
-  echo "  Issues found: $ERRORS error(s), $WARNINGS warning(s)."
-  echo "  FIX the errors before starting implementation."
-  exit 1
-elif [ "$WARNINGS" -gt 0 ]; then
-  echo "  $WARNINGS warning(s). Consider reordering tasks for clarity."
-  echo "  (Errors are OK to proceed.)"
-  exit 0
-else
-  echo "  All checks passed. $ERRORS errors, $WARNINGS warnings."
-  exit 0
-fi
+source scripts/print-result.sh \
+  "Issues found: $ERRORS error(s), $WARNINGS warning(s)." \
+  "FIX the errors before starting implementation." \
+  "$WARNINGS warning(s). Consider reordering tasks for clarity." \
+  "All checks passed. $ERRORS errors, $WARNINGS warnings."
