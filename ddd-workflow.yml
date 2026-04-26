@@ -351,7 +351,7 @@ steps:
         scripts/ci-local.sh (fill in the COMMANDS section):
           Populate the command variables at the top of scripts/ci-local.sh
           using the values from plan.md §13 and §14:
-            SECRET_SCAN_CMD: gitleaks detect --source . --redact -q
+            SECRET_SCAN_CMD: see ci-local.sh:21 (gitleaks detect --source . --redact -q)
             LINT_CMD: from §14 task_runner.lint
             ARCH_TEST_CMD: construct from §20 backend_arch_tool (e.g. if ArchUnit → ./gradlew test --tests ArchitectureTest; if dependency-cruiser → dc --config .dependency-cruiser.cjs) + frontend arch:check
             UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)

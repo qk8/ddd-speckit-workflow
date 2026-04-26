@@ -648,15 +648,9 @@ contract_testing:
   failure_action: [blocks merge]
 
 # ── CI TEST EXECUTION ORDER ─────────────────────────────────────
-# Canonical stage order defined in scripts/ci-local.sh.
+# See: scripts/ci-local.sh — the canonical stage order and execution engine.
+# The stages defined above in ci_execution_order must match ci-local.sh.
 ci_execution_order:
-  1: secret scan (gitleaks)
-  2: lint + arch tests
-  3: unit tests
-  4: integration tests
-  5: api tests
-  6: contract tests
-  7: e2e tests
 
 ─────────────────────────────────
 §14 MONOREPO & DEVELOPER EXPERIENCE
