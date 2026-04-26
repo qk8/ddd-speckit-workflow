@@ -5,14 +5,10 @@ applies_to: all
 ---
 [C] REGRESSION SUITE — zero new failures allowed
   Run the full test suite (all tests, not just the new ones):
-    For backend-domain tasks:   plan.md §13 regression_command.api_only
-    For backend-infra tasks:    plan.md §13 regression_command.api_only
-    For backend-api tasks:      plan.md §13 regression_command.api_only
-    For shared tasks:           plan.md §13 regression_command.api_only
-    For integration tasks:      plan.md §13 regression_command.api_only
-    For frontend-data tasks:    plan.md §13 regression_command.api_only
-    For frontend-feature tasks: plan.md §13 regression_command.all
-    For e2e tasks:              plan.md §13 regression_command.all
+    For all task types except frontend-feature and e2e:
+      plan.md §13 regression_command.api_only
+    For frontend-feature and e2e tasks:
+      plan.md §13 regression_command.all
   Required: ZERO new test failures.
   If a previously passing test now fails:
     This task introduced a regression. Do not mark DONE.

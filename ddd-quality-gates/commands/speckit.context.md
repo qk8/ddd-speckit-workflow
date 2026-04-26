@@ -1,12 +1,11 @@
 Read the feature preamble from templates/preamble.md.
+Read CLAUDE.md fully.
 
 Check for IN_PROGRESS tasks first:
   Scan tasks.md for any task with Status: IN_PROGRESS.
   If found:
     Print: "IN_PROGRESS task detected: TASK-[N] — [title]"
     Print: "Continuing with this task."
-    Print: "Reading CLAUDE.md and relevant plan.md sections."
-    Read CLAUDE.md fully.
     Read plan.md sections relevant to this task's Type (same as speckit.implement).
     Print compact context for this IN_PROGRESS task.
     Stop.
@@ -15,8 +14,6 @@ and all Depends-on tasks are DONE.
 If no such task exists: "No unblocked tasks. Run /speckit.status." and stop.
 
 Print: Next task: TASK-[N] — [title] | Type: [type] | Scope: [files]
-
-Read CLAUDE.md fully.
 Then read ONLY the plan.md sections for this task's Type.
 Read the spec-sections mapping from templates/spec-sections.md.
 
