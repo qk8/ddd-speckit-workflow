@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # ── Resolve to repository root ──────────────────────────────────
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+REPO_ROOT="$(bash scripts/repo-root.sh)"
 cd "$REPO_ROOT"
 
 # ── Locate api-contract.yaml ────────────────────────────────────

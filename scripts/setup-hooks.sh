@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+REPO_ROOT="$(bash scripts/repo-root.sh)"
 HOOKS_DIR="$REPO_ROOT/.git/hooks"
 
 echo ""
