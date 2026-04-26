@@ -23,6 +23,25 @@ fi
 # The 8 task types in canonical order
 TYPES=("backend-domain" "backend-infra" "backend-api" "shared" "integration" "frontend-data" "frontend-feature" "e2e")
 
+# derive_checks_for_type <task_type> <preset_file>
+# Prints check IDs that apply to the given task type.
+derive_checks_for_type() {
+  awk -v type="$1" '
+    /^  [A-Z]:/ { id = $1; gsub(/:/, "", id) }
+    /applies_to:.*all/ { if (id != "") print id }
+    /applies_to:.*\[.*\]/ {
+      line = $0
+      gsub(/.*\[/, "", line)
+      gsub(/\].*/, "", line)
+      n = split(line, a, ",")
+      for (i = 1; i <= n; i++) {
+        gsub(/ /, "", a[i])
+        if (a[i] == type && id != "") { print id; break }
+      }
+    }
+  ' "$2"
+}
+
 # --compare mode: derive routing and compare against manual routing in preset.yml
 if [ "$COMPARE_MODE" = true ]; then
   DERIVED_FILE=$(mktemp)
@@ -37,20 +56,7 @@ if [ "$COMPARE_MODE" = true ]; then
       else
         result="$result, $check_id"
       fi
-    done < <(awk -v type="$t" '
-      /^  [A-Z]:/ { id = $1; gsub(/:/, "", id) }
-      /applies_to:.*all/ { if (id != "") print id }
-      /applies_to:.*\[.*\]/ {
-        line = $0
-        gsub(/.*\[/, "", line)
-        gsub(/\].*/, "", line)
-        n = split(line, a, ",")
-        for (i = 1; i <= n; i++) {
-          gsub(/ /, "", a[i])
-          if (a[i] == type && id != "") { print id; break }
-        }
-      }
-    ' "$PRESET_FILE")
+    done < <(derive_checks_for_type "$t" "$PRESET_FILE")
 
     if [ -z "$result" ]; then
       result="[]"
@@ -83,7 +89,6 @@ fi
 
 echo "routing:"
 for t in "${TYPES[@]}"; do
-  # For each type, find all checks that apply to it
   result=""
   while IFS= read -r check_id; do
     if [ -z "$result" ]; then
@@ -91,20 +96,7 @@ for t in "${TYPES[@]}"; do
     else
       result="$result, $check_id"
     fi
-  done < <(awk -v type="$t" '
-    /^  [A-Z]:/ { id = $1; gsub(/:/, "", id) }
-    /applies_to:.*all/ { if (id != "") print id }
-    /applies_to:.*\[.*\]/ {
-      line = $0
-      gsub(/.*\[/, "", line)
-      gsub(/\].*/, "", line)
-      n = split(line, a, ",")
-      for (i = 1; i <= n; i++) {
-        gsub(/ /, "", a[i])
-        if (a[i] == type && id != "") { print id; break }
-      }
-    }
-  ' "$PRESET_FILE")
+  done < <(derive_checks_for_type "$t" "$PRESET_FILE")
 
   if [ -z "$result" ]; then
     result="[]"

@@ -10,8 +10,7 @@
 
 set -euo pipefail
 
-SPECS_DIR=".specify/specs"
-FEATURE_DIR=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | head -n 1)
+FEATURE_DIR=$(bash scripts/find-first-feature.sh)
 
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "No tasks.md found. Nothing to validate."

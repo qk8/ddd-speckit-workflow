@@ -5,8 +5,7 @@
 
 set -euo pipefail
 
-SPECS_DIR=".specify/specs"
-FEATURE_DIR=$(find "$SPECS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | head -n 1)
+FEATURE_DIR=$(bash scripts/find-first-feature.sh)
 
 # Read cadence defaults from preset.yml (single source of truth)
 PRESET_FILE="ddd-clean-arch/preset.yml"
