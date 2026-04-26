@@ -35,10 +35,7 @@ Print:
 Check if the backend and frontend are running on the dev ports from
 plan.md §14 task_runner.dev. If not: start now.
 
-  DEV SERVER FAILURE PROTOCOL: if startup fails, print the full error,
-  diagnose the cause, and fix it before running any tests.
-  Verify with: curl -f http://localhost:[port][plan.md §11 health_checks.readiness.path]
-  Do NOT proceed if the server is not healthy.
+  DEV SERVER FAILURE PROTOCOL: follow guides/dev-server-failure-protocol.md.
 
 Print: "Dev environment: [already running | started — backend:[port] frontend:[port]]"
 
@@ -47,10 +44,9 @@ Print: "Dev environment: [already running | started — backend:[port] frontend:
 Run: plan.md §13 regression_command.all
 Print full output.
 
-FLAKY TEST DETECTION: if any test fails, before diagnosing code issues,
-re-run the failing test 5 more times to confirm it is a real failure
-and not a flaky test. If it passes on some runs: it is flaky.
-  → Quarantine it per plan.md §13 flaky_test_protocol
+FLAKY TEST DETECTION: if any test fails, re-run it 5 more times
+before diagnosing code issues. If it passes on some runs: it is flaky.
+  → Quarantine per guides/flaky-test-protocol.md
   → Do not treat a flaky failure as a code bug
 
 Summary:
@@ -65,7 +61,7 @@ Then ask: "Debug a specific failure? If yes, which one?" Switch to DEBUG.
 ━━ MODE: --fast ━━━━━━━━━━━━━━━
 
 Run: plan.md §13 regression_command.api_only
-Same flaky test detection protocol as REGRESSION_ALL.
+Same flaky test detection protocol as REGRESSION_ALL (see above).
 
 Summary:
   REGRESSION REPORT — REGRESSION_FAST
@@ -74,7 +70,7 @@ Summary:
 ━━ MODE: --e2e ━━━━━━━━━━━━━━━━
 
 Run: plan.md §13 regression_command.e2e_only  (headless first)
-Same flaky test detection protocol as REGRESSION_ALL.
+Same flaky test detection protocol as REGRESSION_ALL (see above).
 E2E tests are the most prone to flakiness — apply extra scrutiny.
 
 After headless pass, ask: "Replay with Playwright MCP visible browser?"

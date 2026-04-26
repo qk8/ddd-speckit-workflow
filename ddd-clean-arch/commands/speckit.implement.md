@@ -157,19 +157,8 @@ and will run in regression for every future task.
 
 START THE DEV ENVIRONMENT if not running (plan.md §14 task_runner.dev).
 Wait until ready. API tests and E2E tests need it to fail meaningfully.
-
-  DEV SERVER FAILURE PROTOCOL:
-  If the dev server fails to start:
-    1. Print the full startup error output.
-    2. Do NOT proceed to run tests — they will produce misleading results.
-    3. Do NOT mark any check as PASS.
-    4. Diagnose: is it a port conflict, missing environment variable,
-       database not running, or compilation error?
-    5. Fix the startup issue first.
-    6. Only proceed once the dev server responds to a health check:
-       curl -f http://localhost:[backend_port]/[§11 health_checks.readiness.path]
-       (e.g. /health/ready, /health, /actuator/health — from plan.md §11)
-    Print: "Dev server started and healthy — proceeding."
+Follow the dev server failure protocol from guides/dev-server-failure-protocol.md.
+Print: "Dev server started and healthy — proceeding."
 
 TEST DATA ISOLATION — enforce before writing test code:
   Read plan.md §13 test_data_strategy.
