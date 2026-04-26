@@ -12,9 +12,9 @@ PRESET_FILE="ddd-clean-arch/preset.yml"
 DEFAULT_RETRO_INTERVAL=10
 DEFAULT_FIRST_RETRO_THRESHOLD=5
 if [ -f "$PRESET_FILE" ]; then
-  DEFAULT_RETRO_INTERVAL=$(awk '/^  retro_interval:/{found=1} found && /medium:/{print $2; exit}' "$PRESET_FILE" || true)
+  DEFAULT_RETRO_INTERVAL=$(bash scripts/read-preset-cadence.sh medium "$PRESET_FILE" 2>/dev/null) || true
   [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL=10
-  DEFAULT_FIRST_RETRO_THRESHOLD=$(awk '/^  first_retro_threshold:/{print $2; exit}' "$PRESET_FILE" || true)
+  DEFAULT_FIRST_RETRO_THRESHOLD=$(bash scripts/read-preset-cadence.sh first_retro_threshold "$PRESET_FILE" 2>/dev/null) || true
   [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD=5
 fi
 
@@ -65,11 +65,11 @@ fi
 RETRO_INTERVAL="$DEFAULT_RETRO_INTERVAL"
 case "$COMPLEXITY" in
   simple)
-    PRESET_SIMPLE=$(awk '/^  retro_interval:/{found=1} found && /simple:/{print $2; exit}' "$PRESET_FILE")
+    PRESET_SIMPLE=$(bash scripts/read-preset-cadence.sh simple "$PRESET_FILE" 2>/dev/null) || true
     [ -n "$PRESET_SIMPLE" ] && RETRO_INTERVAL="$PRESET_SIMPLE"
     ;;
   complex)
-    PRESET_COMPLEX=$(awk '/^  retro_interval:/{found=1} found && /complex:/{print $2; exit}' "$PRESET_FILE")
+    PRESET_COMPLEX=$(bash scripts/read-preset-cadence.sh complex "$PRESET_FILE" 2>/dev/null) || true
     [ -n "$PRESET_COMPLEX" ] && RETRO_INTERVAL="$PRESET_COMPLEX"
     ;;
 esac
