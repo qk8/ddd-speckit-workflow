@@ -1,0 +1,74 @@
+# Short display labels and descriptions for the 21 quality checks.
+# Used by scripts/derive-checks-table.sh to generate the README table.
+# Keep in sync with ddd-clean-arch/preset.yml checks section.
+#
+# Format per check:
+#   ID:
+#     label: "<short label for Check column>"
+#     desc:  "<description for What it does column>"
+#
+# The "Applies to" column is auto-derived from preset.yml checks.<ID>.applies_to.
+
+A:
+  label: "Arch tests"
+  desc: "ArchUnit / dependency-cruiser layer enforcement"
+B:
+  label: "New tests pass"
+  desc: "Written before implementation (TDD, failing-first)"
+C:
+  label: "Regression suite"
+  desc: "Full test suite — zero new failures allowed"
+D:
+  label: "Linter"
+  desc: "No errors"
+E:
+  label: "Dependency scan"
+  desc: "No CRITICAL/HIGH CVEs in direct deps"
+F:
+  label: "Migration test"
+  desc: "Schema matches plan.md §12 exactly"
+G:
+  label: "Error handling"
+  desc: "Error taxonomy, correlation ID, error envelope assertions"
+H:
+  label: "Browser verification"
+  desc: "Headless E2E + optional Playwright MCP visual replay"
+I:
+  label: "Secret scan"
+  desc: "gitleaks — no credentials or secrets in committed files"
+J:
+  label: "Performance budget"
+  desc: "p95 response time / LCP within §10 budget"
+K:
+  label: "Contract enforcement"
+  desc: "API endpoints match api-contract.yaml"
+L:
+  label: "Anti-hallucination"
+  desc: "Implementation matches plan.md — no spec drift"
+M:
+  label: "Failure modes"
+  desc: "All §15 failure handlers implemented and tested"
+N:
+  label: "Cross-cutting"
+  desc: "Auth, logging, error handling applied consistently"
+O:
+  label: "Security"
+  desc: "OWASP Top 10, auth, input validation, rate limiting"
+P:
+  label: "Test quality"
+  desc: "Assertions prove acceptance criteria, not stale tests"
+Q:
+  label: "Resilience"
+  desc: "Circuit breakers, retries, graceful degradation"
+R:
+  label: "Quantitative"
+  desc: "Coverage thresholds, type check, lint, build clean"
+S:
+  label: "Property-based"
+  desc: "Invariant preservation, edge case coverage"
+T:
+  label: "Adversarial"
+  desc: "Malformed input, injection, fuzzing"
+U:
+  label: "Session/token"
+  desc: "JWT, refresh tokens, session security"

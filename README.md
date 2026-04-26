@@ -21,6 +21,10 @@ scripts/
   check-naming.sh                          ← Ubiquitous language validation (used by pre-commit hook)
   validate-api-contract.sh                 ← API contract enforcement (Check [K])
   ci-local.sh                              ← Run full CI pipeline locally (--fast | --e2e-only)
+  derive-routing.sh                        ← Auto-derive routing table from checks[].applies_to
+  derive-checks-table.sh                   ← Auto-derive README check table from preset.yml
+  validate-routing-table.sh                ← Drift detection: manual vs auto-derived routing
+  check-labels.yml                         ← Short labels & descriptions for check table
 ddd-clean-arch/                            ← Preset
   preset.yml
   templates/
@@ -134,6 +138,8 @@ specify workflow resume <run-id>
 
 ## The 21 quality checks
 
+<!-- Auto-generated from preset.yml + check-labels.yml.
+     Regenerate: bash scripts/derive-checks-table.sh -->
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
 | [A] Arch tests | ArchUnit / dependency-cruiser layer enforcement | backend-domain, backend-infra, backend-api |
@@ -141,7 +147,7 @@ specify workflow resume <run-id>
 | [C] Regression suite | Full test suite — zero new failures allowed | All |
 | [D] Linter | No errors | All |
 | [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | backend-domain, backend-infra, backend-api, shared |
-| [F] Migration test | Schema matches plan.md §12 exactly | backend-infra only |
+| [F] Migration test | Schema matches plan.md §12 exactly | backend-infra |
 | [G] Error handling | Error taxonomy, correlation ID, error envelope assertions | backend-api, frontend-data |
 | [H] Browser verification | Headless E2E + optional Playwright MCP visual replay | frontend-feature, e2e |
 | [I] Secret scan | gitleaks — no credentials or secrets in committed files | All |
