@@ -15,10 +15,7 @@ if [ "${1:-}" = "--compare" ]; then
 fi
 
 PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
-if [ ! -f "$PRESET_FILE" ]; then
-  echo "ERROR: preset.yml not found at $PRESET_FILE"
-  exit 1
-fi
+bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 # The 8 task types in canonical order
 TYPES=("backend-domain" "backend-infra" "backend-api" "shared" "integration" "frontend-data" "frontend-feature" "e2e")

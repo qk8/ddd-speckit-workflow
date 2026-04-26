@@ -10,10 +10,7 @@
 set -euo pipefail
 
 PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
-if [ ! -f "$PRESET_FILE" ]; then
-  echo "ERROR: preset.yml not found at $PRESET_FILE"
-  exit 1
-fi
+bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 PRESET_DIR=$(dirname "$PRESET_FILE")
 CHECKS_DIR="$PRESET_DIR/commands/checks"
