@@ -42,29 +42,41 @@ derive_checks_for_type() {
   ' "$2"
 }
 
-# --compare mode: derive routing and compare against manual routing in preset.yml
-if [ "$COMPARE_MODE" = true ]; then
-  DERIVED_FILE=$(mktemp)
-  trap "rm -f '$DERIVED_FILE'" EXIT
-
-  : > "$DERIVED_FILE"
+# format_routing <preset_file> [output_file]
+# Prints or writes the derived routing table.
+# If output_file is given, writes to it; otherwise prints to stdout.
+format_routing() {
+  local outf="${2:-}"
   for t in "${TYPES[@]}"; do
-    result=""
+    local result=""
     while IFS= read -r check_id; do
       if [ -z "$result" ]; then
         result="[$check_id"
       else
         result="$result, $check_id"
       fi
-    done < <(derive_checks_for_type "$t" "$PRESET_FILE")
+    done < <(derive_checks_for_type "$t" "$1")
 
     if [ -z "$result" ]; then
       result="[]"
     else
       result="$result]"
     fi
-    printf "  %-17s %s\n" "$t:" "$result" >> "$DERIVED_FILE"
+    if [ -n "$outf" ]; then
+      printf "  %-17s %s\n" "$t:" "$result" >> "$outf"
+    else
+      printf "  %-17s %s\n" "$t:" "$result"
+    fi
   done
+}
+
+# --compare mode: derive routing and compare against manual routing in preset.yml
+if [ "$COMPARE_MODE" = true ]; then
+  DERIVED_FILE=$(mktemp)
+  trap "rm -f '$DERIVED_FILE'" EXIT
+
+  : > "$DERIVED_FILE"
+  format_routing "$PRESET_FILE" "$DERIVED_FILE"
 
   # Extract manual routing entries from preset.yml (only lines matching routing entries)
   MANUAL_FILE=$(mktemp)
@@ -88,22 +100,4 @@ if [ "$COMPARE_MODE" = true ]; then
 fi
 
 echo "routing:"
-for t in "${TYPES[@]}"; do
-  result=""
-  while IFS= read -r check_id; do
-    if [ -z "$result" ]; then
-      result="[$check_id"
-    else
-      result="$result, $check_id"
-    fi
-  done < <(derive_checks_for_type "$t" "$PRESET_FILE")
-
-  if [ -z "$result" ]; then
-    result="[]"
-  else
-    result="$result]"
-  fi
-
-  # Pad to 17 chars for alignment
-  printf "  %-17s %s\n" "$t:" "$result"
-done
+format_routing "$PRESET_FILE"
