@@ -150,12 +150,7 @@ SEARCH_PATTERNS=(
   '@router\.patch'
 )
 
-SEARCH_DIRS=()
-for dir in src app; do
-  if [ -d "$dir" ]; then
-    SEARCH_DIRS+=("$dir")
-  fi
-done
+source scripts/search-dirs.sh
 
 if [ ${#SEARCH_DIRS[@]} -gt 0 ]; then
   for pattern in "${SEARCH_PATTERNS[@]}"; do

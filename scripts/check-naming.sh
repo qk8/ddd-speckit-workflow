@@ -85,12 +85,7 @@ RENAMES=()
 
 # ── Search codebase ─────────────────────────────────────────────
 # Search in src/ and app/ directories; fall back to any top-level dirs
-SEARCH_DIRS=()
-for dir in src app; do
-  if [ -d "$dir" ]; then
-    SEARCH_DIRS+=("$dir")
-  fi
-done
+source scripts/search-dirs.sh
 if [ ${#SEARCH_DIRS[@]} -eq 0 ]; then
   echo "No src/ or app/ directory found. Skipping codebase search."
   exit 0
