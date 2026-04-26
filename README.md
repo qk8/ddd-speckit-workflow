@@ -34,6 +34,12 @@ ddd-clean-arch/                            ← Preset
   commands/
     speckit.implement.md                   ← Build override (task plan + test writing + handoff to checks)
     speckit.check.md                       ← 21 quality checks via routing table
+  guides/
+    correction-loop.md                     ← Test failure triage and correction protocol
+    dev-server-failure-protocol.md         ← Dev server startup failure SOP
+    flaky-test-protocol.md                 ← Flaky test detection, quarantine, and fix
+    test-data-strategy.md                  ← Test data isolation approaches
+    api-testing-tool-guide.md              ← API testing tool comparison
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/
