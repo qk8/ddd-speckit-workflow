@@ -16,13 +16,7 @@
 set -euo pipefail
 
 # ── Locate plan.md ──────────────────────────────────────────────
-PLAN_FILE=""
-for dir in . .specify/specs/*; do
-  if [ -f "$dir/plan.md" ]; then
-    PLAN_FILE="$dir/plan.md"
-    break
-  fi
-done
+PLAN_FILE=$(bash scripts/find-file.sh plan.md)
 
 if [ -z "$PLAN_FILE" ]; then
   echo "No plan.md found. Skipping naming validation."
