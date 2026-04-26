@@ -19,17 +19,7 @@ Cross-check: are all in plan.md?
 plan.md §10: end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
 
 Read tasks.md DONE entries for "Perf warning:" lines:
-  Extract fields from tasks.md DONE entries using a reusable parser:
-    TASKS_FILE="<feature_dir>/tasks.md"
-    awk -v status="DONE" -v field="Perf warning" '
-      /^## TASK-/ { task_header = $0; header = 1 }
-      /^Status: DONE/ { found = 1 }
-      header && found && $0 ~ "^Perf warning:" {
-        val = $0; sub(/^[^:]*: */, "", val)
-        print task_header " | Perf warning: " val
-      }
-      /^###/ { header = 0 }
-    ' "$TASKS_FILE"
+  bash scripts/parse-tasks-field.sh "<feature_dir>/tasks.md" "Perf warning"
   backend-api tasks with perf warnings: list each endpoint, measured p95, budget.
   frontend-feature tasks with perf warnings: list each page, measured LCP, budget.
 
@@ -44,16 +34,7 @@ Recommendation: [none | run a load test | revisit budget]
 ━━ SECTION 3: ROLLBACKS ━━━━━━━━━━━━━━
 
 Read tasks.md DONE entries for "Rollback note:" lines:
-  Same parser pattern, different field:
-    awk -v status="DONE" -v field="Rollback note" '
-      /^## TASK-/ { task_header = $0; header = 1 }
-      /^Status: DONE/ { found = 1 }
-      header && found && $0 ~ "^Rollback note:" {
-        val = $0; sub(/^[^:]*: */, "", val)
-        print task_header " | Rollback note: " val
-      }
-      /^###/ { header = 0 }
-    ' "$TASKS_FILE"
+  bash scripts/parse-tasks-field.sh "<feature_dir>/tasks.md" "Rollback note"
 
 If any Rollback note exists in tasks.md:
   ROLLBACK: [N] task(s) were rolled back due to unfixable regressions.

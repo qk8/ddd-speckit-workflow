@@ -512,13 +512,13 @@ steps:
             on_restart:
               type: shell
               command: >
-                sed -i 's/^Status: IN_PROGRESS$/Status: TODO/' "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
             on_continue:
               type: noop
             on_abandon:
               type: shell
               command: >
-                sed -i 's/^Status: IN_PROGRESS$/Status: ABANDONED/' "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" ABANDONED
 
       - id: check_abandoned
         type: if
