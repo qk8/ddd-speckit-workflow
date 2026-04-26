@@ -80,6 +80,7 @@ RENAMES=()
 # ── Search codebase ─────────────────────────────────────────────
 # Search in src/ and app/ directories; fall back to any top-level dirs
 source scripts/search-dirs.sh
+source scripts/filetypes.sh
 if [ ${#SEARCH_DIRS[@]} -eq 0 ]; then
   echo "No src/ or app/ directory found. Skipping codebase search."
   exit 0
@@ -87,8 +88,7 @@ fi
 
 for term in "${!TERMS[@]}"; do
   # Case-insensitive search for the term in codebase
-  matches=$(grep -rl --include="*.java" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" --include="*.go" --include="*.rs" --include="*.kt" --include="*.scala" --include="*.rb" --include="*.cs" --include="*.swift" --include="*.php" --include="*.cpp" --include="*.h" --include="*.hpp" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" \
-    "$term" "${SEARCH_DIRS[@]}" 2>/dev/null || true)
+  matches=$(grep -rl "${FILETYPES_PATTERNS[@]}" "$term" "${SEARCH_DIRS[@]}" 2>/dev/null || true)
 
   if [ -z "$matches" ]; then
     echo "  WARNING: §2 \"$term\" — not found in codebase (may be planned but not yet implemented)."
@@ -124,7 +124,7 @@ done
 # ── Cross-check: find code terms not in plan ────────────────────
 # Search for common DDD patterns (Aggregate, Repository, UseCase, etc.)
 # and check if they match plan.md terms
-PATTERN_FILES=$(grep -rl --include="*.java" --include="*.ts" --include="*.tsx" --include="*.py" \
+PATTERN_FILES=$(grep -rl "${FILETYPES_PATTERNS[@]}" \
   -E "(Aggregate|Repository|UseCase|DomainEvent|ValueObject)" "${SEARCH_DIRS[@]}" 2>/dev/null || true)
 
 if [ -n "$PATTERN_FILES" ]; then
