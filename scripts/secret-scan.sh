@@ -10,9 +10,7 @@ REPO_ROOT="${1:-.}"
 cd "$REPO_ROOT"
 
 # Ensure .gitleaks.toml exists
-if [ ! -f "$REPO_ROOT/.gitleaks.toml" ]; then
-  cp "$(dirname "$0")/gitleaks-base.toml" "$REPO_ROOT/.gitleaks.toml"
-fi
+bash scripts/ensure-gitleaks-toml.sh "$REPO_ROOT"
 
 # Check gitleaks is available
 if ! command -v gitleaks &> /dev/null; then

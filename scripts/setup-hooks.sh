@@ -108,9 +108,9 @@ chmod +x "$HOOKS_DIR/pre-commit"
 echo "→ Hook written to .git/hooks/pre-commit"
 
 # ── CREATE .gitleaks.toml IF MISSING ────────────────────────────────────────
-if [ ! -f "$REPO_ROOT/.gitleaks.toml" ]; then
-  # Copy base config, then append extended comments and examples
-  cp "$(dirname "$0")/gitleaks-base.toml" "$REPO_ROOT/.gitleaks.toml"
+# ensure-gitleaks-toml.sh creates base config if missing.
+# If it created the file, append developer-friendly examples.
+if ! bash scripts/ensure-gitleaks-toml.sh "$REPO_ROOT"; then
   cat >> "$REPO_ROOT/.gitleaks.toml" << 'CFG'
 
 # Add allowlist entries here for false positives.
@@ -121,8 +121,8 @@ if [ ! -f "$REPO_ROOT/.gitleaks.toml" ]; then
 #     regexes = ['''test-token-[a-z0-9]{8}''']
 #     description = "Synthetic tokens used in unit test fixtures only"
 CFG
-  echo "→ .gitleaks.toml created"
 fi
+echo "→ .gitleaks.toml ready"
 
 echo ""
 echo "=== Done ==="
