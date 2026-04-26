@@ -57,52 +57,10 @@ else
 fi
 
 # ── WRITE HOOK ───────────────────────────────────────────────────────────────
-cat > "$HOOKS_DIR/pre-commit" << HOOK
-#!/usr/bin/env bash
-set -euo pipefail
-REPO_ROOT="\$(git rev-parse --show-toplevel)"
-echo ""
-echo "── pre-commit ─────────────────────────────────────"
-
-# 1. SECRET SCAN
-echo "→ Secret scan..."
-if command -v gitleaks &>/dev/null; then
-  if ! gitleaks protect --staged --no-banner 2>&1; then
-    echo "BLOCKED: Secret detected in staged files."
-    echo "Remove it. If false positive, add to .gitleaks.toml allowlist."
-    exit 1
-  fi
-  echo "  ✓ No secrets"
-else
-  echo "  ⚠ gitleaks not installed. Run: bash scripts/setup-hooks.sh"
-fi
-
-# 2. LINT
-echo "→ Lint..."
-cd "\$REPO_ROOT"
-if ! $LINT_CMD > /tmp/lint-out.txt 2>&1; then
-  echo "BLOCKED: Lint errors."
-  cat /tmp/lint-out.txt
-  exit 1
-fi
-echo "  ✓ Lint passed"
-
-# 3. NAMING VALIDATION
-echo "→ Naming validation..."
-if [ -f "\$REPO_ROOT/scripts/check-naming.sh" ] && [ -f "\$REPO_ROOT/plan.md" ]; then
-  if ! bash "\$REPO_ROOT/scripts/check-naming.sh" > /tmp/naming-out.txt 2>&1; then
-    echo "BLOCKED: Naming validation failed."
-    cat /tmp/naming-out.txt
-    exit 1
-  fi
-  echo "  ✓ Naming consistent"
-elif [ -f "\$REPO_ROOT/scripts/check-naming.sh" ]; then
-  echo "  ⚠ plan.md not found — naming validation skipped"
-fi
-
-echo "── pre-commit passed ──────────────────────────────"
-echo ""
-HOOK
+# Copy template, then substitute LINT_CMD into the lint section
+cp "$(dirname "$0")/pre-commit-template.sh" "$HOOKS_DIR/pre-commit"
+sed -i "s|__LINT_CMD__|$LINT_CMD|" "$HOOKS_DIR/pre-commit"
+chmod +x "$HOOKS_DIR/pre-commit"
 
 chmod +x "$HOOKS_DIR/pre-commit"
 echo "→ Hook written to .git/hooks/pre-commit"
