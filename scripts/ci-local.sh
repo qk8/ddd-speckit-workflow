@@ -95,15 +95,22 @@ if $FAST; then echo "  Mode: FAST (no E2E)"; fi
 if $E2E_ONLY; then echo "  Mode: E2E ONLY"; fi
 echo "════════════════════════════════════════"
 
+STAGE_NAMES=("Secret scan (gitleaks)" "Lint + arch tests" "Unit tests" "Integration tests" "API tests" "Contract tests")
+STAGE_CMDS=(
+  "$SECRET_SCAN_CMD"
+  "$(join_cmds "$LINT_CMD" "$ARCH_TEST_CMD")"
+  "$UNIT_TEST_CMD"
+  "$INTEGRATION_TEST_CMD"
+  "$API_TEST_CMD"
+  "$CONTRACT_TEST_CMD"
+)
+
 if $E2E_ONLY; then
   run_stage 7 "E2E tests (headless)" "$E2E_TEST_CMD"
 else
-  run_stage 1 "Secret scan (gitleaks)"   "$SECRET_SCAN_CMD" || { print_summary; exit 1; }
-  run_stage 2 "Lint + arch tests"        "$(join_cmds "$LINT_CMD" "$ARCH_TEST_CMD")" || { print_summary; exit 1; }
-  run_stage 3 "Unit tests"               "$UNIT_TEST_CMD"        || { print_summary; exit 1; }
-  run_stage 4 "Integration tests"        "$INTEGRATION_TEST_CMD" || { print_summary; exit 1; }
-  run_stage 5 "API tests"                "$API_TEST_CMD"         || { print_summary; exit 1; }
-  run_stage 6 "Contract tests"           "$CONTRACT_TEST_CMD" || { print_summary; exit 1; }
+  for i in "${!STAGE_NAMES[@]}"; do
+    run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || { print_summary; exit 1; }
+  done
 
   if ! $FAST; then
     run_stage 7 "E2E tests (headless)"   "$E2E_TEST_CMD"
