@@ -8,14 +8,15 @@ set -euo pipefail
 FEATURE_DIR=$(bash scripts/find-first-feature.sh)
 
 # Read cadence defaults from preset.yml (single source of truth)
+source scripts/cadence-defaults.sh
 PRESET_FILE="ddd-clean-arch/preset.yml"
-DEFAULT_RETRO_INTERVAL=10
-DEFAULT_FIRST_RETRO_THRESHOLD=5
+DEFAULT_RETRO_INTERVAL="$CADENCE_RETRO_INTERVAL_MEDIUM"
+DEFAULT_FIRST_RETRO_THRESHOLD="$CADENCE_FIRST_RETRO_THRESHOLD"
 if [ -f "$PRESET_FILE" ]; then
   DEFAULT_RETRO_INTERVAL=$(bash scripts/read-preset-cadence.sh medium "$PRESET_FILE" 2>/dev/null) || true
-  [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL=10
+  [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL="$CADENCE_RETRO_INTERVAL_MEDIUM"
   DEFAULT_FIRST_RETRO_THRESHOLD=$(bash scripts/read-preset-cadence.sh first_retro_threshold "$PRESET_FILE" 2>/dev/null) || true
-  [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD=5
+  [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD="$CADENCE_FIRST_RETRO_THRESHOLD"
 fi
 
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
