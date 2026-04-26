@@ -13,7 +13,7 @@ PRESET_FILE="ddd-clean-arch/preset.yml"
 DEFAULT_RETRO_INTERVAL=10
 DEFAULT_FIRST_RETRO_THRESHOLD=5
 if [ -f "$PRESET_FILE" ]; then
-  DEFAULT_RETRO_INTERVAL=$(awk '/^    medium:/{print $2; exit}' "$PRESET_FILE" || true)
+  DEFAULT_RETRO_INTERVAL=$(awk '/^  retro_interval:/{found=1} found && /medium:/{print $2; exit}' "$PRESET_FILE" || true)
   [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL=10
   DEFAULT_FIRST_RETRO_THRESHOLD=$(awk '/^  first_retro_threshold:/{print $2; exit}' "$PRESET_FILE" || true)
   [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD=5

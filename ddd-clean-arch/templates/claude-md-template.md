@@ -86,8 +86,5 @@ Local CI:   bash scripts/ci-local.sh
 ## Definition of done
 [Criteria from §17 verbatim. A feature is complete when:]
   - [ ] Test file committed to codebase
-  - [ ] All 17 checks pass: arch | new tests | regression | lint | dep scan |
-          migration | error handling | browser verify | secret scan |
-          perf budget | contract | anti-hallucination | failure modes |
-          cross-cutting | security | test quality | resilience
+  - [ ] All checks from preset.yml routing table pass
   - [ ] [additional criteria from §17]

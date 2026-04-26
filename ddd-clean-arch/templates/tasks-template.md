@@ -47,7 +47,7 @@ Status: TODO
 # Valid statuses:
 #   TODO         — not started
 #   IN_PROGRESS  — currently being worked on (set at task plan confirmation)
-#   DONE         — all 17 checks passed, test file committed
+#   DONE         — all applicable checks passed, test file committed
 #   ABANDONED    — interrupted; partial files listed below for recovery
 #
 # Fields added by /speckit.implement when task is completed:

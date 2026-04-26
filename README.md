@@ -29,7 +29,7 @@ ddd-clean-arch/                            ← Preset
     constitution-template.md              ← Layer rules and constraints
   commands/
     speckit.implement.md                   ← Build override (task plan + test writing + handoff to checks)
-    speckit.check.md                       ← 17 quality checks via routing table (TDD + regression + security + browser + perf budget + contract + anti-hallucination + failure modes + cross-cutting + test quality + resilience)
+    speckit.check.md                       ← 21 quality checks via routing table
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/
@@ -132,7 +132,7 @@ specify workflow list-runs
 specify workflow resume <run-id>
 ```
 
-## The 11 quality checks
+## The 21 quality checks
 
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
@@ -142,11 +142,21 @@ specify workflow resume <run-id>
 | [D] Linter | No errors | All |
 | [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | All |
 | [F] Migration test | Schema matches plan.md §12 exactly | backend-infra only |
-| [G] Observability | Correlation ID, logging, error taxonomy assertions | backend-api, frontend-data |
+| [G] Error handling | Error taxonomy, correlation ID, error envelope assertions | backend-api, frontend-data |
 | [H] Browser verification | Headless E2E + optional Playwright MCP visual replay | frontend-feature, e2e |
 | [I] Secret scan | gitleaks — no credentials or secrets in committed files | All |
 | [J] Performance budget | p95 response time / LCP within §10 budget | backend-api, frontend-feature |
 | [K] Contract enforcement | API endpoints match api-contract.yaml | backend-api, shared |
+| [L] Anti-hallucination | Implementation matches plan.md — no spec drift | All |
+| [M] Failure modes | All §15 failure handlers implemented and tested | All |
+| [N] Cross-cutting | Auth, logging, error handling applied consistently | backend-api, shared |
+| [O] Security | OWASP Top 10, auth, input validation, rate limiting | backend-api, backend-infra, frontend |
+| [P] Test quality | Assertions prove acceptance criteria, not stale tests | All |
+| [Q] Resilience | Circuit breakers, retries, graceful degradation | backend-api, backend-infra |
+| [R] Quantitative | Coverage thresholds, type check, lint, build clean | backend-api, shared |
+| [S] Property-based | Invariant preservation, edge case coverage | All |
+| [T] Adversarial | Malformed input, injection, fuzzing | backend-api, shared |
+| [U] Session/token | JWT, refresh tokens, session security | backend-api |
 
 ### TDD and regression (checks [B] + [C])
 
@@ -198,7 +208,7 @@ check [H] runs headless only — all other checks are unaffected.
 | `/speckit.test` | Standalone test or debug session |
 | `/speckit.verify` | Spec-code drift check |
 | `/speckit.review` | Design quality review |
-| `/speckit.retrospect` | Adaptive cadence (simple: 15, medium: 10, complex: 5 tasks) |
+| `/speckit.retrospect` | Adaptive cadence (configured in preset.yml cadence section) |
 | `/speckit.status` | Progress dashboard |
 | `/speckit.context` | Targeted spec loading |
 

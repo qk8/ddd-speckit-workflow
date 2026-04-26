@@ -10,7 +10,7 @@ workflow:
     Phases: clarify → spec → plan-full (§1–§16) → plan-artifacts
     (api-contract.yaml + data-model.sql + interfaces) → plan-devex (§17–§20
     + DevEx files) → tasks (with integration tasks) → validate dependency graph
-    → implement loop (batched parallel tasks, 21 checks via routing table, TDD,
+    → implement loop (batched parallel tasks, all checks via routing table, TDD,
     self-correction inline → adaptive retrospective → code-review
     (Phase 7: security, correctness, performance, maintainability, accessibility)
     → final verify.
@@ -296,7 +296,7 @@ steps:
         §1–§16 of plan.md are approved. Produce §17–§20 and DevEx/config files:
 
         §17 Definition of done
-          Concrete verifiable criteria. Must align with the 21 checks in preset.yml routing table.
+          Concrete verifiable criteria. Must align with all checks in preset.yml routing table.
           Include: test file committed, regression suite green, secret scan clean.
 
         §18 Self-critique (mandatory — do not soften)
@@ -595,7 +595,7 @@ steps:
           Review the completion report for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] All applicable checks passed (21 checks via routing table: arch, new tests, regression, lint, dep scan, migration, error handling, browser, secret scan, perf budget, contract, anti-hallucination, failure modes, cross-cutting, security, test quality, resilience, quantitative, property-based, adversarial, session/token)?
+          [ ] All applicable checks passed (all checks in routing table)?
           [ ] Check [C] regression: zero new failures in existing test suite?
           [ ] Check [J] performance budget: within §10 budget?
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?

@@ -104,13 +104,13 @@ checks:
 
 # Derived routing table — single source of truth for which checks apply to each type.
 routing:
-  backend-domain:    [A, B, C, D, M, P]
-  backend-infra:     [A, B, C, D, E, F, M, O, Q]
-  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, R, T, U]
-  shared:            [A, B, C, D, E, K, L, M, N, R, T]
-  frontend-data:     [B, C, D, G, L, O, P]
-  frontend-feature:  [B, C, D, G, H, L, O, P]
-  e2e:               [B, C, D, H, P]
+  backend-domain:    [A, B, C, D, M, P, S]
+  backend-infra:     [A, B, C, D, E, F, M, O, Q, S]
+  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, R, S, T, U]
+  shared:            [A, B, C, D, E, K, L, M, N, R, S, T]
+  frontend-data:     [B, C, D, G, L, O, P, S]
+  frontend-feature:  [B, C, D, G, H, L, O, P, S]
+  e2e:               [B, C, D, H, P, S]
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.
