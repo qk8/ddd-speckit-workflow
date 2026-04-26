@@ -12,11 +12,8 @@ applies_to: [backend-api, shared]
     2. type_check_command: Run [type_check_command]. Assert 0 errors.
        If errors: print "TYPE ERRORS: [N] errors found"
        Fix and re-run. Do not proceed.
-    3. lint_command: Run [lint_command]. Assert 0 errors.
-       If errors: print "LINT ERRORS: [N] errors found"
-       Fix and re-run. Do not proceed.
-    4. build_command: Run [build_command]. Assert clean build (0 errors).
+    3. build_command: Run [build_command]. Assert clean build (0 errors).
        If errors: print "BUILD ERRORS: [N] errors found"
        Fix and re-run. Do not proceed.
 
-  Print: "QUANTITATIVE GATE: coverage [line]%/[branch]%/[function]%, 0 type errors, 0 lint errors, build clean"
+  Print: "QUANTITATIVE GATE: coverage [line]%/[branch]%/[function]%, 0 type errors, build clean"

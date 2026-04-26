@@ -2,33 +2,8 @@
 
 One task = one speckit.implement session (max 5 files, max 1 aggregate).
 
-# HOW TDD WORKS ACROSS TASK TYPES
-# Every task starts by writing a failing test, then implements until it passes.
-# The test type written in each task is different:
-#
-#   backend-domain   → write failing UNIT tests first, then implement domain classes
-#   backend-infra    → write failing INTEGRATION tests first, then implement repository
-#   backend-api      → write failing API tests first (REST Assured / Playwright API),
-#                      then implement controller + use case
-#   shared           → write failing contract tests first, then generate types
-#   frontend-data    → write failing UNIT tests first, then implement data layer
-#   frontend-feature → write failing E2E tests first (Playwright), then implement UI
-#   e2e              → write failing E2E tests first for CROSS-FEATURE journeys,
-#                      then fix any gaps revealed across already-built features
-#   integration      → write failing INTEGRATION tests first for CROSS-CONTEXT
-#                      boundaries (between bounded contexts), then verify the
-#                      event/command flow between contexts
-#
-# The "e2e" task type is NOT redundant with frontend-feature TDD.
-# frontend-feature tasks test one feature in isolation (e.g. "place an order").
-# e2e tasks test journeys that span multiple features (e.g. "register, then place
-# an order, then view order history"). These only make sense after all the individual
-# features they depend on are complete — hence their position at the end.
-#
-# The "integration" task type is NOT redundant with e2e.
-# integration tasks test bounded context boundaries (e.g. "Order placed → Payment
-# created via shared kernel"). These run after all domain/infra/api tasks for both
-# contexts are DONE but before frontend tasks. e2e tasks test user-facing journeys.
+# HOW TDD WORKS
+# TDD is used throughout — see plan.md §13 for the full explanation.
 
 Task order:
 1. backend-domain  (aggregate root, value objects, events, repo interface — one task per aggregate)

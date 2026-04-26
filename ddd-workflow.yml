@@ -614,7 +614,7 @@ steps:
         on_revise:
           goto: implement_one
 
-  # ── PHASE 7: CODE REVIEW CHECKLIST ──────────────────────────────
+  # ── PHASE 6: CODE REVIEW CHECKLIST ──────────────────────────────
   - id: code_review
     command: speckit.code-review
     integration: claude

@@ -1,8 +1,4 @@
-Locate the current feature by scanning .specify/specs/ for the first
-feature directory. Read from that directory:
-  - plan.md (complete)
-  - tasks.md (complete)
-Also read CLAUDE.md from the repo root.
+Read the feature preamble from templates/preamble.md.
 
 Run on adaptive cadence (check-tasks.sh, values from ddd-clean-arch/preset.yml cadence section).
 Does not implement or fix anything.

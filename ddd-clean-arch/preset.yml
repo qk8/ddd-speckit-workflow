@@ -102,7 +102,8 @@ checks:
     name: "Session & Token Security"
     applies_to: [backend-api]
 
-# Derived routing table — single source of truth for which checks apply to each type.
+# Derived routing table — manually synced with checks[].applies_to above.
+# Run scripts/derive-routing.sh to see the auto-derived version and spot drift.
 routing:
   backend-domain:    [A, B, C, D, M, P, S]
   backend-infra:     [A, B, C, D, E, F, M, O, Q, S]

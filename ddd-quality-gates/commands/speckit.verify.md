@@ -2,11 +2,7 @@ Read CLAUDE.md fully.
 (verify reads CLAUDE.md fully — it is short by design and contains the rules
 that everything is checked against.)
 
-Locate the current feature by scanning .specify/specs/ for the first
-feature directory. All plan.md and spec file reads below use that directory:
-  plan.md      → .specify/specs/[feature]/plan.md
-  tasks.md     → .specify/specs/[feature]/tasks.md
-  conventions  → .specify/memory/conventions.md
+Read the feature preamble from templates/preamble.md.
 
 Ask: "What do you want to verify?"
   1. A specific aggregate
