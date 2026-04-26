@@ -102,16 +102,18 @@ checks:
     name: "Session & Token Security"
     applies_to: [backend-api]
 
-# Derived routing table — manually synced with checks[].applies_to above.
-# Run scripts/derive-routing.sh to see the auto-derived version and spot drift.
+# Derived routing table — auto-derived from checks[].applies_to.
+# Regenerate with: scripts/derive-routing.sh
+# Drift from derived values is flagged by: scripts/validate-routing-table.sh
 routing:
-  backend-domain:    [A, B, C, D, M, P, S]
-  backend-infra:     [A, B, C, D, E, F, M, O, Q, S]
-  backend-api:       [A, B, C, D, E, G, I, J, K, L, M, N, O, Q, R, S, T, U]
-  shared:            [A, B, C, D, E, K, L, M, N, R, S, T]
-  frontend-data:     [B, C, D, G, L, O, P, S]
-  frontend-feature:  [B, C, D, G, H, L, O, P, S]
-  e2e:               [B, C, D, H, P, S]
+  backend-domain:   [A, B, C, D, E, I, L, M, P, S]
+  backend-infra:    [A, B, C, D, E, F, I, L, M, O, P, Q, S]
+  backend-api:      [A, B, C, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U]
+  shared:           [B, C, D, E, I, K, L, M, N, P, R, S, T]
+  integration:      [B, C, D, I, L, M, P, S]
+  frontend-data:    [B, C, D, G, I, L, M, O, P, S]
+  frontend-feature: [B, C, D, H, I, J, L, M, O, P, S]
+  e2e:              [B, C, D, H, I, L, M, P, S]
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.

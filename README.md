@@ -136,11 +136,11 @@ specify workflow resume <run-id>
 
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
-| [A] Arch tests | ArchUnit / dependency-cruiser layer enforcement | All |
+| [A] Arch tests | ArchUnit / dependency-cruiser layer enforcement | backend-domain, backend-infra, backend-api |
 | [B] New tests pass | Written before implementation (TDD, failing-first) | All |
 | [C] Regression suite | Full test suite — zero new failures allowed | All |
 | [D] Linter | No errors | All |
-| [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | All |
+| [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | backend-domain, backend-infra, backend-api, shared |
 | [F] Migration test | Schema matches plan.md §12 exactly | backend-infra only |
 | [G] Error handling | Error taxonomy, correlation ID, error envelope assertions | backend-api, frontend-data |
 | [H] Browser verification | Headless E2E + optional Playwright MCP visual replay | frontend-feature, e2e |
@@ -150,7 +150,7 @@ specify workflow resume <run-id>
 | [L] Anti-hallucination | Implementation matches plan.md — no spec drift | All |
 | [M] Failure modes | All §15 failure handlers implemented and tested | All |
 | [N] Cross-cutting | Auth, logging, error handling applied consistently | backend-api, shared |
-| [O] Security | OWASP Top 10, auth, input validation, rate limiting | backend-api, backend-infra, frontend |
+| [O] Security | OWASP Top 10, auth, input validation, rate limiting | backend-api, backend-infra, frontend-data, frontend-feature |
 | [P] Test quality | Assertions prove acceptance criteria, not stale tests | All |
 | [Q] Resilience | Circuit breakers, retries, graceful degradation | backend-api, backend-infra |
 | [R] Quantitative | Coverage thresholds, type check, lint, build clean | backend-api, shared |

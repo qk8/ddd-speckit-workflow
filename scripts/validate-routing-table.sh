@@ -4,6 +4,7 @@
 #   - All check IDs in routing: exist in checks: section
 #   - All check IDs in checks: appear in at least one routing: entry
 #   - commands/checks/check_[X]_[name].mdc files exist for all check IDs
+#   - Manual routing matches auto-derived values (drift detection)
 # Exit 0 if valid, exit 1 if issues found.
 
 set -euo pipefail
@@ -59,8 +60,16 @@ for cid in "${CHECK_IDS[@]}"; do
   fi
 done
 
+# Check 4: Compare manual routing against auto-derived routing (drift detection)
+DRIFT_OUTPUT=$(./scripts/derive-routing.sh --compare "$PRESET_FILE" 2>&1) && DRIFT_RC=0 || DRIFT_RC=$?
+if [ "$DRIFT_RC" -ne 0 ]; then
+  echo "DRIFT: Manual routing diverges from auto-derived values"
+  echo "$DRIFT_OUTPUT" | sed 's/^/  /'
+  ERRORS=$((ERRORS + 1))
+fi
+
 if [ "$ERRORS" -eq 0 ]; then
-  echo "OK: Routing table valid — ${#CHECK_IDS[@]} checks, ${#UNIQUE_ROUTING_IDS[@]} unique routing entries, all .mdc files present"
+  echo "OK: Routing table valid — ${#CHECK_IDS[@]} checks, ${#UNIQUE_ROUTING_IDS[@]} unique routing entries, all .mdc files present, 0 drift"
   exit 0
 else
   echo "FAIL: $ERRORS issue(s) found"
