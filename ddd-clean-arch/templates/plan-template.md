@@ -438,50 +438,16 @@ orm_leak_prevention:
 
 # TDD APPROACH (outside-in)
 # Every task starts by writing a failing test, then implements until it passes.
-# The test type per task type:
-#   backend-domain   → failing unit test first, then implement domain classes
-#   backend-infra    → failing integration test first, then implement repository
-#   backend-api      → failing API test first (full stack), then implement controller + use case
-#   shared           → failing contract test first, then generate types
-#   frontend-data    → failing unit test first, then implement data layer
-#   frontend-feature → failing Playwright E2E test first (single feature), then implement UI
-#   e2e              → failing Playwright E2E test first (cross-feature journey),
-#                      then fix any gaps across already-built features
-#
-# Why e2e tasks come last is NOT a TDD violation:
-#   frontend-feature tasks use TDD for individual features.
-#   e2e tasks test journeys across multiple already-built features.
-#   These cross-feature tests cannot be written until all dependent features exist.
-#   Writing them last is the correct outside-in sequence.
-#
+# See: guides/flaky-test-protocol.md for flaky test handling.
 # No task is DONE without a persistent test file committed to the codebase.
 # After every task, the full regression suite runs — zero new failures allowed.
 
 # ── TOOL SELECTION ─────────────────────────────────────────────
 # Derived from backend language in project-brief.md.
-# Do not change this decision after the first task is implemented.
+# See: guides/api-testing-tool-guide.md for full tool comparison.
 
 api_testing_tool:
-  # IF backend_language is Java:
-  #   tool: REST Assured
-  #   reason: JUnit 5 ecosystem fit, expressive DSL, Spring Boot Test integration,
-  #           runs as part of the existing Maven/Gradle test task
-  #   runner: same as unit tests (mvn test / gradle test)
-  #   location: [backend-module]/src/test/java/api/
-  #
-  # IF backend_language is TypeScript / JavaScript (Node.js):
-  #   tool: Playwright (request API)
-  #   reason: single tool for both API and E2E, no additional dependency
-  #   runner: npx playwright test --project=api
-  #   location: [backend-module]/tests/api/
-  #
-  # IF backend_language is Python:
-  #   tool: pytest + httpx
-  #   reason: async-native, integrates with pytest fixtures
-  #   runner: pytest tests/api/
-  #   location: [backend-module]/tests/api/
-  #
-  # Fill in the selected tool below:
+  # See: guides/api-testing-tool-guide.md for tool comparison.
   selected:      # [rest-assured | playwright-api | pytest-httpx]
   runner:        # [mvn test | gradle test | npx playwright test --project=api | pytest tests/api/]
   location:      # [path to API test files]
@@ -555,11 +521,7 @@ coverage_thresholds:
     branch: 85
     function: 90
 
-  # These are hard minimums. If any threshold is not met:
-  #   1. Identify uncovered lines via coverage report
-  #   2. Write tests for those paths
-  #   3. If a path cannot be reached, remove dead code — do not lower thresholds
-  #   4. Re-run coverage check
+  # These are hard minimums. If any threshold is not met, write tests for uncovered paths or remove dead code.
 
 # ── TYPE CHECKING ────────────────────────────────────────────
 # Zero errors required. Strict mode must be enabled.
@@ -604,7 +566,6 @@ unit_tests:
   framework:    # [JUnit 5 | Vitest | pytest]
   location: [path pattern, e.g. src/test/java/**/unit/]
   coverage_focus: [invariants, use case orchestration, all error paths]
-  # A use case that cannot be tested without a database is an architecture violation.
 
 integration_tests:
   target_layers: [infrastructure]
@@ -612,13 +573,8 @@ integration_tests:
   framework:    # [JUnit 5 + Testcontainers | Vitest | pytest]
   location: [path pattern]
   coverage_focus: [repository implementations, external adapters]
-  # Testcontainers (or equivalent) provides a real database.
-  # Never use an in-memory database for integration tests — it hides real SQL issues.
 
 api_tests:
-  # These tests call the RUNNING local server via HTTP.
-  # They test the full backend stack: delivery → application → domain → infrastructure.
-  # They are the primary regression suite for the backend API contract.
   scope: all endpoints in docs/spec/api-contract.yaml
   per_endpoint_coverage:
     - happy_path: yes       # correct input → expected status + response shape
@@ -632,9 +588,6 @@ api_tests:
   run_order: after_unit_and_integration  # API tests run after unit and integration pass
 
 e2e_tests:
-  # These tests run in a real browser against the full running stack.
-  # They verify critical user journeys from the user's perspective.
-  # They are the primary regression suite for frontend features.
   scope:
     # List every critical user journey. These are used by check [G] and /speckit.test.
     # Form: "[Journey name]: As a [user], I [action sequence] and verify [outcome]"
@@ -648,50 +601,16 @@ e2e_tests:
     # e.g. [feature-name].e2e.spec.ts
   run_order: last  # E2E runs after all other tests pass
 
-# ── TEST FILE OWNERSHIP ─────────────────────────────────────────
-# Every backlog task owns one or more test files. These are created during
-# the task and committed to the codebase. They never disappear.
-# task_type → test_file_type:
-#   backend-domain   → unit test (domain layer, no infrastructure)
-#   backend-infra    → integration test (repository, real DB via Testcontainers)
-#   backend-api      → API test (REST Assured or Playwright API, full stack)
-#   shared           → unit test (type contracts, generated code validation)
-#   frontend-data    → unit test (data layer functions, typed error returns)
-#   frontend-feature → E2E test (Playwright, browser, full journey)
-#   e2e              → E2E test (Playwright, critical cross-feature journey)
-
 # ── TEST DATA ISOLATION ─────────────────────────────────────────
-# Every test must set up its own data and clean up after itself.
-# Tests must never depend on data created by other tests.
-# Tests must be runnable in any order and in parallel.
+# See: guides/test-data-strategy.md for full strategy guide.
 
 test_data_strategy:
   approach: [test_containers_per_test | shared_db_with_cleanup | factory_functions]
-  # test_containers_per_test: cleanest isolation, slowest startup — use for integration tests
-  # shared_db_with_cleanup:  single test DB, each test cleans up in @AfterEach/@afterEach
-  # factory_functions:       helper functions that create valid domain objects for tests
-  #
-  # Recommended: test_containers_per_test for integration tests
-  #              shared_db_with_cleanup for API tests (faster)
-  #              factory_functions for unit tests (no DB)
-
   factory_location: [path — e.g. src/test/java/fixtures/ or tests/fixtures/]
-  # Factory functions / builder classes create valid aggregates for test use.
-  # They use the exact class names and invariants from plan.md §4.
-  # No test should construct domain objects by hand — use the factory.
-
   e2e_data_setup:
     strategy: [api_seeding | db_seeding | before_each_hook]
-    # api_seeding: E2E tests call the API to create their own test data before running
-    #              (most realistic, tests the full stack including auth)
-    # db_seeding:  direct DB insert via a test helper endpoint or migration-style script
-    #              (faster, but bypasses application logic)
-    # before_each_hook: Playwright beforeEach creates data, afterEach cleans up
     cleanup: [after_each | after_all | none_if_isolated_db]
     isolation_guarantee: [each_test_independent | run_in_isolation_only]
-    # each_test_independent = tests can run in any order and in parallel
-    # run_in_isolation_only = tests must run sequentially (document why this is acceptable)
-
   forbidden:
     - Tests must never share state through static variables or module-level singletons
     - Tests must never read data written by a different test
@@ -699,40 +618,12 @@ test_data_strategy:
     - E2E tests must never reuse user accounts created by other tests
 
 # ── FLAKY TEST PROTOCOL ──────────────────────────────────────────
-# A flaky test is one that fails intermittently without a code change.
-# Flaky tests erode trust in the test suite. Left unaddressed, teams
-# start ignoring failures — at which point the suite provides no safety net.
-
+# See: guides/flaky-test-protocol.md for full SOP (definition, fix approach, forbidden).
 flaky_test_protocol:
-  definition: a test that fails at least once without any code change in 20 runs
-  detection: [CI failure rate tracking | manual observation | flaky test detector tool]
-
-  on_detection:
-    immediate_action: quarantine  # move to quarantine suite, do NOT delete
-    quarantine_location: [path — e.g. tests/quarantine/ or src/test/java/quarantine/]
-    quarantine_suite_runs: [nightly | manual — NOT on every PR]
-    ticket_required: yes  # every quarantined test needs a tracking issue
-    max_time_in_quarantine: [e.g. 2 weeks — after this, fix or delete with justification]
-
-  fix_approach:
-    step_1: reproduce the flakiness locally (run the test 20 times in a loop)
-    step_2: identify root cause category:
-      - timing: test doesn't wait for async operation to complete
-              → fix: explicit wait conditions, not fixed sleep()
-      - shared_state: test depends on data from another test
-              → fix: test data isolation (see test_data_strategy above)
-      - race_condition: concurrent operations produce non-deterministic result
-              → fix: deterministic test setup or mock the concurrency
-      - environment: test depends on network, clock, or OS-specific behavior
-              → fix: mock the external dependency or use test-stable values
-    step_3: fix the root cause (not the symptom — do not add retry logic)
-    step_4: run fixed test 50 times to confirm stability before removing from quarantine
-
-  forbidden:
-    - Never add retry logic to a test to hide flakiness
-    - Never skip a flaky test without a quarantine ticket
-    - Never keep a test in quarantine longer than max_time_in_quarantine without action
-    - Never use fixed sleep() / Thread.sleep() — use explicit wait conditions
+  quarantine_location: [path — e.g. tests/quarantine/ or src/test/java/quarantine/]
+  quarantine_suite_runs: [nightly | manual — NOT on every PR]
+  ticket_required: yes
+  max_time_in_quarantine: [e.g. 2 weeks]
 
 # ── HIGHEST RISK PATHS ─────────────────────────────────────────
 highest_risk_paths:
@@ -757,16 +648,15 @@ contract_testing:
   failure_action: [blocks merge]
 
 # ── CI TEST EXECUTION ORDER ─────────────────────────────────────
+# Canonical stage order defined in scripts/ci-local.sh.
 ci_execution_order:
-  # Fast feedback first, expensive tests last.
-  # Each stage only runs if the previous stage passes.
-  1: secret scan (gitleaks)  # seconds — blocks merge if credentials found
-  2: lint + arch tests        # seconds — blocks if layer rules violated
-  3: unit tests               # seconds
-  4: integration tests        # ~1-2 minutes (Testcontainers startup)
-  5: api tests                # ~1-5 minutes (real server required)
-  6: contract tests           # ~seconds
-  7: e2e tests                # ~5-20 minutes (browser, headless)
+  1: secret scan (gitleaks)
+  2: lint + arch tests
+  3: unit tests
+  4: integration tests
+  5: api tests
+  6: contract tests
+  7: e2e tests
 
 ─────────────────────────────────
 §14 MONOREPO & DEVELOPER EXPERIENCE
