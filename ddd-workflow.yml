@@ -126,46 +126,53 @@ steps:
     options: [approve, reject]
     on_reject: abort
 
-  - id: audit-spec
-    type: prompt
-    integration: claude
-    input:
-      args: >
-        Read .specify/specs/[feature]/spec.md. Then produce an adversarial
-        audit with exactly these sections:
+  - id: audit_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: audit-spec
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Read .specify/specs/[feature]/spec.md. Then produce an adversarial
+            audit with exactly these sections:
 
-        ### Hidden Requirements
-        [Requirements implied by the spec but not stated — e.g., auth
-        is implied if there are user roles; pagination is implied if
-        there are list endpoints]
+            ### Hidden Requirements
+            [Requirements implied by the spec but not stated — e.g., auth
+            is implied if there are user roles; pagination is implied if
+            there are list endpoints]
 
-        ### Contradictions
-        [Any two requirements that cannot both be true simultaneously]
+            ### Contradictions
+            [Any two requirements that cannot both be true simultaneously]
 
-        ### Ambiguities
-        [Any phrase a developer could interpret two different ways]
+            ### Ambiguities
+            [Any phrase a developer could interpret two different ways]
 
-        ### Missing Edge Cases
-        [Empty states, error states, concurrent access, scale limits,
-        clock skew, malformed input]
+            ### Missing Edge Cases
+            [Empty states, error states, concurrent access, scale limits,
+            clock skew, malformed input]
 
-        ### Security Surfaces
-        [Any feature that introduces a security surface not addressed
-        in the spec]
+            ### Security Surfaces
+            [Any feature that introduces a security surface not addressed
+            in the spec]
 
-        Print the audit. Do NOT modify spec.md yet. The human will
-        review and decide what to add.
+            Print the audit. Do NOT modify spec.md yet. The human will
+            review and decide what to add.
 
-  - id: review-audit
-    type: gate
-    message: |
-      Review the adversarial spec audit above.
-      Edit spec.md to resolve every item: add missing requirements,
-      clarify ambiguities, document contradictions resolved.
-      Approve when the spec is unambiguous and complete.
-    options: [approve, revise]
-    on_revise:
-      goto: audit-spec
+      - id: review-audit
+        type: gate
+        message: |
+          ━━ AUDIT ROUND {{ steps.audit_round_iteration.output.count || 1 }}/3 ━━
+
+          Review the adversarial spec audit above.
+          Edit spec.md to resolve every item: add missing requirements,
+          clarify ambiguities, document contradictions resolved.
+          Approve when the spec is unambiguous and complete.
+        options: [approve, revise]
+        on_revise:
+          goto: audit-spec
 
   # ── PHASE 3: PLAN — CONSOLIDATED IN 3 BATCHES ──────────────────
   # Batch 1: Core plan (§1–§16) — domain decisions, architecture,
