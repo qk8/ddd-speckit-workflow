@@ -28,7 +28,7 @@ applies_to: [frontend-feature, e2e]
       3. Find the correlation ID in any failed API response.
          Use it to locate the corresponding backend log entry.
       4. Trace the root cause to its source layer.
-      5. Fix. Re-run headless E2E only. Then re-run check [C] regression suite.
+      5. Fix. Re-run headless E2E only. Then re-run check [BC] regression suite.
 
   If Playwright MCP is not available (web sandbox):
     Headless only. Print warning: "Playwright MCP not available -- visual
