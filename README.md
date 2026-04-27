@@ -134,7 +134,7 @@ Installs Playwright browsers and registers two MCP servers:
 - **Chrome DevTools MCP** — debugging (network, console, performance)
 
 ⚠️ **Local Claude Code only.** Does not work in the claude.ai/code web sandbox.
-If you use the web sandbox, check [G] is skipped with a warning — all other checks still run.
+If you use the web sandbox, check [H] is skipped with a warning — all other checks still run.
 
 ### Step 5 — Run
 
