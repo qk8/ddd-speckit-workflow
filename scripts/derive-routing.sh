@@ -24,7 +24,7 @@ TYPES=("backend-domain" "backend-infra" "backend-api" "shared" "integration" "fr
 # Prints check IDs that apply to the given task type.
 derive_checks_for_type() {
   awk -v type="$1" '
-    /^  [A-Z]:/ { id = $1; gsub(/:/, "", id) }
+    /^  [A-Z][A-Z]?:/ { id = $1; gsub(/:/, "", id) }
     /applies_to:.*all/ { if (id != "") print id }
     /applies_to:.*\[.*\]/ {
       line = $0

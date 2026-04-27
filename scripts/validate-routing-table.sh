@@ -42,8 +42,8 @@ PRESET_DIR=$(dirname "$PRESET_FILE")
 CHECKS_DIR="$PRESET_DIR/commands/checks"
 ERRORS=0
 
-# Parse check IDs from checks: section (indented with 2 spaces: "  A:")
-read_from_input CHECK_IDS < <(awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z]:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE")
+# Parse check IDs from checks: section (indented: "  A:" or "  BC:")
+read_from_input CHECK_IDS < <(awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE")
 
 # Parse check IDs from routing: section (indented: "  backend-domain:    [A, B, ...]")
 read_from_input ROUTING_IDS < <(awk '/^routing:/{found=1; next} found && /^[a-z]/{found=0} found && /\[/{gsub(/.*\[/, ""); gsub(/\].*/, ""); gsub(/ /, ""); n=split($0, a, ","); for(i=1;i<=n;i++) print a[i]}' "$PRESET_FILE")

@@ -1,4 +1,4 @@
-# Short display labels and descriptions for the 21 quality checks.
+# Short display labels and descriptions for the 20 quality checks.
 # Used by scripts/derive-checks-table.sh to generate the README table.
 # Keep in sync with ddd-clean-arch/preset.yml checks section.
 #
@@ -12,12 +12,9 @@
 A:
   label: "Arch tests"
   desc: "ArchUnit / dependency-cruiser layer enforcement"
-B:
-  label: "New tests pass"
-  desc: "Written before implementation (TDD, failing-first)"
-C:
-  label: "Regression suite"
-  desc: "Full test suite — zero new failures allowed"
+BC:
+  label: "New tests + regression"
+  desc: "New tests pass + full suite — zero new failures allowed"
 D:
   label: "Linter"
   desc: "No errors"

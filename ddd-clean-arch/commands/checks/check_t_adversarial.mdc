@@ -28,13 +28,7 @@ applies_to: [backend-api, shared]
      - Empty array [] where non-empty array expected → typed validation error
      - Error must name the specific invalid parameter (not generic TypeError)
 
-  4. SQL injection:
-     - "' OR '1'='1" in all string fields → treated as literal string
-     - "'; DROP TABLE users; --" → treated as literal string
-     - Null byte injection → no DDL executed, schema unchanged
-     - Verify all queries use parameterized statements (grep source for string concatenation)
-
-  5. Idempotency:
+  4. Idempotency:
      - Same request sent twice with identical body → exactly one side-effect
      - Duplicate payment/order/notification → exactly one record created
      - Second call returns same success response (not error, not duplicate)

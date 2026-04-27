@@ -1,0 +1,37 @@
+---
+check_id: BC
+name: "New Tests + Regression"
+applies_to: all
+---
+[BC] NEW TESTS + REGRESSION — zero new failures allowed
+
+STEP 1: Run only the test file created in Step 1.
+  Required: all pass.
+  If any fail: fix the implementation. Do not weaken the tests to make them pass.
+
+  FLAKY TEST PROTOCOL: follow guides/flaky-test-protocol.md.
+    Additional requirement: if a test passes on the first run but you
+    suspect timing- or state-dependency, run it 5 times consecutively
+    ([test runner command] --repeat=5). If it fails on any run, treat
+    as flaky. Fix the root cause before marking DONE.
+
+STEP 2: Run the full test suite (all tests, not just the new ones):
+  For all task types except frontend-feature and e2e:
+    plan.md §13 regression_command.api_only
+  For frontend-feature and e2e tasks:
+    plan.md §13 regression_command.all
+  Required: ZERO new test failures.
+  If a previously passing test now fails:
+    This task introduced a regression. Do not mark DONE.
+    Identify exactly which change broke the existing test.
+    Fix the regression, then re-run the full regression suite.
+    Print: "REGRESSION FOUND AND FIXED — [test name]: [root cause and fix]"
+
+  If the regression cannot be fixed (conflicting requirements, unresolvable
+  architecture clash):
+    1. Mark the task ABANDONED in tasks.md with a note explaining the clash.
+    2. Print: "REGRESSION UNFIXABLE — ABANDONING task. See rollback note."
+    3. Do NOT mark the task DONE.
+    4. Do NOT weaken existing tests to make them pass.
+
+Print: "NEW+REGRESSION: [N] new tests pass, [total N] total tests, 0 new failures"

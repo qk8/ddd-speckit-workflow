@@ -41,11 +41,8 @@ checks:
   A:
     name: "Architectural Tests"
     applies_to: [backend-domain, backend-infra, backend-api]
-  B:
-    name: "New Tests Pass"
-    applies_to: all
-  C:
-    name: "Regression Suite"
+  BC:
+    name: "New Tests + Regression"
     applies_to: all
   D:
     name: "Linter"
@@ -106,14 +103,14 @@ checks:
 # Regenerate with: scripts/derive-routing.sh
 # Drift from derived values is flagged by: scripts/validate-routing-table.sh
 routing:
-  backend-domain:   [A, B, C, D, E, I, L, M, P, S]
-  backend-infra:    [A, B, C, D, E, F, I, L, M, O, P, Q, S]
-  backend-api:      [A, B, C, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U]
-  shared:           [B, C, D, E, I, K, L, M, N, P, R, S, T]
-  integration:      [B, C, D, I, L, M, P, S]
-  frontend-data:    [B, C, D, G, I, L, M, O, P, S]
-  frontend-feature: [B, C, D, H, I, J, L, M, O, P, S]
-  e2e:              [B, C, D, H, I, L, M, P, S]
+  backend-domain:   [A, BC, D, E, I, L, M, P, S]
+  backend-infra:    [A, BC, D, E, F, I, L, M, O, P, Q, S]
+  backend-api:      [A, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U]
+  shared:           [BC, D, E, I, K, L, M, N, P, R, S, T]
+  integration:      [BC, D, I, L, M, P, S]
+  frontend-data:    [BC, D, G, I, L, M, O, P, S]
+  frontend-feature: [BC, D, H, I, J, L, M, O, P, S]
+  e2e:              [BC, D, H, I, L, M, P, S]
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.

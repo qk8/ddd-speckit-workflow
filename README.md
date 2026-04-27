@@ -155,8 +155,7 @@ specify workflow resume <run-id>
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
 | [A] Arch tests | ArchUnit / dependency-cruiser layer enforcement | backend-domain, backend-infra, backend-api |
-| [B] New tests pass | Written before implementation (TDD, failing-first) | All |
-| [C] Regression suite | Full test suite — zero new failures allowed | All |
+| [BC] New tests + regression | New tests + full suite — zero new failures | All |
 | [D] Linter | No errors | All |
 | [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | backend-domain, backend-infra, backend-api, shared |
 | [F] Migration test | Schema matches plan.md §12 exactly | backend-infra |
@@ -176,10 +175,10 @@ specify workflow resume <run-id>
 | [T] Adversarial | Malformed input, injection, fuzzing | backend-api, shared |
 | [U] Session/token | JWT, refresh tokens, session security | backend-api |
 
-### TDD and regression (checks [B] + [C])
+### TDD and regression (check [BC])
 
-Every task starts by writing a failing test, then implements until it passes ([B]).
-After the new tests pass, the **full test suite** runs ([C]).
+Every task starts by writing a failing test, then implements until it passes.
+After the new tests pass, the **full test suite** runs.
 Zero new failures allowed — any regression must be fixed before the task is DONE.
 This means every task automatically verifies all previously implemented features still work.
 
