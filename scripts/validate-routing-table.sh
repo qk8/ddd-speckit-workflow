@@ -20,12 +20,12 @@ set -euo pipefail
 read_from_input() {
   local _tmpfile
   _tmpfile=$(mktemp)
-  trap 'rm -f "$_tmpfile"' EXIT
   cat > "$_tmpfile"
   local _arr=()
   while IFS= read -r line; do
     [ -n "$line" ] && _arr+=("$line")
   done < "$_tmpfile"
+  rm -f "$_tmpfile"
   # Write result back using eval (bash 3.2 compatible)
   eval "$1=(\"\${_arr[@]}\")"
 }
