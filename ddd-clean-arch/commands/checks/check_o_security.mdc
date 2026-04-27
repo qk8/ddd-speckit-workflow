@@ -23,5 +23,5 @@ applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
   8. Error messages: Do error messages NOT reveal internal paths,
      library names, or stack traces to clients?
 
-  For each item: PASS, FAIL, or N-A.
-  If any FAIL: fix it. Do not proceed until all PASS or N-A.
+  For each item: PASS, FAIL, or N/A.
+  If any FAIL: fix it. Do not proceed until all PASS or N/A.
