@@ -318,73 +318,81 @@ steps:
 
         End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete."
 
-  # ── CONSOLIDATED REVIEW ─────────────────────────────────────────
-  # Single review gate replaces review-plan + review-plan-artifacts + review-plan-devex.
-  # Reduces planning phase from 3 review rounds (45-90 min) to 1 session (20-40 min).
-  - id: review-plan-consolidated
-    type: shell
-    command: "cat plan.md docs/spec/api-contract.yaml docs/spec/data-model.sql scripts/ci-local.sh .claude/CLAUDE.md 2>/dev/null || true"
-    ignore_failure: true
+  # ── BOUNDED PLAN REVIEW ─────────────────────────────────────────
+  # Replaces the unbounded review-plan-consolidated-gate.
+  # Max 3 revisions prevent infinite revise cycles.
+  - id: plan_review_revision
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: plan-consolidated-review
+        type: prompt
+        command: speckit.plan
+        integration: claude
+        input:
+          args: >
+            Read plan.md, docs/spec/api-contract.yaml, docs/spec/data-model.sql,
+            scripts/ci-local.sh, .claude/CLAUDE.md, and .specify/memory/conventions.md.
 
-  - id: review-plan-consolidated-gate
-    type: prompt
-    command: speckit.plan
-    integration: claude
-    input:
-      args: >
-        Read plan.md, docs/spec/api-contract.yaml, docs/spec/data-model.sql,
-        scripts/ci-local.sh, .claude/CLAUDE.md, and .specify/memory/conventions.md.
+            Run the CONSOLIDATED REVIEW CHECKLIST below. For each section,
+            verify all items. Report PASS/FAIL/N/A per item.
 
-        Run the CONSOLIDATED REVIEW CHECKLIST below. For each section,
-        verify all items. Report PASS/FAIL/N/A per item.
+            ═══════════════════════════════════════════════════════════════
+            SECTION 1: plan.md §1–§16
+            ═══════════════════════════════════════════════════════════════
+            [§2] Ubiquitous language: exact names you want in code?
+            [§4] Aggregates: invariants correct? Concurrency strategy per aggregate? Idempotency?
+            [§7] Error taxonomy: four types defined? Envelope shape correct?
+            [§8] API: every endpoint present? Auth correct? Token delivery? CORS?
+            [§9] CSP: connect-src includes API origin? Consistent with token delivery?
+            [§10] End-to-end budget realistic? Backend p95 derived from it?
+            [§11] Correlation ID matches §8? Health checks OK? Circuit breakers external only?
+            [§12] Tables match §4 aggregates? Indexes name use cases? Teardown scripts?
+            [§13] api_testing_tool correct? Three regression commands? E2E coverage? Test data strategy?
+            [§14] local_dev_setup runnable in under 15 min?
+            [§15] 10 domain-specific failure scenarios with detection/response/recovery?
+            [§16] Exactly 10 constraints, specific to this codebase with consequence?
 
-        ═══════════════════════════════════════════════════════════════
-        SECTION 1: plan.md §1–§16
-        ═══════════════════════════════════════════════════════════════
-        [§2] Ubiquitous language: exact names you want in code?
-        [§4] Aggregates: invariants correct? Concurrency strategy per aggregate? Idempotency?
-        [§7] Error taxonomy: four types defined? Envelope shape correct?
-        [§8] API: every endpoint present? Auth correct? Token delivery? CORS?
-        [§9] CSP: connect-src includes API origin? Consistent with token delivery?
-        [§10] End-to-end budget realistic? Backend p95 derived from it?
-        [§11] Correlation ID matches §8? Health checks OK? Circuit breakers external only?
-        [§12] Tables match §4 aggregates? Indexes name use cases? Teardown scripts?
-        [§13] api_testing_tool correct? Three regression commands? E2E coverage? Test data strategy?
-        [§14] local_dev_setup runnable in under 15 min?
-        [§15] 10 domain-specific failure scenarios with detection/response/recovery?
-        [§16] Exactly 10 constraints, specific to this codebase with consequence?
+            ═══════════════════════════════════════════════════════════════
+            SECTION 2: Companion files
+            ═══════════════════════════════════════════════════════════════
+            [api-contract.yaml] All §8 endpoints with correct HTTP methods and paths?
+            [api-contract.yaml] Error envelope as $component referenced everywhere?
+            [api-contract.yaml] CORS + token delivery in top comment block?
+            [api-contract.yaml] Cache-control headers on cacheable endpoints?
+            [data-model.sql] Schema matches §12 tables and column types?
+            [data-model.sql] Each table has aggregate + bounded context comment?
+            [data-model.sql] Each index names its supporting use case?
+            [data-model.sql] Teardown SQL included for test DB setup?
+            [backend-interfaces] Signatures match §4? Zero infra imports?
+            [frontend-interfaces] Result<T,E> returns? Error tags match §7?
+            [frontend-interfaces] One typed function per §8 endpoint?
 
-        ═══════════════════════════════════════════════════════════════
-        SECTION 2: Companion files
-        ═══════════════════════════════════════════════════════════════
-        [api-contract.yaml] All §8 endpoints with correct HTTP methods and paths?
-        [api-contract.yaml] Error envelope as $component referenced everywhere?
-        [api-contract.yaml] CORS + token delivery in top comment block?
-        [api-contract.yaml] Cache-control headers on cacheable endpoints?
-        [data-model.sql] Schema matches §12 tables and column types?
-        [data-model.sql] Each table has aggregate + bounded context comment?
-        [data-model.sql] Each index names its supporting use case?
-        [data-model.sql] Teardown SQL included for test DB setup?
-        [backend-interfaces] Signatures match §4? Zero infra imports?
-        [frontend-interfaces] Result<T,E> returns? Error tags match §7?
-        [frontend-interfaces] One typed function per §8 endpoint?
+            ═══════════════════════════════════════════════════════════════
+            SECTION 3: DevEx files
+            ═══════════════════════════════════════════════════════════════
+            [CLAUDE.md] ≤150 lines? All template sections filled? §16 verbatim?
+            [.gitignore] .env listed? Project-specific patterns added?
+            [ci-local.sh] All command variables populated from plan.md?
+            [ci-local.sh] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+            [conventions.md] Naming patterns filled in for this stack?
+            ═══════════════════════════════════════════════════════════════
 
-        ═══════════════════════════════════════════════════════════════
-        SECTION 3: DevEx files
-        ═══════════════════════════════════════════════════════════════
-        [CLAUDE.md] ≤150 lines? All template sections filled? §16 verbatim?
-        [.gitignore] .env listed? Project-specific patterns added?
-        [ci-local.sh] All command variables populated from plan.md?
-        [ci-local.sh] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
-        [conventions.md] Naming patterns filled in for this stack?
-        ═══════════════════════════════════════════════════════════════
+            For any FAIL: fix the issue immediately. Do not proceed until all
+            items are PASS. Print a summary of all sections at the end.
+            End with: "Consolidated plan review complete. All sections PASS."
 
-        For any FAIL: fix the issue immediately. Do not proceed until all
-        items are PASS. Print a summary of all sections at the end.
-        End with: "Consolidated plan review complete. All sections PASS."
+      - id: review-plan-revision-gate
+        type: gate
+        message: |
+          ━━ PLAN REVIEW REVISION {{ steps.plan_review_revision_iteration.output.count || 1 }}/3 ━━
 
-    on_revise:
-      goto: plan-full
+          Review all 3 sections. Approve to continue implementation.
+          Revise to send back for changes ({{ steps.plan_review_revision_iteration.output.count || 1 }}/3 used).
+        options: [approve, revise]
+        on_revise:
+          goto: plan-consolidated-review
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
