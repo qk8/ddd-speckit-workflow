@@ -391,102 +391,111 @@ steps:
       goto: plan-devex
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
-  - id: tasks
-    command: speckit.tasks
-    integration: claude
-    input:
-      args: >
-        Read plan.md and use ddd-clean-arch/templates/tasks-template.md.
+  # Tasks phase runs in a loop with max 5 revisions to prevent
+  # infinite revise-validate-tasks cycles (circular deps, etc.).
+  - id: tasks_phase
+    type: while
+    condition: "true"
+    max_iterations: 5
+    steps:
 
-        Produce one task per aggregate (domain layer), one per aggregate
-        (infra layer), one per endpoint group (api layer), then shared,
-        then integration tasks, then frontend-data, frontend-feature, e2e —
-        in that order.
+      - id: tasks
+        command: speckit.tasks
+        integration: claude
+        input:
+          args: >
+            Read plan.md and use ddd-clean-arch/templates/tasks-template.md.
 
-        AFTER producing shared/frontend-data/frontend-feature/e2e tasks,
-        read plan.md §3 (Bounded contexts). For each bounded context relationship
-        (shared kernel, ACL, open host service, publisher-subscriber),
-        produce an integration task:
+            Produce one task per aggregate (domain layer), one per aggregate
+            (infra layer), one per endpoint group (api layer), then shared,
+            then integration tasks, then frontend-data, frontend-feature, e2e —
+            in that order.
 
-          ## TASK-[N]
-          Title: [Context A] → [Context B] integration
-          Type: integration
-          Depends on: [all domain + infra + api tasks for both contexts]
-          Scope:
-            Creates:
-              - tests/integration/[contextA]_[contextB]_IntegrationTest.[ext]
-            Modifies:
-              - none
-          Acceptance criteria:
-            - [Test verifies that an event/command from Context A correctly
-              triggers the expected behavior in Context B through the ACL/shared kernel]
-          Do NOT:
-            - [Do not implement domain logic — only write the integration test]
+            AFTER producing shared/frontend-data/frontend-feature/e2e tasks,
+            read plan.md §3 (Bounded contexts). For each bounded context relationship
+            (shared kernel, ACL, open host service, publisher-subscriber),
+            produce an integration task:
 
-        Task order must be:
-          1. backend-domain → 2. backend-infra → 3. backend-api →
-          4. shared → 5. integration (cross-context) →
-          6. frontend-data → 7. frontend-feature → 8. e2e
+              ## TASK-[N]
+              Title: [Context A] → [Context B] integration
+              Type: integration
+              Depends on: [all domain + infra + api tasks for both contexts]
+              Scope:
+                Creates:
+                  - tests/integration/[contextA]_[contextB]_IntegrationTest.[ext]
+                Modifies:
+                  - none
+              Acceptance criteria:
+                - [Test verifies that an event/command from Context A correctly
+                  triggers the expected behavior in Context B through the ACL/shared kernel]
+              Do NOT:
+                - [Do not implement domain logic — only write the integration test]
 
-        Rules:
-          - Acceptance criteria must name exact classes from plan.md.
-            Form: "calling [ExactClass].[method]([input]) raises/returns [output]"
-          - Each task has exactly one "Do NOT" scope-creep guard.
-          - Max 5 files and max 1 aggregate per task.
-          - All Depends-on fields must reference earlier tasks.
-          - No circular dependencies.
+            Task order must be:
+              1. backend-domain → 2. backend-infra → 3. backend-api →
+              4. shared → 5. integration (cross-context) →
+              6. frontend-data → 7. frontend-feature → 8. e2e
 
-  - id: review-tasks
-    type: gate
-    message: |
-      Review .specify/specs/[feature]/tasks.md
+            Rules:
+              - Acceptance criteria must name exact classes from plan.md.
+                Form: "calling [ExactClass].[method]([input]) raises/returns [output]"
+              - Each task has exactly one "Do NOT" scope-creep guard.
+              - Max 5 files and max 1 aggregate per task.
+              - All Depends-on fields must reference earlier tasks.
+              - No circular dependencies.
 
-      [ ] Task order: domain → infra → api → shared → integration → frontend-data → frontend-feature → e2e
-      [ ] Integration tasks: one per bounded context relationship (shared kernel, ACL, publisher-subscriber)?
-      [ ] Acceptance criteria verifiable (name exact classes/methods from plan.md)?
-      [ ] Each "Do NOT" guard is specific to that task?
-      [ ] No task touches more than 5 files or more than 1 aggregate?
-      [ ] All Depends-on references are to earlier tasks?
+      - id: review-tasks
+        type: gate
+        message: |
+          Review .specify/specs/[feature]/tasks.md
 
-      Approving proceeds to task dependency graph validation before implementation.
-    options: [approve, revise]
-    on_revise:
-      goto: tasks
+          [ ] Task order: domain → infra → api → shared → integration → frontend-data → frontend-feature → e2e
+          [ ] Integration tasks: one per bounded context relationship (shared kernel, ACL, publisher-subscriber)?
+          [ ] Acceptance criteria verifiable (name exact classes/methods from plan.md)?
+          [ ] Each "Do NOT" guard is specific to that task?
+          [ ] No task touches more than 5 files or more than 1 aggregate?
+          [ ] All Depends-on references are to earlier tasks?
 
-  # ── PHASE 4.5: TASK DEPENDENCY GRAPH VALIDATION ────────────────
-  # Verify the task graph before starting implementation.
-  # Catches circular dependencies, missing references, and ordering issues.
-  - id: validate-tasks
-    type: shell
-    command: "bash scripts/validate-tasks.sh"
+          Approving proceeds to task dependency graph validation before implementation.
+        options: [approve, revise]
+        on_revise:
+          goto: tasks
 
-  - id: review-validate-tasks
-    type: gate
-    message: |
-      Review the task dependency graph validation results above.
+      - id: validate-tasks
+        type: shell
+        command: "bash scripts/validate-tasks.sh"
 
-      ERRORS must be fixed before implementation starts:
-        - Circular dependencies
-        - References to non-existent tasks
+      - id: review-validate-tasks
+        type: gate
+        message: |
+          Review the task dependency graph validation results above.
 
-      WARNINGS are advisory:
-        - Task ordering issues (depends-on appears after dependent task)
+          ERRORS must be fixed before implementation starts:
+            - Circular dependencies
+            - References to non-existent tasks
 
-      If there are errors, select "revise" to fix tasks.md.
-      If clean, select "approve" to start implementation.
-    options: [approve, revise]
-    on_revise:
-      goto: tasks
+          WARNINGS are advisory:
+            - Task ordering issues (depends-on appears after dependent task)
+
+          If there are errors, select "revise" to fix tasks.md.
+          If clean, select "approve" to start implementation.
+          Maximum 5 revision cycles ({{ steps.tasks_phase_iteration.output.count || 1 }}/5).
+        options: [approve, revise]
+        on_revise:
+          goto: tasks
 
   # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
+  # Max 100 iterations protects against stuck tasks (e.g., unfixable regression).
+  # Uses check-tasks-safe.sh which returns safe defaults if tasks.md is malformed.
   - id: implement_loop
     type: while
     condition: "{{ steps.check_remaining.output.has_todo == 'true' }}"
+    max_iterations: 100
     steps:
 
       - id: check_remaining
         type: shell
-        command: "bash scripts/check-tasks.sh"
+        command: "bash scripts/check-tasks-safe.sh"
 
       - id: check_in_progress
         type: if
