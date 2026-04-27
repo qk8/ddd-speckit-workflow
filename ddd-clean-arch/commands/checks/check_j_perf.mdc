@@ -5,9 +5,10 @@ applies_to: [backend-api, frontend-feature]
 ---
 [J] PERFORMANCE BUDGET — backend-api and frontend-feature tasks only
   For backend-api:
-    Run a quick load test with plan.md §10 backend_p95 budget:
-      ab -n 100 -c 10 [API endpoint from §8]
-    Compare LCP against backend budget from §10.
+    Run a quick load test using the project's preferred HTTP benchmarking
+    tool (autocannon for Node.js, hey for Go, wrk for Rust, etc.):
+      tool -n 100 -c 10 [API endpoint from §8]
+    Compare p95 against backend budget from §10.
     If p95 exceeds budget: print WARNING — "p95=[N]ms exceeds budget [budget]ms"
     Note in completion report for retrospect review.
 
