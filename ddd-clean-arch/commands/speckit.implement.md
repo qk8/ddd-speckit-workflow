@@ -66,88 +66,9 @@ Read plan.md §13 to determine the test type, location, and naming convention.
 The test file is permanent — it will be committed alongside the implementation
 and will run in regression for every future task.
 
-  TYPE: backend-domain
-    Write a UNIT TEST for the domain layer.
-    Location: plan.md §13 unit_tests.location
-    Framework: plan.md §13 unit_tests.framework
-    Cover:
-      - Each invariant from §4: attempting to violate it raises the correct error
-      - Each domain event: the aggregate raises it under the correct condition
-      - Each state transition: the aggregate reaches the correct state
-      - Value objects: equality by value, immutable, invalid construction rejected
-
-  TYPE: backend-infra
-    Write an INTEGRATION TEST for the repository.
-    Location: plan.md §13 integration_tests.location
-    Framework: plan.md §13 integration_tests.framework (with Testcontainers or equivalent)
-    Cover:
-      - save() then findById() returns an identical aggregate
-      - Any query methods implied by §8 endpoints return correct results
-      - Optimistic lock conflict (if concurrency.strategy is optimistic_version):
-        concurrent save raises the correct conflict error
-      - Soft delete (if soft_delete: yes in §12): deleted records are excluded from queries
-
-  TYPE: backend-api
-    Write an API TEST using the tool from plan.md §13 api_testing_tool.selected.
-    Location: plan.md §13 api_tests.location
-    Naming: plan.md §13 api_tests.naming_convention
-    For each endpoint implemented in this task, write test cases for:
-      - Happy path: correct request → expected status code + response shape from §8
-      - Auth required: unauthenticated request → 401 with correct envelope
-      - Each validation error: malformed input → 400 with field-level detail in §7 envelope
-      - Each domain error: business rule violation → correct status + domain_error envelope
-      - Idempotency (if §8 says idempotent: yes): duplicate request → same result, not error
-      - Correlation ID: response contains the header from §8 correlation_id_header_name
-      - Error envelope shape: all four error types use the §7 envelope structure exactly
-    ALSO write unit tests for the use case class and controller:
-      - Use case: correct orchestration of domain objects without business logic
-      - Controller: input validation rejects malformed requests before use case is called
-
-  TYPE: shared
-    Write a UNIT TEST validating the generated type contract.
-    Cover: generated types match the api-contract.yaml schema;
-    breaking changes in the schema fail the test.
-
-  TYPE: integration
-    Write an INTEGRATION TEST for cross-context boundaries.
-    Location: plan.md §13 integration_tests.location
-    Framework: plan.md §13 integration_tests.framework (with Testcontainers or equivalent)
-    (Same location/framework as TYPE: backend-infra)
-    Cover:
-      - The bounded context boundary defined in §3 for the involved contexts
-      - Event/command flow between contexts matches §4 domain events
-      - Shared kernel types (§14 contract_sharing) are compatible on both sides
-      - Failure in one context does not crash the other (resilience pattern from §11)
-
-  TYPE: frontend-data
-    Write a UNIT TEST for the data layer module.
-    Framework: plan.md §13 unit_tests.framework
-    Cover:
-      - Happy path: successful API response → correct typed return value
-      - Each of the four error types from §7: correct discriminated union tag
-      - Correlation ID: included in infrastructure_error and unexpected_error objects
-      - Network failure (simulated): returns typed infrastructure_error, never throws
-      - All functions return Result<T,E> — none of them throw under any condition
-
-  TYPE: frontend-feature
-    Write an E2E TEST using Playwright.
-    Location: plan.md §13 e2e_tests.location
-    Naming: plan.md §13 e2e_tests.naming_convention
-    For the feature implemented in this task, write test cases for:
-      - Happy path of every acceptance criterion:
-        navigate to the route → interact → verify expected content/state
-      - One error state: trigger a validation error or failed request;
-        verify the correct user-facing error message appears (from §7)
-      - If the error message should show a correlation ID (from §11): assert it is visible
-    Use Playwright's accessibility tree for element selection, not CSS selectors.
-    Tests must run headlessly in CI without Playwright MCP.
-
-  TYPE: e2e
-    Write an E2E TEST covering the full cross-feature journey.
-    Location: plan.md §13 e2e_tests.location
-    Cover the complete user journey from start to final state.
-    Include an error trigger midway through to verify correlation ID is visible.
-    The test must be completely independent: it sets up its own test data.
+  Read templates/test-instructions/[actual type value].md for the test instructions
+  matching the current task Type (e.g., if Type is backend-domain, read
+  templates/test-instructions/backend-domain.md).
 
 START THE DEV ENVIRONMENT if not running (plan.md §14 task_runner.dev).
 Wait until ready. API tests and E2E tests need it to fail meaningfully.
@@ -242,27 +163,7 @@ Acceptance criteria:
 
 Do NOT constraint: [restate] → RESPECTED — [how]
 
-Checks:
-  [A] Arch tests:      PASS
-  [B] New tests:       PASS ([N] cases, stability-checked) | FLAKY — [fix applied]
-  [C] Regression:      PASS ([total N] tests, 0 new failures)
-  [D] Linter:          PASS
-  [E] Dep scan:        PASS | BLOCKED — [details]
-  [F] Migration:       PASS | N/A
-  [G] Error handling:  PASS | N/A
-  [H] Browser verify:  PASS (screenshot: [path]) | headless only | N/A
-  [I] Secret scan:     PASS | WARNING — gitleaks not installed | BLOCKED — [details]
-  [J] Perf budget:     PASS | WARNING — [details] | N/A
-  [K] Contract:        PASS | DRIFT — [details] | N/A
-  [L] Anti-hallucination: PASS | FAILED — [details]
-  [M] Failure modes:   PASS | PARTIAL — [N] missed | MISSING — [details]
-  [N] Cross-cutting:   PASS | GAP — [details] | N/A
-  [O] Security:        PASS | FAIL — [details] | N/A
-  [P] Test quality:    PASS | [N] issues — [details] | N/A
-  [Q] Resilience:      PASS | [N] scenarios tested | [N] added
-  [S] Property-based:  PASS | [N] weak, [N] missed | N/A
-  [T] Adversarial:     PASS | [N] covered, [N] missed | N/A
-  [U] Session/token:   PASS | [N] covered, [N] missed | N/A
+Read templates/check-report-template.md for the 21-check results table.
 
 Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
 
