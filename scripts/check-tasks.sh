@@ -28,6 +28,14 @@ if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
 fi
 
 TASKS_FILE="$FEATURE_DIR/tasks.md"
+
+# Sanitize: strip \r (Windows line endings) and trim leading/trailing whitespace.
+# This ensures grep patterns work on files from any editor or OS.
+SANITIZED_FILE=$(mktemp)
+trap 'rm -f "$SANITIZED_FILE"' EXIT
+sed 's/\r$//' "$TASKS_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$SANITIZED_FILE"
+TASKS_FILE="$SANITIZED_FILE"
+
 DONE_COUNT=$(grep -c "^Status: DONE$" "$TASKS_FILE" || true)
 TODO_COUNT=$(grep -c "^Status: TODO$" "$TASKS_FILE" || true)
 IN_PROGRESS=$(grep -B1 "^Status: IN_PROGRESS$" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | head -1 | sed 's/^## //' || true)
