@@ -684,34 +684,41 @@ steps:
         on_revise:
           goto: implement_one
 
-  # ── PHASE 7: CODE REVIEW CHECKLIST ──────────────────────────────
-  - id: code_review
-    command: speckit.code-review
-    integration: claude
-    input:
-      args: >
-        Run the full code review checklist.
-        Every item must be PASS, FAIL, or N/A.
-        For every FAIL: apply the fix immediately.
-        Produce REVIEW_REPORT.md documenting the outcome.
+  # ── PHASE 7: CODE REVIEW CHECKLIST (bounded) ────────────────────
+  - id: code_review_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: code_review
+        command: speckit.code-review
+        integration: claude
+        input:
+          args: >
+            Run the full code review checklist.
+            Every item must be PASS, FAIL, or N/A.
+            For every FAIL: apply the fix immediately.
+            Produce REVIEW_REPORT.md documenting the outcome.
 
-  - id: review-code-review
-    type: gate
-    message: |
-      Review the code review checklist results.
+      - id: review-code-review
+        type: gate
+        message: |
+          ━━ CODE REVIEW ROUND {{ steps.code_review_round_iteration.output.count || 1 }}/3 ━━
 
-      [ ] All security items: PASS or N/A
-      [ ] All correctness items: PASS
-      [ ] All performance items: PASS or N/A
-      [ ] All maintainability items: PASS
-      [ ] All accessibility items: PASS, N/A
-      [ ] REVIEW_REPORT.md produced
+          Review the code review checklist results.
 
-      Approve to continue to final verify.
-      Revise to send the checklist back for fixes.
-    options: [approve, revise]
-    on_revise:
-      goto: code_review
+          [ ] All security items: PASS or N/A
+          [ ] All correctness items: PASS
+          [ ] All performance items: PASS or N/A
+          [ ] All maintainability items: PASS
+          [ ] All accessibility items: PASS, N/A
+          [ ] REVIEW_REPORT.md produced
+
+          Approve to continue to final verify.
+          Revise to send the checklist back for fixes.
+        options: [approve, revise]
+        on_revise:
+          goto: code_review
 
   # ── PHASE 8: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
