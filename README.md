@@ -99,7 +99,7 @@ specify workflow add /path/to/ddd-workflow.yml
 cp /path/to/boilerplate/project-brief.md .
 cp /path/to/boilerplate/.gitignore .
 mkdir -p scripts .claude
-for f in check-tasks.sh validate-tasks.sh check-naming.sh validate-api-contract.sh setup-mcp.sh setup-hooks.sh ci-local.sh check-labels.yml; do
+for f in check-tasks.sh check-tasks-safe.sh validate-tasks.sh check-naming.sh validate-api-contract.sh setup-mcp.sh setup-hooks.sh ci-local.sh check-labels.yml find-first-feature.sh cadence-defaults.sh read-preset-cadence.sh print-result.sh set-task-status.sh repo-root.sh ensure-gitleaks-toml.sh find-file.sh search-dirs.sh filetypes.sh; do
   cp "/path/to/boilerplate/scripts/$f" scripts/
 done
 cp /path/to/boilerplate/.claude/settings.json .claude/
