@@ -18,6 +18,6 @@ if [ "$KEY" = "first_retro_threshold" ]; then
 else
   awk -v key="$KEY" '
     /^  retro_interval:/{found=1}
-    found && $0 ~ key ":/{print $2; exit}
+    found && index($0, key ":") > 0 {print $2; exit}
   ' "$PRESET_FILE"
 fi
