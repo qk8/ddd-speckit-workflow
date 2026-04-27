@@ -3,7 +3,7 @@ check_id: O
 name: Security Hardening
 applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
 ---
-[O] SECURITY HARDENING — backend-api, frontend-data, frontend-feature tasks
+[O] SECURITY HARDENING — backend-api, backend-infra, frontend-data, frontend-feature tasks
   If this task touches any user-facing code, verify every security
   requirement from plan.md §9 is implemented:
 
