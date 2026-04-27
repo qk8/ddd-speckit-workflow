@@ -71,34 +71,41 @@ steps:
     options: [approve, restart]
     on_restart: abort
 
-  # ── PHASE 1: CLARIFY ──────────────────────────────────────────
-  - id: clarify
-    type: prompt
-    integration: claude
-    input:
-      args: >
-        Read project-brief.md fully.
+  # ── PHASE 1: CLARIFY (bounded) ──────────────────────────────────
+  - id: clarify_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: clarify
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Read project-brief.md fully.
 
-        Based on what you read, ask 3-5 targeted clarifying questions.
-        Focus only on things that are genuinely ambiguous or missing and
-        that would significantly affect architecture decisions.
-        Do not ask about things already covered in the brief.
-        Do not ask generic questions.
+            Based on what you read, ask 3-5 targeted clarifying questions.
+            Focus only on things that are genuinely ambiguous or missing and that
+            would significantly affect architecture decisions.
+            Do not ask about things already covered in the brief.
+            Do not ask generic questions.
 
-        Good questions probe: edge cases in the core domain, conflict
-        resolution between competing requirements, specific compliance
-        obligations, external system API constraints, and expected
-        data volumes for the most critical operations.
+            Good questions probe: edge cases in the core domain, conflict
+            resolution between competing requirements, specific compliance
+            obligations, external system API constraints, and expected
+            data volumes for the most critical operations.
 
-  - id: review-clarify
-    type: gate
-    message: |
-      Answer the clarifying questions above.
-      Edit your answers directly in this gate if needed.
-      Approve when requirements are well-understood.
-    options: [approve, re-clarify]
-    on_re-clarify:
-      goto: clarify
+      - id: review-clarify
+        type: gate
+        message: |
+          ━━ CLARIFY ROUND {{ steps.clarify_round_iteration.output.count || 1 }}/3 ━━
+
+          Answer the clarifying questions above.
+          Edit your answers directly in this gate if needed.
+          Approve when requirements are well-understood.
+        options: [approve, re-clarify]
+        on_re-clarify:
+          goto: clarify
 
   # ── PHASE 2: SPEC ─────────────────────────────────────────────
   - id: specify
