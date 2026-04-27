@@ -14,7 +14,7 @@ if [ "${1:-}" = "--compare" ]; then
   shift
 fi
 
-PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
+PRESET_FILE="${1:-ddd-clean-arch/preset-checks.yml}"
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 # The 8 task types in canonical order

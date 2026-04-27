@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Usage: ./scripts/validate-routing-table.sh [preset.yml path]
-#        ./scripts/validate-routing-table.sh --fix [preset.yml path]
+# Usage: ./scripts/validate-routing-table.sh [preset-checks.yml path]
+#        ./scripts/validate-routing-table.sh --fix [preset-checks.yml path]
+#        ./scripts/validate-routing-table.sh --cross-check
 # Validates routing table consistency:
 #   - All check IDs in routing: exist in checks: section
 #   - All check IDs in checks: appear in at least one routing: entry
 #   - commands/checks/check_[X]_[name].mdc files exist for all check IDs
 #   - Manual routing matches auto-derived values (drift detection)
+#   - preset-checks.yml matches preset.yml checks/routing (cross-check mode)
 # --fix: regenerate routing section from auto-derived values
+# --cross-check: compare preset-checks.yml against preset.yml
 # Exit 0 if valid, exit 1 if issues found.
 
 set -euo pipefail
@@ -23,12 +26,16 @@ read_from_input() {
 }
 
 FIX_MODE=false
+CROSS_CHECK=false
 if [ "${1:-}" = "--fix" ]; then
   FIX_MODE=true
   shift
+elif [ "${1:-}" = "--cross-check" ]; then
+  CROSS_CHECK=true
+  shift
 fi
 
-PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
+PRESET_FILE="${1:-ddd-clean-arch/preset-checks.yml}"
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 PRESET_DIR=$(dirname "$PRESET_FILE")
@@ -82,6 +89,22 @@ if [ "$DRIFT_RC" -ne 0 ]; then
   echo "DRIFT: Manual routing diverges from auto-derived values"
   echo "$DRIFT_OUTPUT" | sed 's/^/  /'
   ERRORS=$((ERRORS + 1))
+fi
+
+# Cross-check: preset-checks.yml vs preset.yml (checks + routing must match)
+PRESET_DIR=$(dirname "$PRESET_FILE")
+PRESET_MAIN="$PRESET_DIR/preset.yml"
+if [ -f "$PRESET_MAIN" ]; then
+  CHECKS_DIFF=$(diff <(awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d') \
+                     <(awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d')) || true
+  ROUTING_DIFF=$(diff <(awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d') \
+                      <(awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d')) || true
+  if [ -n "$CHECKS_DIFF" ] || [ -n "$ROUTING_DIFF" ]; then
+    echo "DRIFT: preset-checks.yml diverges from preset.yml"
+    [ -n "$CHECKS_DIFF" ] && echo "$CHECKS_DIFF" | sed 's/^/  checks: /'
+    [ -n "$ROUTING_DIFF" ] && echo "$ROUTING_DIFF" | sed 's/^/  routing: /'
+    ERRORS=$((ERRORS + 1))
+  fi
 fi
 
 # --fix: regenerate routing section from auto-derived values

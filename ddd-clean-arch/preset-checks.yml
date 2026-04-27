@@ -1,0 +1,83 @@
+# Minimal check configuration — extracted from preset.yml for context efficiency.
+# Only checks[].applies_to and routing[] are needed by speckit.check.
+# Source of truth: preset.yml. Sync with: scripts/derive-routing.sh
+# Drift detection: scripts/validate-routing-table.sh preset-checks.yml
+
+# Quality checks: each check declares which task types it applies to.
+checks:
+  A:
+    name: "Architectural Tests"
+    applies_to: [backend-domain, backend-infra, backend-api]
+  B:
+    name: "New Tests Pass"
+    applies_to: all
+  C:
+    name: "Regression Suite"
+    applies_to: all
+  D:
+    name: "Linter"
+    applies_to: all
+  E:
+    name: "Dependency Vulnerability Scan"
+    applies_to: [backend-domain, backend-infra, backend-api, shared]
+  F:
+    name: "Migration Test"
+    applies_to: [backend-infra]
+  G:
+    name: "Error Handling Assertions"
+    applies_to: [backend-api, frontend-data]
+  H:
+    name: "Browser Verification"
+    applies_to: [frontend-feature, e2e]
+  I:
+    name: "Secret Scanning"
+    applies_to: all
+  J:
+    name: "Performance Budget"
+    applies_to: [backend-api, frontend-feature]
+  K:
+    name: "API Contract Enforcement"
+    applies_to: [backend-api, shared]
+  L:
+    name: "Anti-Hallucination Check"
+    applies_to: all
+  M:
+    name: "Failure Mode Coverage"
+    applies_to: all
+  N:
+    name: "Cross-Cutting Concern Audit"
+    applies_to: [backend-api, shared]
+  O:
+    name: "Security Hardening"
+    applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
+  P:
+    name: "Test Quality Review"
+    applies_to: all
+  Q:
+    name: "Resilience Testing"
+    applies_to: [backend-api, backend-infra]
+  R:
+    name: "Quantitative Pass Gate"
+    applies_to: [backend-api, shared]
+  S:
+    name: "Property-Based Test Coverage"
+    applies_to: all
+  T:
+    name: "Adversarial Input Testing"
+    applies_to: [backend-api, shared]
+  U:
+    name: "Session & Token Security"
+    applies_to: [backend-api]
+
+# Derived routing table — auto-derived from checks[].applies_to.
+# Regenerate with: scripts/derive-routing.sh
+# Drift from derived values is flagged by: scripts/validate-routing-table.sh
+routing:
+  backend-domain:   [A, B, C, D, E, I, L, M, P, S]
+  backend-infra:    [A, B, C, D, E, F, I, L, M, O, P, Q, S]
+  backend-api:      [A, B, C, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U]
+  shared:           [B, C, D, E, I, K, L, M, N, P, R, S, T]
+  integration:      [B, C, D, I, L, M, P, S]
+  frontend-data:    [B, C, D, G, I, L, M, O, P, S]
+  frontend-feature: [B, C, D, H, I, J, L, M, O, P, S]
+  e2e:              [B, C, D, H, I, L, M, P, S]
