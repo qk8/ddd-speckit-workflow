@@ -7,7 +7,7 @@ applies_to: [backend-api, frontend-feature]
   For backend-api:
     Run a quick load test using the project's preferred HTTP benchmarking
     tool (autocannon for Node.js, hey for Go, wrk for Rust, etc.):
-      tool -n 100 -c 10 [API endpoint from §8]
+      autocannon -n 100 -c 10 [API endpoint from §8]
     Compare p95 against backend budget from §10.
     If p95 exceeds budget: print WARNING — "p95=[N]ms exceeds budget [budget]ms"
     Note in completion report for retrospect review.
