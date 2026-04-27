@@ -577,6 +577,33 @@ steps:
                 For any FAIL: fix the violation immediately. Do not proceed
                 until all constraints are PASS or N/A.
 
+      - id: drift_check_result
+        type: shell
+        command: |
+          REPORT=".artifacts/drift_check_report.md"
+          mkdir -p .artifacts
+          if [ ! -f "$REPORT" ]; then
+            echo "WARNING: drift check report not found" >&2
+            exit 0
+          fi
+          FAIL_COUNT=$(grep -c "FAIL" "$REPORT" || true)
+          if [ "$FAIL_COUNT" -gt 0 ]; then
+            echo "FAIL: $FAIL_COUNT constraint violation(s) detected" >&2
+            grep "FAIL" "$REPORT" >&2
+            exit 1
+          fi
+          echo "PASS: All constraints satisfied"
+        ignore_failure: true
+
+      - id: drift_check_review
+        type: gate
+        message: |
+          Drift check completed. Review the report at .artifacts/drift_check_report.md.
+          Approve to continue to implementation.
+        options: [approve, revise]
+        on_revise:
+          goto: run_drift_check
+
       - id: implement_one
         type: prompt
         command: speckit.implement
