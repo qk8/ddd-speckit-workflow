@@ -588,6 +588,10 @@ steps:
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
         then:
+          - id: cleanup_drift_report
+            type: shell
+            command: "rm -f .artifacts/drift_check_report.md"
+
           - id: run_drift_check
             type: prompt
             command: speckit.check
