@@ -18,14 +18,7 @@ Do not implement or modify anything.
   ──────────────────────────────────────────────────────────────────────
   TOTAL             |      |         |      |           |         |
 
-Status definitions:
-  DONE      — all applicable checks passed, test file committed
-  IN_PROGRESS   — currently being worked on (set at task confirmation)
-              If IN_PROGRESS is present: a session may have been interrupted.
-              Run /speckit.retrospect or check-tasks.sh for details.
-  TODO      — not started, dependencies met or pending
-  ABANDONED — interrupted; partial files may exist on disk
-  BLOCKED   — Depends-on contains at least one task that is not DONE
+Status definitions: templates/task-state-reference.md (source of truth)
 
 ━━ MODULE COMPLETION ━━━━━━━━━━━━━━━━━━━
 
