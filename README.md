@@ -155,7 +155,7 @@ specify workflow resume <run-id>
 | Check | What it does | Applies to |
 |-------|-------------|-----------|
 | [A] Arch tests | ArchUnit / dependency-cruiser layer enforcement | backend-domain, backend-infra, backend-api |
-| [BC] New tests + regression | New tests + full suite — zero new failures | All |
+| [BC] New tests + regression | New tests pass + full suite — zero new failures allowed | All |
 | [D] Linter | No errors | All |
 | [E] Dependency scan | No CRITICAL/HIGH CVEs in direct deps | backend-domain, backend-infra, backend-api, shared |
 | [F] Migration test | Schema matches plan.md §12 exactly | backend-infra |
@@ -174,6 +174,7 @@ specify workflow resume <run-id>
 | [S] Property-based | Invariant preservation, edge case coverage | All |
 | [T] Adversarial | Malformed input, injection, fuzzing | backend-api, shared |
 | [U] Session/token | JWT, refresh tokens, session security | backend-api |
+| [Z] Constraint drift | Implementation against CLAUDE.md §16 constraints | All |
 
 ### TDD and regression (check [BC])
 

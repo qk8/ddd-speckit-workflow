@@ -1,4 +1,4 @@
-# Short display labels and descriptions for the 20 quality checks.
+# Short display labels and descriptions for the 21 quality checks.
 # Used by scripts/derive-checks-table.sh to generate the README table.
 # Keep in sync with ddd-clean-arch/preset.yml checks section.
 #
@@ -69,3 +69,6 @@ T:
 U:
   label: "Session/token"
   desc: "JWT, refresh tokens, session security"
+Z:
+  label: "Constraint drift"
+  desc: "Implementation against CLAUDE.md §16 constraints"

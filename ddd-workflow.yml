@@ -201,31 +201,7 @@ steps:
 
         Do NOT produce §17 onwards yet.
         Do NOT produce companion files yet.
-        End with: "Plan full (§1–§16) complete. Waiting for review."
-
-  - id: review-plan
-    type: gate
-    message: |
-      ━━ REVIEW PLAN (§1–§16) ━━
-
-      §2 Ubiquitous language: exact names you want in code?
-      §4 Aggregates: invariants correct? Concurrency strategy right per aggregate? Idempotency mechanisms specified?
-      §7 Error taxonomy: four types defined? Envelope shape correct?
-      §8 API: every endpoint present? Auth correct on each? Token delivery acceptable? CORS consistent?
-      §9 CSP: connect-src includes API origin? Consistent with token delivery (cookie domain if httpOnly)?
-      §10 End-to-end budget realistic? Backend p95 derived from it?
-      §11 Correlation ID matches §8? Health checks don't conflict with API routes? Circuit breakers only for external deps?
-      §12 Tables match §4 aggregates? Indexes name their use case? Migration teardown scripts included?
-      §13 api_testing_tool correct for backend language? All three regression commands defined? e2e coverage covers all critical journeys? Test data strategy and flaky test protocol set?
-      §14 local_dev_setup steps runnable in under 15 minutes?
-      §15 10 specific failure scenarios with detection/response/recovery?
-      §16 Exactly 10 constraints, each specific to this codebase with consequence?
-
-      Edit plan.md directly before approving.
-      These decisions propagate through everything that follows.
-    options: [approve, revise]
-    on_revise:
-      goto: plan-full
+        End with: "Plan full (§1–§16) complete. Continuing to companion files…"
 
   # Batch 2: Companion files — api-contract.yaml, data-model.sql, interfaces
   # These are lightweight, self-contained, and only depend on approved plan.md.
@@ -257,35 +233,7 @@ steps:
           Auth state type consistent with §8 token_delivery.
           One typed async function per endpoint — Result<T,E>, never throws.
 
-        End with: "Plan artifacts (api-contract.yaml, data-model.sql, interfaces) complete. Waiting for review."
-
-  - id: review-plan-artifacts
-    type: gate
-    message: |
-      ━━ REVIEW PLAN ARTIFACTS ━━
-
-      api-contract.yaml:
-        [ ] All §8 endpoints present with correct HTTP methods and paths?
-        [ ] Error envelope as $component referenced everywhere?
-        [ ] CORS + token delivery documented in top comment block?
-        [ ] Cache-control headers on cacheable endpoints?
-
-      data-model.sql:
-        [ ] Schema matches §12 tables and column types?
-        [ ] Each table has aggregate + bounded context comment?
-        [ ] Each index names its supporting use case?
-        [ ] Teardown SQL included for test DB setup?
-
-      interfaces:
-        [ ] backend-interfaces: signatures match §4? Zero infra imports?
-        [ ] frontend-interfaces: Result<T,E> returns? Error tags match §7?
-        [ ] frontend-interfaces: one typed function per §8 endpoint?
-
-      If anything is wrong, edit the files and revise.
-      This is the source of truth for implementation — get it right.
-    options: [approve, revise]
-    on_revise:
-      goto: plan-artifacts
+        End with: "Plan artifacts complete. Continuing to DevEx files…"
 
   # Batch 3: DevEx files — gitignore, .env.example, CLAUDE.md, ci-local.sh, conventions.md
   - id: plan-devex
@@ -368,27 +316,75 @@ steps:
           Shared: commit format, TODO format.
           Decision log section (empty — grows via /speckit.review).
 
-        End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete. Waiting for review."
+        End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete."
 
-  - id: review-plan-devex
-    type: gate
-    message: |
-      ━━ REVIEW PLAN DEVEX ━━
+  # ── CONSOLIDATED REVIEW ─────────────────────────────────────────
+  # Single review gate replaces review-plan + review-plan-artifacts + review-plan-devex.
+  # Reduces planning phase from 3 review rounds (45-90 min) to 1 session (20-40 min).
+  - id: review-plan-consolidated
+    type: shell
+    command: "cat plan.md docs/spec/api-contract.yaml docs/spec/data-model.sql scripts/ci-local.sh .claude/CLAUDE.md 2>/dev/null || true"
+    ignore_failure: true
 
-      CLAUDE.md:
-        [ ] ≤150 lines? All template sections filled? §16 verbatim?
-      .gitignore:
-        [ ] .env listed? Project-specific patterns added?
-      ci-local.sh:
-        [ ] all command variables populated from plan.md?
-        [ ] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
-      conventions.md:
-        [ ] naming patterns filled in for this stack?
+  - id: review-plan-consolidated-gate
+    type: prompt
+    command: speckit.plan
+    integration: claude
+    input:
+      args: >
+        Read plan.md, docs/spec/api-contract.yaml, docs/spec/data-model.sql,
+        scripts/ci-local.sh, .claude/CLAUDE.md, and .specify/memory/conventions.md.
 
-      Edit files and revise if needed.
-    options: [approve, revise]
+        Run the CONSOLIDATED REVIEW CHECKLIST below. For each section,
+        verify all items. Report PASS/FAIL/N/A per item.
+
+        ═══════════════════════════════════════════════════════════════
+        SECTION 1: plan.md §1–§16
+        ═══════════════════════════════════════════════════════════════
+        [§2] Ubiquitous language: exact names you want in code?
+        [§4] Aggregates: invariants correct? Concurrency strategy per aggregate? Idempotency?
+        [§7] Error taxonomy: four types defined? Envelope shape correct?
+        [§8] API: every endpoint present? Auth correct? Token delivery? CORS?
+        [§9] CSP: connect-src includes API origin? Consistent with token delivery?
+        [§10] End-to-end budget realistic? Backend p95 derived from it?
+        [§11] Correlation ID matches §8? Health checks OK? Circuit breakers external only?
+        [§12] Tables match §4 aggregates? Indexes name use cases? Teardown scripts?
+        [§13] api_testing_tool correct? Three regression commands? E2E coverage? Test data strategy?
+        [§14] local_dev_setup runnable in under 15 min?
+        [§15] 10 domain-specific failure scenarios with detection/response/recovery?
+        [§16] Exactly 10 constraints, specific to this codebase with consequence?
+
+        ═══════════════════════════════════════════════════════════════
+        SECTION 2: Companion files
+        ═══════════════════════════════════════════════════════════════
+        [api-contract.yaml] All §8 endpoints with correct HTTP methods and paths?
+        [api-contract.yaml] Error envelope as $component referenced everywhere?
+        [api-contract.yaml] CORS + token delivery in top comment block?
+        [api-contract.yaml] Cache-control headers on cacheable endpoints?
+        [data-model.sql] Schema matches §12 tables and column types?
+        [data-model.sql] Each table has aggregate + bounded context comment?
+        [data-model.sql] Each index names its supporting use case?
+        [data-model.sql] Teardown SQL included for test DB setup?
+        [backend-interfaces] Signatures match §4? Zero infra imports?
+        [frontend-interfaces] Result<T,E> returns? Error tags match §7?
+        [frontend-interfaces] One typed function per §8 endpoint?
+
+        ═══════════════════════════════════════════════════════════════
+        SECTION 3: DevEx files
+        ═══════════════════════════════════════════════════════════════
+        [CLAUDE.md] ≤150 lines? All template sections filled? §16 verbatim?
+        [.gitignore] .env listed? Project-specific patterns added?
+        [ci-local.sh] All command variables populated from plan.md?
+        [ci-local.sh] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
+        [conventions.md] Naming patterns filled in for this stack?
+        ═══════════════════════════════════════════════════════════════
+
+        For any FAIL: fix the issue immediately. Do not proceed until all
+        items are PASS. Print a summary of all sections at the end.
+        End with: "Consolidated plan review complete. All sections PASS."
+
     on_revise:
-      goto: plan-devex
+      goto: plan-full
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -564,6 +560,22 @@ steps:
             options: [approve, revise]
             on_revise:
               goto: run_retrospect
+
+      - id: drift_check
+        type: if
+        condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
+        then:
+          - id: run_drift_check
+            type: prompt
+            command: speckit.check
+            integration: claude
+            input:
+              args: >
+                Run only check [Z] — Constraint Drift Detection.
+                Compare the implementation just completed against CLAUDE.md §16
+                constraints. Report PASS/FAIL/N/A for each constraint.
+                For any FAIL: fix the violation immediately. Do not proceed
+                until all constraints are PASS or N/A.
 
       - id: implement_one
         type: prompt

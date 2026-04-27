@@ -19,3 +19,4 @@ Checks:
   [S] Property-based:          PASS | [N] weak, [N] missed | N/A
   [T] Adversarial:             PASS | [N] covered, [N] missed | N/A
   [U] Session/token:           PASS | [N] covered, [N] missed | N/A
+  [Z] Constraint drift:        PASS | FAIL — [details] | N/A

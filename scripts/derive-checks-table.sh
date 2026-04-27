@@ -23,8 +23,8 @@ bash scripts/require-file.sh "$LABELS_FILE" check-labels.yml
 declare -A LABELS DESCS
 CURRENT_LABEL=""
 while IFS= read -r line; do
-  # Check for check ID line: "A:" (single uppercase letter at start of line)
-  if [[ "$line" =~ ^([A-Z]):$ ]]; then
+  # Check for check ID line: "A:", "BC:", "Z:" (1-2 uppercase letters at start of line)
+  if [[ "$line" =~ ^([A-Z][A-Z]?):$ ]]; then
     CURRENT_LABEL="${BASH_REMATCH[1]}"
     continue
   fi
@@ -77,8 +77,8 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Detect check ID line: "  A:", "  B:", etc. (single uppercase letter, 2-space indent)
-  if [[ "$line" =~ ^[[:space:]]{2}([A-Z]):[[:space:]]*$ ]]; then
+  # Detect check ID line: "  A:", "  BC:", "  Z:", etc. (1-2 uppercase letters, 2-space indent)
+  if [[ "$line" =~ ^[[:space:]]{2}([A-Z][A-Z]?):[[:space:]]*$ ]]; then
     # Emit previous check if complete
     if [ -n "$CURRENT_ID" ] && [ -n "${LABELS[$CURRENT_ID]:-}" ] && [ -n "${DESCS[$CURRENT_ID]:-}" ] && [ -n "$_prev_applies" ]; then
       label="${LABELS[$CURRENT_ID]}"
