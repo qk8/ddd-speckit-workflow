@@ -538,7 +538,7 @@ steps:
               Approve to continue with the next TODO task (ABANDONED tasks are skipped).
             options: [approve, revise]
             on_revise:
-              goto: tasks
+              goto: check_remaining
 
       - id: should_retrospect
         type: if
