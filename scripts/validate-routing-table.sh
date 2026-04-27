@@ -14,15 +14,20 @@
 
 set -euo pipefail
 
-# Bash 3.2-compatible array reader (works on macOS default bash).
-# Uses process substitution instead of pipeline to avoid subshell variable loss.
+# Bash 3.2-compatible array reader.
+# Uses temp file + eval instead of namerefs (bash 4.3+) to support macOS default bash 3.2.
 # Usage: read_from_input VARNAME <<< "$(command)"
 read_from_input() {
-  local -n _arr=$1
-  _arr=()
+  local _tmpfile
+  _tmpfile=$(mktemp)
+  trap 'rm -f "$_tmpfile"' EXIT
+  cat > "$_tmpfile"
+  local _arr=()
   while IFS= read -r line; do
     [ -n "$line" ] && _arr+=("$line")
-  done
+  done < "$_tmpfile"
+  # Write result back using eval (bash 3.2 compatible)
+  eval "$1=(\"\${_arr[@]}\")"
 }
 
 FIX_MODE=false
