@@ -59,7 +59,8 @@ join_cmds() {
   echo "$result"
 }
 
-FAILED_STAGES=()
+FAILED_COUNT=0
+FAILED_LIST=""
 START_TIME=$(date +%s)
 
 run_stage() {
@@ -83,7 +84,8 @@ run_stage() {
   else
     local elapsed=$(( $(date +%s) - stage_start ))
     echo -e "${RED}    ✗ FAILED (${elapsed}s)${NC}"
-    FAILED_STAGES+=("[$num] $name")
+    FAILED_COUNT=$((FAILED_COUNT + 1))
+    FAILED_LIST="${FAILED_LIST}[$num] $name\n"
     return 1
   fi
 }
@@ -110,13 +112,13 @@ print_summary() {
   local total_elapsed=$(( $(date +%s) - START_TIME ))
   echo ""
   echo "════════════════════════════════════════"
-  if [ ${#FAILED_STAGES[@]} -eq 0 ]; then
+  if [ "$FAILED_COUNT" -eq 0 ]; then
     echo -e "  ${GREEN}ALL STAGES PASSED${NC} (${total_elapsed}s)"
     echo "  Safe to push."
   else
     echo -e "  ${RED}FAILED STAGES:${NC}"
-    for stage in "${FAILED_STAGES[@]}"; do
-      echo -e "    ${RED}✗ $stage${NC}"
+    echo -e "$FAILED_LIST" | while IFS= read -r stage; do
+      [ -n "$stage" ] && echo -e "    ${RED}✗ $stage${NC}"
     done
     echo ""
     echo "  Fix the failures before pushing."
@@ -142,6 +144,6 @@ fi
 
 print_summary
 
-if [ ${#FAILED_STAGES[@]} -gt 0 ]; then
+if [ "$FAILED_COUNT" -gt 0 ]; then
   exit 1
 fi
