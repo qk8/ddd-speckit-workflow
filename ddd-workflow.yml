@@ -609,7 +609,7 @@ steps:
             echo "WARNING: drift check report not found" >&2
             exit 0
           fi
-          FAIL_COUNT=$(grep -c "FAIL" "$REPORT" || true)
+          FAIL_COUNT=$(grep -E '^\s*[0-9]+\.' "$REPORT" | grep -c 'FAIL' || true)
           if [ "$FAIL_COUNT" -gt 0 ]; then
             echo "FAIL: $FAIL_COUNT constraint violation(s) detected" >&2
             grep "FAIL" "$REPORT" >&2
