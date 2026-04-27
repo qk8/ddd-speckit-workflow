@@ -40,6 +40,7 @@ ddd-clean-arch/                            ← Preset
     flaky-test-protocol.md                 ← Flaky test detection, quarantine, and fix
     test-data-strategy.md                  ← Test data isolation approaches
     api-testing-tool-guide.md              ← API testing tool comparison
+    task-selection.md                      ← IN_PROGRESS / TODO task selection protocol
 ddd-quality-gates/                         ← Extension
   extension.yml
   commands/
@@ -89,13 +90,9 @@ specify workflow add /path/to/ddd-workflow.yml
 cp /path/to/boilerplate/project-brief.md .
 cp /path/to/boilerplate/.gitignore .
 mkdir -p scripts .claude
-cp /path/to/boilerplate/scripts/check-tasks.sh scripts/
-cp /path/to/boilerplate/scripts/validate-tasks.sh scripts/
-cp /path/to/boilerplate/scripts/check-naming.sh scripts/
-cp /path/to/boilerplate/scripts/validate-api-contract.sh scripts/
-cp /path/to/boilerplate/scripts/setup-mcp.sh scripts/
-cp /path/to/boilerplate/scripts/setup-hooks.sh scripts/
-cp /path/to/boilerplate/scripts/ci-local.sh scripts/
+for f in check-tasks.sh validate-tasks.sh check-naming.sh validate-api-contract.sh setup-mcp.sh setup-hooks.sh ci-local.sh; do
+  cp "/path/to/boilerplate/scripts/$f" scripts/
+done
 cp /path/to/boilerplate/.claude/settings.json .claude/
 chmod +x scripts/*.sh
 ```

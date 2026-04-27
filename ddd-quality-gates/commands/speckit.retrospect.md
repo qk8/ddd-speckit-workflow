@@ -19,7 +19,9 @@ Cross-check: are all in plan.md?
 plan.md §10: end_to_end=[N]ms, backend_p95=[N]ms, frontend=[N]ms
 
 Read tasks.md DONE entries for "Perf warning:" lines:
+  ```bash
   bash scripts/parse-tasks-field.sh "<feature_dir>/tasks.md" "Perf warning"
+  ```
   backend-api tasks with perf warnings: list each endpoint, measured p95, budget.
   frontend-feature tasks with perf warnings: list each page, measured LCP, budget.
 
@@ -34,7 +36,9 @@ Recommendation: [none | run a load test | revisit budget]
 ━━ SECTION 3: ROLLBACKS ━━━━━━━━━━━━━━
 
 Read tasks.md DONE entries for "Rollback note:" lines:
+  ```bash
   bash scripts/parse-tasks-field.sh "<feature_dir>/tasks.md" "Rollback note"
+  ```
 
 If any Rollback note exists in tasks.md:
   ROLLBACK: [N] task(s) were rolled back due to unfixable regressions.
@@ -90,7 +94,9 @@ FLAKY TEST AUDIT: scan .specify/specs/[feature]/tasks.md DONE entries and
     Action required: fix or delete with documented justification.
 
 SECRET SCANNING AUDIT:
-  Run: bash scripts/secret-scan.sh .
+  ```bash
+  bash scripts/secret-scan.sh .
+  ```
   Required: no secrets detected.
   If found: SECURITY: secret found in [file] — rotate the credential immediately.
   Also verify: are all .env files in .gitignore?

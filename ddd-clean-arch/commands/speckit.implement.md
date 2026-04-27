@@ -22,14 +22,7 @@ the next task's Type. Do not read plan.md end to end.
 Read the spec-sections mapping from templates/spec-sections.md.
 
 Check for IN_PROGRESS tasks first:
-  Scan tasks.md for any task with Status: IN_PROGRESS.
-  If found:
-    Print: "IN_PROGRESS task detected: TASK-[N] — [title]"
-    Print: "This task was left active from a previous session."
-    Print: "Continuing with this task."
-    Keep Status as IN_PROGRESS (do not change it).
-    Continue to TASK PLAN below with this task.
-  If no IN_PROGRESS task: Find the first task in tasks.md where Status is TODO.
+  Follow the task selection protocol: guides/task-selection.md
 
 Check all Depends-on tasks. If any is not DONE:
   Print: BLOCKED: TASK-[N] — incomplete dependencies: [list]
@@ -119,6 +112,7 @@ and will run in regression for every future task.
     Write an INTEGRATION TEST for cross-context boundaries.
     Location: plan.md §13 integration_tests.location
     Framework: plan.md §13 integration_tests.framework (with Testcontainers or equivalent)
+    (Same location/framework as TYPE: backend-infra)
     Cover:
       - The bounded context boundary defined in §3 for the involved contexts
       - Event/command flow between contexts matches §4 domain events

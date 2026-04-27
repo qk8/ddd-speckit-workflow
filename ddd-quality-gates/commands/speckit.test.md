@@ -39,15 +39,17 @@ plan.md §14 task_runner.dev. If not: start now.
 
 Print: "Dev environment: [already running | started — backend:[port] frontend:[port]]"
 
+━━ FLAKY TEST DETECTION (applies to all regression modes) ━━━━━
+
+If any test fails, re-run it 5 more times before diagnosing code issues.
+If it passes on some runs: it is flaky.
+  → Quarantine per guides/flaky-test-protocol.md
+  → Do not treat a flaky failure as a code bug
+
 ━━ MODE: --regression ━━━━━━━━━━━━━━━━
 
 Run: plan.md §13 regression_command.all
 Print full output.
-
-FLAKY TEST DETECTION: if any test fails, re-run it 5 more times
-before diagnosing code issues. If it passes on some runs: it is flaky.
-  → Quarantine per guides/flaky-test-protocol.md
-  → Do not treat a flaky failure as a code bug
 
 Summary:
   REGRESSION REPORT — REGRESSION_ALL
@@ -61,7 +63,8 @@ Then ask: "Debug a specific failure? If yes, which one?" Switch to DEBUG.
 ━━ MODE: --fast ━━━━━━━━━━━━━━━
 
 Run: plan.md §13 regression_command.api_only
-Same flaky test detection protocol as REGRESSION_ALL (see above).
+Print full output.
+Apply flaky test detection protocol (see above).
 
 Summary:
   REGRESSION REPORT — REGRESSION_FAST
@@ -70,7 +73,8 @@ Summary:
 ━━ MODE: --e2e ━━━━━━━━━━━━━━━━
 
 Run: plan.md §13 regression_command.e2e_only  (headless first)
-Same flaky test detection protocol as REGRESSION_ALL (see above).
+Print full output.
+Apply flaky test detection protocol (see above).
 E2E tests are the most prone to flakiness — apply extra scrutiny.
 
 After headless pass, ask: "Replay with Playwright MCP visible browser?"
