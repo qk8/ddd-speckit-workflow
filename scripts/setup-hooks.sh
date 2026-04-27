@@ -66,9 +66,15 @@ chmod +x "$HOOKS_DIR/pre-commit"
 echo "→ Hook written to .git/hooks/pre-commit"
 
 # ── CREATE .gitleaks.toml IF MISSING ────────────────────────────────────────
-# ensure-gitleaks-toml.sh creates base config if missing.
-# If it created the file, append developer-friendly examples.
-if ! bash scripts/ensure-gitleaks-toml.sh "$REPO_ROOT"; then
+# Check if file existed before ensure-gitleaks-toml.sh runs.
+# If it existed, append developer-friendly examples (base config was fresh).
+# If it didn't exist, ensure-gitleaks-toml.sh creates it from base config.
+_GITLEAKS_EXISTED=false
+[ -f "$REPO_ROOT/.gitleaks.toml" ] && _GITLEAKS_EXISTED=true
+
+bash scripts/ensure-gitleaks-toml.sh "$REPO_ROOT"
+
+if [ "$_GITLEAKS_EXISTED" = true ]; then
   cat >> "$REPO_ROOT/.gitleaks.toml" << 'CFG'
 
 # Add allowlist entries here for false positives.

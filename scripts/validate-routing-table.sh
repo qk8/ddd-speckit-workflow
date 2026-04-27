@@ -11,6 +11,17 @@
 
 set -euo pipefail
 
+# Bash 3.2-compatible array reader (works on macOS default bash).
+# Uses process substitution instead of pipeline to avoid subshell variable loss.
+# Usage: read_from_input VARNAME <<< "$(command)"
+read_from_input() {
+  local -n _arr=$1
+  _arr=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && _arr+=("$line")
+  done
+}
+
 FIX_MODE=false
 if [ "${1:-}" = "--fix" ]; then
   FIX_MODE=true
@@ -25,13 +36,13 @@ CHECKS_DIR="$PRESET_DIR/commands/checks"
 ERRORS=0
 
 # Parse check IDs from checks: section (indented with 2 spaces: "  A:")
-mapfile -t CHECK_IDS < <(awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z]:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE")
+read_from_input CHECK_IDS < <(awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z]:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE")
 
 # Parse check IDs from routing: section (indented: "  backend-domain:    [A, B, ...]")
-mapfile -t ROUTING_IDS < <(awk '/^routing:/{found=1; next} found && /^[a-z]/{found=0} found && /\[/{gsub(/.*\[/, ""); gsub(/\].*/, ""); gsub(/ /, ""); n=split($0, a, ","); for(i=1;i<=n;i++) print a[i]}' "$PRESET_FILE")
+read_from_input ROUTING_IDS < <(awk '/^routing:/{found=1; next} found && /^[a-z]/{found=0} found && /\[/{gsub(/.*\[/, ""); gsub(/\].*/, ""); gsub(/ /, ""); n=split($0, a, ","); for(i=1;i<=n;i++) print a[i]}' "$PRESET_FILE")
 
 # Deduplicate routing IDs
-mapfile -t UNIQUE_ROUTING_IDS < <(printf '%s\n' "${ROUTING_IDS[@]}" | sort -u)
+read_from_input UNIQUE_ROUTING_IDS < <(printf '%s\n' "${ROUTING_IDS[@]}" | sort -u)
 
 # Check 1: All routing IDs exist in checks section
 for rid in "${UNIQUE_ROUTING_IDS[@]}"; do

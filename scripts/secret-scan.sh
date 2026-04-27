@@ -2,7 +2,10 @@
 # Usage: ./scripts/secret-scan.sh [repo-root]
 # Runs gitleaks secret scan on the working tree.
 # Ensures .gitleaks.toml exists (creates minimal config if missing).
-# Exit 0: no secrets found. Exit 1: secrets detected or gitleaks not installed.
+# Exit 0: no secrets found. Exit 1: secrets detected.
+#
+# NOTE: If gitleaks is not installed, the scan SKIPS (not passes).
+# Output goes to stderr so CI pipelines can distinguish skip from pass.
 
 set -euo pipefail
 
@@ -14,8 +17,8 @@ bash scripts/ensure-gitleaks-toml.sh "$REPO_ROOT"
 
 # Check gitleaks is available
 if ! command -v gitleaks &> /dev/null; then
-  echo "WARNING: gitleaks not installed — skipping secret scan."
-  echo "Install: brew install gitleaks  (or: go install github.com/gitleaks/gitleaks/v2/cmd/gitleaks@latest)"
+  echo "WARNING: gitleaks not installed — secret scan SKIPPED (not passed)." >&2
+  echo "Install: brew install gitleaks  (or: go install github.com/gitleaks/gitleaks/v8@latest)" >&2
   exit 0
 fi
 
