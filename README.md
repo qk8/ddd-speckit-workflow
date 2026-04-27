@@ -31,6 +31,10 @@ ddd-clean-arch/                            ← Preset
     plan-template.md                       ← 20-section architecture doc template
     tasks-template.md                      ← Structured backlog format
     constitution-template.md              ← Layer rules and constraints
+    spec-sections.md                       ← Task type → plan.md section mapping
+    check-report-template.md              ← 21-check completion report table
+    task-state-reference.md              ← Source of truth for task states
+    test-instructions/                   ← Lazy-loaded per-task TYPE branches
   commands/
     speckit.implement.md                   ← Build override (task plan + test writing + handoff to checks)
     speckit.check.md                       ← 21 quality checks via routing table
@@ -46,6 +50,7 @@ ddd-quality-gates/                         ← Extension
   templates/
     command-header.md                      ← Shared opening for quality-gate commands
     preamble.md                            ← Feature preamble template
+    test-modes/                            ← Lazy-loaded per-test-mode branches
   commands/
     speckit.verify.md
     speckit.review.md
@@ -53,6 +58,7 @@ ddd-quality-gates/                         ← Extension
     speckit.status.md
     speckit.context.md
     speckit.test.md                        ← Standalone live test + debug command
+    speckit.code-review.md                 ← 5-dimension code review checklist
 ```
 
 ## Prerequisites
