@@ -12,7 +12,7 @@ workflow:
     + DevEx files) → tasks (with integration tasks) → validate dependency graph
     → implement loop (batched parallel tasks, all checks via routing table, TDD,
     self-correction inline → adaptive retrospective → code-review
-    (Phase 7: security, correctness, performance, maintainability, accessibility)
+    (security, correctness, performance, maintainability, accessibility)
     → final verify.
 
 requires:
@@ -620,7 +620,7 @@ steps:
     integration: claude
     input:
       args: >
-        Run the full Phase 7 code review checklist.
+        Run the full code review checklist.
         Every item must be PASS, FAIL, or N/A.
         For every FAIL: apply the fix immediately.
         Produce REVIEW_REPORT.md documenting the outcome.
