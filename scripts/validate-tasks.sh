@@ -94,38 +94,40 @@ echo ""
 echo "Check 2: Circular dependencies"
 
 declare -A VISIT_STATE
-# 0 = unvisited, 1 = in progress, 2 = done
+VISIT_UNVISITED=0
+VISIT_IN_PROGRESS=1
+VISIT_DONE=2
 
 for task_id in "${!TASK_IDS[@]}"; do
-  VISIT_STATE["$task_id"]=0
+  VISIT_STATE["$task_id"]=$VISIT_UNVISITED
 done
 
 detect_cycle() {
   local node="$1"
-  VISIT_STATE["$node"]=1
+  VISIT_STATE["$node"]=$VISIT_IN_PROGRESS
 
   local deps="${TASK_DEPS[$node]:-none}"
   if [ "$deps" != "none" ]; then
     IFS=',' read -ra dep_list <<< "$deps"
     for dep in "${dep_list[@]}"; do
       dep=$(echo "$dep" | xargs)
-      local state="${VISIT_STATE[$dep]:-0}"
-      if [ "$state" -eq 1 ]; then
+      local state="${VISIT_STATE[$dep]:-$VISIT_UNVISITED}"
+      if [ "$state" -eq $VISIT_IN_PROGRESS ]; then
         echo "  ERROR: Circular dependency detected: TASK-$node -> TASK-$dep -> ... -> TASK-$node"
         ERRORS=$((ERRORS + 1))
         return 1
-      elif [ "$state" -eq 0 ]; then
+      elif [ "$state" -eq $VISIT_UNVISITED ]; then
         detect_cycle "$dep" || true
       fi
     done
   fi
 
-  VISIT_STATE["$node"]=2
+  VISIT_STATE["$node"]=$VISIT_DONE
   return 0
 }
 
 for task_id in "${!TASK_IDS[@]}"; do
-  if [ "${VISIT_STATE[$task_id]}" -eq 0 ]; then
+  if [ "${VISIT_STATE[$task_id]}" -eq $VISIT_UNVISITED ]; then
     detect_cycle "$task_id" || true
   fi
 done

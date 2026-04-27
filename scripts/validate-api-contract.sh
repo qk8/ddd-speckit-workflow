@@ -12,6 +12,12 @@
 
 set -euo pipefail
 
+# ── YAML indentation levels for OpenAPI paths section parser ────
+INDENT_PATH=2
+INDENT_METHOD=4
+INDENT_RESPONSES=8
+INDENT_STATUS=12
+
 # ── Resolve to repository root ──────────────────────────────────
 REPO_ROOT="$(bash scripts/repo-root.sh)"
 cd "$REPO_ROOT"
@@ -64,8 +70,8 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Detect new path item (indented with 2 spaces)
-  if [[ "$line" =~ ^[[:space:]]{2}(/[a-zA-Z0-9_{}./-]+): ]]; then
+  # Detect new path item (indented with $INDENT_PATH spaces)
+  if [[ "$line" =~ ^[[:space:]]{$INDENT_PATH}(/[a-zA-Z0-9_{}./-]+): ]]; then
     # Save previous endpoint
     if [ -n "$CURRENT_PATH" ] && [ -n "$CURRENT_METHOD" ]; then
       ENDPOINTS+=("$CURRENT_METHOD|$CURRENT_PATH|$(IFS=,; echo "${RESPONSE_CODES[*]}")")
@@ -79,8 +85,8 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Detect method (indented with 4 spaces): get:, post:, put:, delete:, patch:
-  if [[ "$line" =~ ^[[:space:]]{4}(get|post|put|delete|patch): ]]; then
+  # Detect method (indented with $INDENT_METHOD spaces): get:, post:, put:, delete:, patch:
+  if [[ "$line" =~ ^[[:space:]]{$INDENT_METHOD}(get|post|put|delete|patch): ]]; then
     # Save previous method
     if [ -n "$CURRENT_METHOD" ]; then
       ENDPOINTS+=("$CURRENT_METHOD|$CURRENT_PATH|$(IFS=,; echo "${RESPONSE_CODES[*]}")")
@@ -92,15 +98,15 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Detect responses section (indented with 8 spaces)
-  if [[ "$line" =~ ^[[:space:]]{8}responses: ]] && $in_method; then
+  # Detect responses section (indented with $INDENT_RESPONSES spaces)
+  if [[ "$line" =~ ^[[:space:]]{$INDENT_RESPONSES}responses: ]] && $in_method; then
     in_responses=true
     in_status=false
     continue
   fi
 
-  # Detect status code (indented with 12 spaces): "200:" or "201:"
-  if [[ "$line" =~ ^[[:space:]]{12}([0-9]{3}): ]] && $in_responses; then
+  # Detect status code (indented with $INDENT_STATUS spaces): "200:" or "201:"
+  if [[ "$line" =~ ^[[:space:]]{$INDENT_STATUS}([0-9]{3}): ]] && $in_responses; then
     RESPONSE_CODES+=("${BASH_REMATCH[1]}")
     continue
   fi
