@@ -462,7 +462,7 @@ e2e_testing_tool:
 
 regression_command:
   # Commands that run subsets of the test suite.
-  # Defined here once and referenced by speckit.implement check [C] and [H],
+  # Defined here once and referenced by speckit.implement check [BC] and [H],
   # speckit.verify, speckit.retrospect, and speckit.test.
   # Derive from the monorepo tool in §14.
   all:       # runs everything: arch + unit + integration + API + contract + E2E
@@ -768,8 +768,8 @@ FAILURE: [name]
 
 A feature is complete when:
   - [ ] [concrete verifiable criterion]
-  - [ ] All new tests pass (check [B])
-  - [ ] Zero regression failures (check [C])
+  - [ ] All new tests pass (check [BC])
+  - [ ] Zero regression failures (check [BC])
   - [ ] Coverage ≥ [line]%/[branch]%/[function]% (plan.md §13 coverage_thresholds)
   - [ ] 0 TypeScript/type errors (plan.md §13 type_check_command)
   - [ ] 0 lint errors (plan.md §13 lint_command)
