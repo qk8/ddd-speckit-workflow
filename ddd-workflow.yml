@@ -601,7 +601,6 @@ steps:
             exit 1
           fi
           echo "PASS: All constraints satisfied"
-        ignore_failure: true
 
       - id: drift_check_review
         type: gate
