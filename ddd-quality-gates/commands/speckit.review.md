@@ -1,3 +1,4 @@
+Read CLAUDE.md fully.
 Read the feature preamble from templates/preamble.md.
 
 This command reviews design quality — not tests (implement does that),

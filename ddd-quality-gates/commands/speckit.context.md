@@ -1,5 +1,5 @@
-Read the feature preamble from templates/preamble.md.
 Read CLAUDE.md fully.
+Read the feature preamble from templates/preamble.md.
 
 Check for IN_PROGRESS tasks first:
   Follow the task selection protocol: guides/task-selection.md

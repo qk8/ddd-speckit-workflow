@@ -43,6 +43,9 @@ ddd-clean-arch/                            ← Preset
     task-selection.md                      ← IN_PROGRESS / TODO task selection protocol
 ddd-quality-gates/                         ← Extension
   extension.yml
+  templates/
+    command-header.md                      ← Shared opening for quality-gate commands
+    preamble.md                            ← Feature preamble template
   commands/
     speckit.verify.md
     speckit.review.md

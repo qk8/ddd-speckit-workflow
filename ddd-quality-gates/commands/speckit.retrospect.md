@@ -1,3 +1,4 @@
+Read CLAUDE.md fully.
 Read the feature preamble from templates/preamble.md.
 
 Run on adaptive cadence (check-tasks.sh, values from ddd-clean-arch/preset.yml cadence section).

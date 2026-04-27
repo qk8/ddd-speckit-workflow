@@ -1,3 +1,4 @@
+Read CLAUDE.md fully.
 Read the feature preamble from templates/preamble.md.
 
 This command runs a targeted test session or debug session on demand —
