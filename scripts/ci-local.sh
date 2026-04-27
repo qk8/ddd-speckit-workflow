@@ -104,21 +104,7 @@ STAGE_CMDS=(
   "$API_TEST_CMD"
   "$CONTRACT_TEST_CMD"
 )
-
-if $E2E_ONLY; then
-  run_stage 7 "E2E tests (headless)" "$E2E_TEST_CMD"
-else
-  for i in "${!STAGE_NAMES[@]}"; do
-    run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || { print_summary; exit 1; }
-  done
-
-  if ! $FAST; then
-    run_stage 7 "E2E tests (headless)"   "$E2E_TEST_CMD"
-  else
-    echo ""
-    echo -e "${YELLOW}[7] E2E tests — SKIPPED (--fast mode)${NC}"
-  fi
-fi
+TOTAL_STAGES=${#STAGE_NAMES[@]}
 
 print_summary() {
   local total_elapsed=$(( $(date +%s) - START_TIME ))
@@ -138,6 +124,21 @@ print_summary() {
   fi
   echo "════════════════════════════════════════"
 }
+
+if $E2E_ONLY; then
+  run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD"
+else
+  for i in "${!STAGE_NAMES[@]}"; do
+    run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || { print_summary; exit 1; }
+  done
+
+  if ! $FAST; then
+    run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD"
+  else
+    echo ""
+    echo -e "${YELLOW}[$((TOTAL_STAGES + 1))] E2E tests — SKIPPED (--fast mode)${NC}"
+  fi
+fi
 
 print_summary
 
