@@ -5,7 +5,7 @@ author: "your-org"
 description: >
   Adds seven quality-gate commands to Spec Kit: verify (spec-code drift
   detection), review (design quality across 5 dimensions), code-review
-  (checklist: security, correctness, performance, maintainability,
+  (Phase 7 checklist: security, correctness, performance, maintainability,
   accessibility), retrospect (periodic alignment check with adaptive
   cadence configured in preset.yml cadence section), status (progress
   dashboard), context (targeted spec loading for long sessions), and test
