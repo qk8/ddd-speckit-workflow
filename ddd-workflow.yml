@@ -542,7 +542,7 @@ steps:
               command: >
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
             on_continue:
-              type: noop
+              goto: check_abandoned
             on_abandon:
               type: shell
               command: >
