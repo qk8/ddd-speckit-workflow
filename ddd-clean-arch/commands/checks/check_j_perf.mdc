@@ -14,7 +14,7 @@ applies_to: [backend-api, frontend-feature]
 
   For frontend-feature:
     Run the E2E test headlessly, measure LCP via Playwright MCP:
-      Evaluate: () => document.querySelector('body')?.getBoundingClientRect()
+      Evaluate: () => performance.getEntriesByType('paint').find(e => e.name === 'largest-contentful-paint')?.startTime || 0
     Compare LCP against frontend budget from §10.
     If LCP exceeds budget: print WARNING — "LCP=[N]ms exceeds budget [budget]ms"
     Note in completion report for retrospect review.

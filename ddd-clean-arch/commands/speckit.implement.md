@@ -135,7 +135,7 @@ guides/correction-loop.md (triage → integrity audit → 3 attempts → escalat
 STEP 3 — RUN QUALITY CHECKS
 ─────────────────────────────────────────
 Read the current task type from tasks.md.
-Load applicable checks from preset.yml checks[].applies_to.
+Load applicable checks from preset-checks.yml checks[].applies_to.
 For each applicable check [X], read and execute the sub-check file
 from commands/checks/check_[X]_[name].mdc.
 
