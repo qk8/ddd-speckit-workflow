@@ -23,8 +23,8 @@ touch "$LABELS_FILE" "$DESCS_FILE"
 PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
-LABELS_FILE="scripts/check-labels.yml"
-bash scripts/require-file.sh "$LABELS_FILE" check-labels.yml
+LABELS_SRC="scripts/check-labels.yml"
+bash scripts/require-file.sh "$LABELS_SRC" check-labels.yml
 
 # ── Parse check-labels.yml (nested YAML: ID > label/desc) ──────
 # Bash 3.2 compatible: uses temp files instead of associative arrays
@@ -43,7 +43,7 @@ while IFS= read -r line; do
       echo "${CURRENT_LABEL}|$(echo "$line" | sed 's/.*desc:[[:space:]]*"\([^"]*\)".*/\1/')" >> "$DESCS_FILE"
     fi
   fi
-done < "scripts/check-labels.yml"
+done < "$LABELS_SRC"
 
 # ── Emit table header ────────────────────────────────────────────────────────
 echo "| Check | What it does | Applies to |"
@@ -112,9 +112,9 @@ while IFS= read -r line; do
 done < "$PRESET_FILE"
 
 # Emit the last check (U)
-if [ -n "$CURRENT_ID" ] && [ -n "${LABELS[$CURRENT_ID]:-}" ] && [ -n "${DESCS[$CURRENT_ID]:-}" ] && [ -n "$_prev_applies" ]; then
-  label="${LABELS[$CURRENT_ID]}"
-  desc="${DESCS[$CURRENT_ID]}"
+if [ -n "$CURRENT_ID" ] && grep -q "^${CURRENT_ID}|" "$LABELS_FILE" 2>/dev/null && grep -q "^${CURRENT_ID}|" "$DESCS_FILE" 2>/dev/null && [ -n "$_prev_applies" ]; then
+  label=$(grep "^${CURRENT_ID}|" "$LABELS_FILE" | head -1 | cut -d'|' -f2-)
+  desc=$(grep "^${CURRENT_ID}|" "$DESCS_FILE" | head -1 | cut -d'|' -f2-)
   if [ "$_prev_applies" = "all" ]; then
     applies_col="All"
   else

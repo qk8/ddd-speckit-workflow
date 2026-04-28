@@ -194,21 +194,10 @@ fi
 for endpoint in "${ENDPOINTS[@]}"; do
   IFS='|' read -r method path codes <<< "$endpoint"
 
-  # Check if this endpoint exists in code
-  found=false
-  # Try lowercase method
-  if [ -n "${CODE_ENDPOINTS["${method,,}|${path}"]+x}" ]; then
-    found=true
-  fi
-  # Try uppercase method
-  if [ -n "${CODE_ENDPOINTS["${method^^}|${path}"]+x}" ]; then
-    found=true
-  fi
-
-  # Check if this endpoint exists in code (bash 3.2 compatible lookup)
-  if ! grep -qxF "${method,,}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null && \
-     ! grep -qxF "${method^^}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null; then
-    echo "  DRIFT: ${method^^} $path — defined in contract but not found in codebase."
+  # Check if this endpoint exists in code (bash 3.2 compatible)
+  # CODE_ENDPOINTS_FILE stores METHOD|PATH in uppercase
+  if ! grep -qxF "${method}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null; then
+    echo "  DRIFT: ${method} $path — defined in contract but not found in codebase."
     ERRORS=$((ERRORS + 1))
   fi
 done
