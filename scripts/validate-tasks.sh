@@ -141,37 +141,76 @@ while IFS= read -r tid; do
   set_state "$tid" "$VISIT_UNVISITED"
 done < "$TASK_IDS_FILE"
 
-detect_cycle() {
-  local node="$1"
-  set_state "$node" "$VISIT_IN_PROGRESS"
+# Iterative DFS cycle detection (bash 3.2 compatible, no recursion).
+# Stack format: NODE|DEP_INDEX (one line per active node).
+# DEP_INDEX tracks which dependency we're processing so we resume
+# correctly after returning from a sub-dependency.
+# Nodes are marked IN_PROGRESS when pushed, DONE when popped.
+dfs_detect_cycles() {
+  local stack_file="$TMP_DIR/dfs_stack.txt"
 
-  local deps
-  deps=$(get_deps "$node")
-  if [ "$deps" != "none" ]; then
-    IFS=',' read -ra dep_list <<< "$deps"
-    for dep in "${dep_list[@]}"; do
-      dep=$(echo "$dep" | xargs)
-      local state
-      state=$(get_state "$dep")
-      if [ "$state" -eq "$VISIT_IN_PROGRESS" ]; then
-        echo "  ERROR: Circular dependency detected: TASK-$node -> TASK-$dep -> ... -> TASK-$node"
-        ERRORS=$((ERRORS + 1))
-        return 1
-      elif [ "$state" -eq "$VISIT_UNVISITED" ]; then
-        detect_cycle "$dep" || true
+  while IFS= read -r task_id; do
+    if [ "$(get_state "$task_id")" -ne "$VISIT_UNVISITED" ]; then
+      continue
+    fi
+
+    # Push start node: node|0 (node, processing dependency 0)
+    # Mark IN_PROGRESS as soon as we enter (simulates recursive call entry)
+    set_state "$task_id" "$VISIT_IN_PROGRESS"
+    echo "${task_id}|0" > "$stack_file"
+
+    while [ -s "$stack_file" ]; do
+      # Read current node and dependency index from top of stack
+      local top_line current_node dep_idx
+      top_line=$(tail -1 "$stack_file")
+      current_node=$(echo "$top_line" | cut -d'|' -f1)
+      dep_idx=$(echo "$top_line" | cut -d'|' -f2)
+
+      # Get deps for current node
+      local deps
+      deps=$(get_deps "$current_node")
+      if [ "$deps" = "none" ]; then
+        # No deps: mark done and pop
+        set_state "$current_node" "$VISIT_DONE"
+        sed -i '$ d' "$stack_file"
+        continue
+      fi
+
+      IFS=',' read -ra dep_list <<< "$deps"
+      local has_more_deps=false
+
+      if [ "$dep_idx" -lt "${#dep_list[@]}" ]; then
+        has_more_deps=true
+        local dep
+        dep=$(echo "${dep_list[$dep_idx]}" | xargs)
+
+        # Update dep_idx for current node on stack
+        local new_idx=$((dep_idx + 1))
+        sed -i '$ d' "$stack_file"
+        echo "${current_node}|${new_idx}" >> "$stack_file"
+
+        local dep_state
+        dep_state=$(get_state "$dep")
+        if [ "$dep_state" -eq "$VISIT_IN_PROGRESS" ]; then
+          echo "  ERROR: Circular dependency detected: TASK-$current_node -> TASK-$dep -> ... -> TASK-$current_node"
+          ERRORS=$((ERRORS + 1))
+        elif [ "$dep_state" -eq "$VISIT_UNVISITED" ]; then
+          # Mark IN_PROGRESS before pushing (simulates recursive call entry)
+          set_state "$dep" "$VISIT_IN_PROGRESS"
+          echo "${dep}|0" >> "$stack_file"
+        fi
+      fi
+
+      if [ "$has_more_deps" = false ]; then
+        # All deps processed: mark done and pop (simulates recursive call exit)
+        set_state "$current_node" "$VISIT_DONE"
+        sed -i '$ d' "$stack_file"
       fi
     done
-  fi
-
-  set_state "$node" "$VISIT_DONE"
-  return 0
+  done < "$TASK_IDS_FILE"
 }
 
-while IFS= read -r task_id; do
-  if [ "$(get_state "$task_id")" -eq "$VISIT_UNVISITED" ]; then
-    detect_cycle "$task_id" || true
-  fi
-done < "$TASK_IDS_FILE"
+dfs_detect_cycles
 
 if [ "$ERRORS" -eq 0 ]; then
   echo "  No circular dependencies detected."
