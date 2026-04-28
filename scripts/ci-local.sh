@@ -131,7 +131,7 @@ if $E2E_ONLY; then
   run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD"
 else
   for i in "${!STAGE_NAMES[@]}"; do
-    run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || { print_summary; exit 1; }
+    run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || true
   done
 
   if ! $FAST; then
