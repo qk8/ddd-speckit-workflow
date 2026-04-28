@@ -378,6 +378,7 @@ alerting:
     - [condition]
 
 health_checks:
+  backend_port: [port number]
   liveness:
     path: /healthz
     checks: [internal only]

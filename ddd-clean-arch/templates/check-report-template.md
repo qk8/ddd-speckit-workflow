@@ -1,6 +1,6 @@
 Checks:
   [A] Arch tests:              PASS
-  [BC] New+Regression:         PASS ([N] new tests, [total N] total, 0 new failures) | FLAKY — [fix applied]
+  [BC] New+Regression:         PASS ([N] new tests, [total N] total, 0 new failures)
   [D] Linter:                  PASS
   [E] Dep scan:                PASS | BLOCKED — [details]
   [F] Migration:               PASS | N/A

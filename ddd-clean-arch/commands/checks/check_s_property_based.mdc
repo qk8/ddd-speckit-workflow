@@ -15,4 +15,4 @@ applies_to: all
   For each MISSING invariant: write the property-based test now.
   Do not proceed until all invariants are COVERED.
 
-  Print: "PROPERTY-BASED: [N] covered, [N] weak, [N] missed"
+  Print: "PROPERTY-BASED: [N] covered, [N] weak — all invariants must reach COVERED before marking DONE."

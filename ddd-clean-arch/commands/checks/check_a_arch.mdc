@@ -4,5 +4,10 @@ name: Architectural Tests
 applies_to: [backend-domain, backend-infra, backend-api]
 ---
 [A] ARCHITECTURAL TESTS
-  Run arch test command from plan.md §20.
-  Required: PASS. If fail: fix the layer violation. Do not skip.
+  Read plan.md §20 to find:
+    - backend_arch_tool: [ArchUnit | dependency-cruiser | other]
+    - backend_arch_test_file: [path]
+  Construct the test command from these fields. For example:
+    - ArchUnit: ./gradlew test --tests "*ArchitectureTest*"
+    - dependency-cruiser: npx depcruise backend/src/ --format text --config
+  Run the command. Required: PASS. If fail: fix the layer violation.

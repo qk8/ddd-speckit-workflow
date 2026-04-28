@@ -28,7 +28,7 @@ fi
 
 # Helper: return when sourced, exit when run directly
 _pr_exit() {
-  if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+  if [ "${#BASH_SOURCE[@]}" -gt 1 ]; then
     return "$1"
   fi
   exit "$1"

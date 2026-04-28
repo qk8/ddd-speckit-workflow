@@ -47,6 +47,8 @@ Clean Architecture preset for the DDD Spec Kit. Provides templates, checks, and 
 | U | Session & Token Security | backend-api |
 | Z | Constraint Drift Detection | all |
 
+**Integration tasks** (cross-context boundary tests) run checks: BC, D, I, L, M, P, S, Z.
+
 ## Structure
 
 ```
@@ -58,7 +60,6 @@ ddd-clean-arch/
 │   └── ...
 ├── templates/          # Plan, spec, and task templates
 │   ├── plan-template.md
-│   ├── spec-template.md
 │   ├── tasks-template.md
 │   └── ...
 ├── guides/             # Process guides (correction loop, dev server, etc.)

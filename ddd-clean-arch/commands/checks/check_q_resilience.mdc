@@ -27,9 +27,6 @@ applies_to: [backend-api, backend-infra]
       breaker prevents cascade, system remains available for
       non-affected endpoints
 
-  NOTE: Session fixation (item 11) and refresh token replay (item 12)
-  are covered by [U] SESSION & TOKEN SECURITY. Do not duplicate checks here.
-
   For each scenario: verify the correct error response is returned
   (not a 500 crash), the error is logged with correct severity,
   and the system remains available for other requests.

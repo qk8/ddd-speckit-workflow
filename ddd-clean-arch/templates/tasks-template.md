@@ -24,6 +24,7 @@ Status: TODO
 #   IN_PROGRESS  — currently being worked on (set at task plan confirmation)
 #   DONE         — all applicable checks passed, test file committed
 #   ABANDONED    — interrupted; partial files listed below for recovery
+#   BLOCKED      — dependency is not DONE (auto-set; unblock when dep becomes DONE)
 #
 # Fields added by /speckit.implement when task is completed:
 # Built: [one sentence describing what was built]

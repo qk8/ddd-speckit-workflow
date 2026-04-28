@@ -165,11 +165,8 @@ Print: "Regression: [total N] tests, [N] failed"
   - Zero new failures allowed
   - If any pre-existing test fails: STOP, diagnose root cause, fix, re-run
 
-─────────────────────────────────────────
 INLINE CORRECTION LOOP (if tests fail)
-─────────────────────────────────────────
-If any test fails after implementation, follow the correction loop:
-guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
+  Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
 
 ─────────────────────────────────────────
 STEP 3 — RUN QUALITY CHECKS
@@ -190,6 +187,11 @@ GLOBAL ITERATION CAP:
   Across all loops (correction, check-fix, regression), after 5 total
   correction iterations, STOP and escalate to human review.
   Print: "MAX CORRECTION ITERATIONS (5) REACHED — escalating to human review."
+
+  Cap hierarchy:
+    1. Correction loop (STEP 2): max 3 attempts per test failure
+    2. Check-fix loop (STEP 3): max 2 attempts per check violation
+    3. GLOBAL CAP: max 5 total iterations across all loops combined
 
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT

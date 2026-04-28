@@ -8,7 +8,7 @@ applies_to: [backend-api, frontend-feature]
     Run a quick load test using the project's preferred HTTP benchmarking
     tool (autocannon for Node.js, hey for Go, wrk for Rust, etc.):
       autocannon -n 100 -c 10 [API endpoint from §8]
-    Default: autocannon -n 100 -c 10. Override with plan.md §13 perf.benchmark_command.
+    Default: autocannon -n 100 -c 10. Override with plan.md §13 regression_command (use the API-specific variant).
     Compare p95 against backend budget from §10.
     If p95 exceeds budget: print WARNING — "p95=[N]ms exceeds budget [budget]ms"
     Note in completion report for retrospect review.

@@ -27,7 +27,8 @@ Monitor CI failure rates. Any test with >5% failure rate without code changes sh
    - **Race condition**: concurrent operations produce non-deterministic result → fix: deterministic test setup or mock the concurrency
    - **Environment**: test depends on network, clock, or OS-specific behavior → fix: mock the external dependency or use test-stable values
 3. Fix the root cause (not the symptom — do not add retry logic)
-4. Run fixed test 50 times to confirm stability before removing from quarantine
+4. While in quarantine: run 5 times to confirm flakiness.
+   After fix: run 50 times to confirm stability before removing from quarantine.
 
 ## Forbidden
 

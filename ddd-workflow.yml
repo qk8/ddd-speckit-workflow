@@ -335,7 +335,7 @@ steps:
         scripts/ci-local.sh (fill in the COMMANDS section):
           Populate the command variables at the top of scripts/ci-local.sh
           using the values from plan.md §13 and §14:
-            SECRET_SCAN_CMD: see ci-local.sh:21 (gitleaks detect --source . --redact -q)
+            SECRET_SCAN_CMD: see ci-local.sh COMMANDS section (default: gitleaks detect --source . --redact -q)
             LINT_CMD: from §14 task_runner.lint
             ARCH_TEST_CMD: construct from §20 backend_arch_tool (e.g. if ArchUnit → ./gradlew test --tests ArchitectureTest; if dependency-cruiser → dc --config .dependency-cruiser.cjs) + frontend arch:check
             UNIT_TEST_CMD: from §13 regression_command.api_only (includes unit tests)
@@ -456,7 +456,7 @@ steps:
 
           Review all 3 sections. Approve to continue implementation.
           Revise to send back for changes ({{ steps.plan_review_revision_iteration.output.count || 1 }}/3 used).
-        options: [approve, revise]
+        options: [approve, revise, abort]
         on_revise:
           - id: trim-revision-history
             type: shell
@@ -468,6 +468,7 @@ steps:
               "{{ steps.plan_review_revision_iteration.output.count || 1 }}"
               "Plan review revision round {{ steps.plan_review_revision_iteration.output.count || 1 }}"
           - goto: plan-consolidated-review
+        on_abort: abort
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -673,8 +674,7 @@ steps:
                 Run only check [Z] — Constraint Drift Detection.
                 Compare the implementation just completed against CLAUDE.md §16
                 constraints. Report PASS/FAIL/N/A for each constraint.
-                For any FAIL: fix the violation immediately. Do not proceed
-                until all constraints are PASS or N/A.
+                For any FAIL: fix the violation immediately.
 
       - id: drift_check_result
         type: shell
@@ -682,27 +682,28 @@ steps:
           REPORT=".artifacts/drift_check_report.md"
           mkdir -p .artifacts
           if [ ! -f "$REPORT" ]; then
-            echo "WARNING: drift check report not found" >&2
+            echo "DRIFT_SKIP=true"
+            echo "No drift report — check [Z] was not triggered this round."
             exit 0
           fi
           FAIL_COUNT=$(grep -E '^\s*[0-9]+\.' "$REPORT" | grep -c 'FAIL' || true)
           if [ "$FAIL_COUNT" -gt 0 ]; then
-            echo "FAIL: $FAIL_COUNT constraint violation(s) detected" >&2
-            grep "FAIL" "$REPORT" >&2
             echo "DRIFT_DETECTED=true"
+            grep "FAIL" "$REPORT" >&2
           else
-            echo "PASS: All constraints satisfied"
+            echo "DRIFT_CLEAN=true"
           fi
-          # Always exit 0 — drift_check_review gate handles the decision
 
       - id: drift_check_review
         type: gate
         message: |
-          Drift check completed. Review the report at .artifacts/drift_check_report.md.
-          Approve to continue to implementation.
-        options: [approve, revise]
+          Drift check: {{ steps.drift_check_result.output || "skipped (no retro trigger)" }}
+          Review the report at .artifacts/drift_check_report.md.
+          Approve to continue. Revise to re-run drift check.
+        options: [approve, revise, abort]
         on_revise:
           goto: run_drift_check
+        on_abort: abort
 
       - id: implement_one
         type: prompt
@@ -811,7 +812,7 @@ steps:
 
           Approve to continue to final verify.
           Revise to send the checklist back for fixes.
-        options: [approve, revise]
+        options: [approve, revise, abort]
         on_revise:
           - id: trim-revision-history
             type: shell
@@ -823,6 +824,7 @@ steps:
               "{{ steps.code_review_round_iteration.output.count || 1 }}"
               "Code review revision round {{ steps.code_review_round_iteration.output.count || 1 }}"
           - goto: code_review
+        on_abort: abort
 
   # ── PHASE 8: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
@@ -843,4 +845,12 @@ steps:
         then select "fix-needed" to resume the implement loop.
     options: [approved-clean, fix-needed]
     on_fix-needed:
-      goto: implement_loop
+      - id: add-fix-tasks
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Read tasks.md and the final verify report.
+            For each drift issue, add a fix task to tasks.md with clear
+            acceptance criteria. Print the list of added tasks.
+      - goto: implement_loop

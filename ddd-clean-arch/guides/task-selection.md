@@ -14,3 +14,4 @@ If found:
 
 If no IN_PROGRESS task: Find the first task in tasks.md where Status is TODO
 and all Depends-on tasks are DONE.
+Skip tasks whose Depends-on includes any task that is not DONE (these are BLOCKED).

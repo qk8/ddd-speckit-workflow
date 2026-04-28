@@ -56,8 +56,8 @@ while IFS= read -r line; do
     IN_SECTION2=true
     continue
   fi
-  # If we hit §3 or another section, stop
-  if echo "$line" | grep -qE '^#+.*§([3-9]|1[0-9]|20)'; then
+  # If we hit §3 or another section, stop (handles up to §30)
+  if echo "$line" | grep -qE '^#+.*§([3-9]|1[0-9]|2[0-9]|30)'; then
     IN_SECTION2=false
     continue
   fi

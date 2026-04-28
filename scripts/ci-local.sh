@@ -29,6 +29,12 @@ E2E_TEST_CMD=""          # e.g. "npx playwright test --project=e2e" | "pnpm test
 
 # ── DO NOT EDIT BELOW THIS LINE ──────────────────────────────────────────────
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
 # ── Warn if all commands are empty (first run, not yet configured) ──
 ALL_EMPTY=true
 for _cmd in "$SECRET_SCAN_CMD" "$LINT_CMD" "$ARCH_TEST_CMD" "$UNIT_TEST_CMD" "$INTEGRATION_TEST_CMD" "$API_TEST_CMD" "$CONTRACT_TEST_CMD" "$E2E_TEST_CMD"; do
@@ -52,12 +58,6 @@ for arg in "$@"; do
     --e2e-only) E2E_ONLY=true ;;
   esac
 done
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 join_cmds() {
   # Join non-empty arguments with ' && '. Ignores empty args.
