@@ -58,8 +58,19 @@ fi
 
 # ── WRITE HOOK ───────────────────────────────────────────────────────────────
 # Copy template, then substitute LINT_CMD into the lint section
+
+# Escape pipe characters in LINT_CMD to prevent sed delimiter conflicts
+_ESCAPED_LINT=$(printf '%s\n' "$LINT_CMD" | sed 's/|/\\|/g')
+
+# Detect GNU vs BSD sed for -i flag
+if sed --version &>/dev/null; then
+  SED_INPLACE=(-i)
+else
+  # macOS BSD sed requires empty suffix: -i ''
+  SED_INPLACE=(-i '')
+fi
 cp "$(dirname "$0")/pre-commit-template.sh" "$HOOKS_DIR/pre-commit"
-sed -i "s|__LINT_CMD__|$LINT_CMD|" "$HOOKS_DIR/pre-commit"
+sed "${SED_INPLACE[@]}" "s|__LINT_CMD__|$_ESCAPED_LINT|" "$HOOKS_DIR/pre-commit"
 chmod +x "$HOOKS_DIR/pre-commit"
 
 chmod +x "$HOOKS_DIR/pre-commit"

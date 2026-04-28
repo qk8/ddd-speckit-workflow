@@ -7,8 +7,14 @@ This command:
 2. Loads preset-checks.yml, derives routing from checks[].applies_to for the task type
 3. For each applicable check [X]:
    - Verifies the sub-check file exists at commands/checks/check_[X]_[name].mdc
-   - If missing: reports "CHECK [X] SKIPPED — sub-check file not found" and continues
-   - If found but empty or malformed: reports "CHECK [X] SKIPPED — file empty" and continues
+   - If missing:
+     - If check is marked critical in preset-checks.yml: FAIL the task immediately
+       Print: "CHECK [X] FAILED — CRITICAL sub-check file not found"
+     - Otherwise: report "CHECK [X] SKIPPED — sub-check file not found" and continue
+   - If found but empty or malformed:
+     - If check is marked critical: FAIL the task immediately
+       Print: "CHECK [X] FAILED — CRITICAL sub-check file empty/malformed"
+     - Otherwise: report "CHECK [X] SKIPPED — file empty" and continue
    - Executes the check instructions
    - Records result
 4. Prints results summary: "CHECK [X] NAME: PASS | FAIL — details"

@@ -46,8 +46,11 @@ echo ""
 
 current_id=""
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-\[([0-9]+)\] ]]; then
+  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+    # Strip brackets: TASK-[3] → 3, TASK-3 → 3
     current_id="${BASH_REMATCH[1]}"
+    current_id="${current_id#\[}"
+    current_id="${current_id%\]}"
     echo "$current_id" >> "$TASK_IDS_FILE"
     echo "${current_id}|none" >> "$TASK_DEPS_FILE"
   elif [[ "$line" =~ ^Depends\ on:\ (.*) ]] && [ -n "${current_id:-}" ]; then
@@ -223,8 +226,12 @@ echo "Check 3: Task ordering"
 # Build ordered list of task IDs (in file order) — regular indexed array (bash 3.2 compatible)
 ORDERED_IDS=()
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-\[([0-9]+)\] ]]; then
-    ORDERED_IDS+=("${BASH_REMATCH[1]}")
+  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+    # Strip brackets: TASK-[3] → 3, TASK-3 → 3
+    _tid="${BASH_REMATCH[1]}"
+    _tid="${_tid#\[}"
+    _tid="${_tid%\]}"
+    ORDERED_IDS+=("$_tid")
   fi
 done < "$TASKS_FILE"
 

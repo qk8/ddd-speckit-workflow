@@ -123,8 +123,10 @@ candidate_contains_term() {
 }
 
 while IFS= read -r term; do
+  # Escape regex special characters in term before using in grep
+  escaped_term=$(printf '%s\n' "$term" | sed 's/[[\.*^$()+?{|]/\\&/g')
   # Case-insensitive search for the term in codebase
-  matches=$(grep -rl "${FILETYPES_PATTERNS[@]}" "$term" "${SEARCH_DIRS[@]}" 2>/dev/null || true)
+  matches=$(grep -rl "${FILETYPES_PATTERNS[@]}" "$escaped_term" "${SEARCH_DIRS[@]}" 2>/dev/null || true)
 
   if [ -z "$matches" ]; then
     echo "  WARNING: §2 \"$term\" — not found in codebase (may be planned but not yet implemented)."

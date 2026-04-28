@@ -4,6 +4,11 @@ name: Security Hardening
 applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
 ---
 [O] SECURITY HARDENING — backend-api, backend-infra, frontend-data, frontend-feature tasks
+  "User-facing code" = any code that directly receives external input or renders output to users:
+    - Backend: API route handlers, controllers, middleware, request validators, serializers
+    - Frontend: Components that render user data, forms that accept input, API client calls
+    - Infrastructure: Config that affects security headers, CORS settings, rate limiting
+  NOT user-facing: domain models, repositories, internal utilities, test files, migrations
   If this task touches any user-facing code, verify every security
   requirement from plan.md §9 is implemented:
 
@@ -19,7 +24,7 @@ applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
   6. HTTP security headers: Are Content-Security-Policy, X-Frame-Options,
      X-Content-Type-Options set?
   7. Sensitive data: Is PII not logged? Are secrets not in source code?
-     Are tokens not stored in localStorage?
+     (Tokens not stored in localStorage → see [U] item 4)
   8. Error messages: Do error messages NOT reveal internal paths,
      library names, or stack traces to clients?
 

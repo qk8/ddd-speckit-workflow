@@ -39,7 +39,7 @@ fi
 
 # Reset only the first IN_PROGRESS task found
 TMPFILE=$(mktemp)
-TASK=$(grep "Status: IN_PROGRESS" "$FEATURE_DIR/tasks.md" -B5 | grep "^## TASK" | tail -1 | sed 's/## TASK-\[\([0-9]*\)\].*/\1/')
+TASK=$(grep -m1 "^Status: IN_PROGRESS$" "$FEATURE_DIR/tasks.md" -B5 | grep "^## TASK" | tail -1 | sed 's/## TASK-\[\?\([0-9]*\)\]\?.*/\1/')
 if [ -n "$TASK" ]; then
   awk -v found_task="$TASK" '
     $0 ~ /^## TASK-/ { task = ""; sub("## TASK-", ""); sub(/\].*/, ""); task = $0 }

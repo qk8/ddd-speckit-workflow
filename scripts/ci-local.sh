@@ -29,6 +29,21 @@ E2E_TEST_CMD=""          # e.g. "npx playwright test --project=e2e" | "pnpm test
 
 # ── DO NOT EDIT BELOW THIS LINE ──────────────────────────────────────────────
 
+# ── Warn if all commands are empty (first run, not yet configured) ──
+ALL_EMPTY=true
+for _cmd in "$SECRET_SCAN_CMD" "$LINT_CMD" "$ARCH_TEST_CMD" "$UNIT_TEST_CMD" "$INTEGRATION_TEST_CMD" "$API_TEST_CMD" "$CONTRACT_TEST_CMD" "$E2E_TEST_CMD"; do
+  if [ -n "$_cmd" ]; then
+    ALL_EMPTY=false
+    break
+  fi
+done
+if $ALL_EMPTY; then
+  echo -e "${RED}FATAL: All commands are empty. ci-local.sh has not been configured.${NC}"
+  echo "Edit the COMMANDS section above with your actual test/lint commands."
+  echo "At least UNIT_TEST_CMD should be set."
+  exit 1
+fi
+
 FAST=false
 E2E_ONLY=false
 for arg in "$@"; do

@@ -31,8 +31,8 @@ STEP 1: Run only the test file created in Step 1.
   FLAKY TEST PROTOCOL: follow guides/flaky-test-protocol.md.
     Additional requirement: if a test passes on the first run but you
     suspect timing- or state-dependency, run it 5 times consecutively
-    ([test runner command] --repeat=5). If it fails on any run, treat
-    as flaky. Fix the root cause before marking DONE.
+    (e.g., jest --repeat=5, vitest --repeat=5, or custom loop). If it
+    fails on any run, treat as flaky. Fix the root cause before marking DONE.
 
 STEP 2: Run the full test suite (all tests, not just the new ones):
   For all task types except frontend-feature and e2e:

@@ -23,13 +23,12 @@ applies_to: [backend-api, backend-infra]
      success closes breaker, failure reopens it
   10. Memory under sustained load — heap growth ≤50% of baseline after
       warmup; no unbounded cache growth
-  11. Session fixation — new session created after authentication
-      has a different session ID; session ID is not predictable
-  12. Refresh token replay — consumed refresh token rejected, entire
-      token family invalidated
-  13. Cascading failure — downstream service unavailable, circuit
+  11. Cascading failure — downstream service unavailable, circuit
       breaker prevents cascade, system remains available for
       non-affected endpoints
+
+  NOTE: Session fixation (item 11) and refresh token replay (item 12)
+  are covered by [U] SESSION & TOKEN SECURITY. Do not duplicate checks here.
 
   For each scenario: verify the correct error response is returned
   (not a 500 crash), the error is logged with correct severity,

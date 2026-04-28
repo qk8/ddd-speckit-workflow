@@ -8,8 +8,8 @@ applies_to: all
     1. Search the codebase for property-based tests that assert this invariant.
        Look in test files for patterns like fc.property, fc.assert, property(,
        prop_(, or framework-specific equivalents.
-    2. If found with ≥ [min_generations] generations: print "COVERED: [name] — [file]"
-    3. If found with < [min_generations] generations: print "WEAK: [name] — [N] generations < [min]"
+    2. If found with ≥ 100 generations (default from plan.md §13): print "COVERED: [name] — [file]"
+    3. If found with < 100 generations: print "WEAK: [name] — [N] generations < 100"
     4. If not found: print "MISSING: [name] — add property-based test"
 
   For each MISSING invariant: write the property-based test now.

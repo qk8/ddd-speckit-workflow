@@ -6,6 +6,10 @@ applies_to: all
 [M] FAILURE MODE COVERAGE
   Read plan.md §15 EDGE CASES & FAILURE MODES. For each FAILURE entry:
 
+  Scope: Focus on domain-level failures (business invariants, validation,
+  edge cases in domain logic). Infrastructure failures (DB drops, timeouts,
+  circuit breakers) → see [Q]. Session/token failures → see [U].
+
   1. Search the codebase for handlers/validators related to this failure.
      Look in:
      - Domain classes (invariants that prevent this failure)

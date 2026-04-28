@@ -7,6 +7,7 @@ applies_to: [backend-api, shared]
   Verify all quantitative thresholds from plan.md §13:
     1. coverage_thresholds: Run coverage report. Assert line ≥ [line]%,
        branch ≥ [branch]%, function ≥ [function]%, statement ≥ [statement]%.
+       Defaults (if not specified in plan.md): line=80, branch=80, function=80, statement=80.
        If any below threshold: print "COVERAGE BELOW THRESHOLD — [metric]: [value]% < [threshold]%"
        Do not mark DONE. Write tests for uncovered paths or remove dead code.
     2. type_check_command: Run [type_check_command]. Assert 0 errors.

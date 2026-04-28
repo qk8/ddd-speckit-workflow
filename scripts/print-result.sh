@@ -26,16 +26,24 @@ else
   exit 2
 fi
 
+# Helper: return when sourced, exit when run directly
+_pr_exit() {
+  if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+    return "$1"
+  fi
+  exit "$1"
+}
+
 echo ""
 echo "━━━ Validation Result ━━━"
 if [ "$_e" -gt 0 ]; then
   echo "  $_err_msg"
   echo "  $_fix_msg"
-  exit 1
+  _pr_exit 1
 elif [ "$_w" -gt 0 ] && [ "$_warn_msg" != "none" ]; then
   echo "  $_warn_msg"
-  exit 0
+  _pr_exit 0
 else
   echo "  $_pass_msg"
-  exit 0
+  _pr_exit 0
 fi

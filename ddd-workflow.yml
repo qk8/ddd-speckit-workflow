@@ -7,9 +7,7 @@ workflow:
   description: >
     Full spec-driven development cycle with DDD and Clean Architecture.
     All project context is read from project-brief.md — no CLI duplication.
-    Phases: clarify → spec → plan-full (§1–§16) → plan-artifacts
-    (api-contract.yaml + data-model.sql + interfaces) → plan-devex (§17–§20
-    + DevEx files) → tasks (with integration tasks) → validate dependency graph
+    Phases: clarify → spec → plan (§1–§20) → tasks → validate dependency graph
     → implement loop (batched parallel tasks, all checks via routing table, TDD,
     self-correction inline → adaptive retrospective → code-review
     (security, correctness, performance, maintainability, accessibility)
