@@ -9,7 +9,8 @@ set -euo pipefail
 
 OUTPUT=$(bash scripts/check-tasks.sh 2>/dev/null) || {
   echo "WARNING: check-tasks.sh failed — using safe defaults" >&2
-  cat <<'DEFAULTS'
+  source scripts/cadence-defaults.sh
+  cat <<DEFAULTS
 has_todo=false
 done_count=0
 todo_count=0
@@ -17,8 +18,8 @@ in_progress=
 abandoned_count=0
 total_tasks=0
 complexity=medium
-retro_interval=10
-first_retro_threshold=5
+retro_interval=${CADENCE_RETRO_INTERVAL_MEDIUM}
+first_retro_threshold=${CADENCE_FIRST_RETRO_THRESHOLD}
 retro_trigger=false
 feature_dir=
 DEFAULTS
