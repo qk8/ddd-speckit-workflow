@@ -28,11 +28,14 @@ applies_to: [backend-api, shared]
      - Empty array [] where non-empty array expected → typed validation error
      - Error must name the specific invalid parameter (not generic TypeError)
 
-  4. Idempotency:
+  4. Idempotency (only for endpoints with idempotent: yes in plan.md §8):
      - Same request sent twice with identical body → exactly one side-effect
      - Duplicate payment/order/notification → exactly one record created
      - Second call returns same success response (not error, not duplicate)
      - Idempotency key has unique database index
+     Note: Read plan.md §8 endpoint definitions. Only apply idempotency checks
+     to endpoints explicitly marked with `idempotent: yes`. Skip idempotency
+     checks for POST/PUT endpoints that are inherently non-idempotent.
 
   For each scenario: verify the correct response is returned
   (400/413 for validation errors, not 500 crash).

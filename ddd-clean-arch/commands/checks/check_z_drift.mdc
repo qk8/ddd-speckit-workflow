@@ -3,40 +3,28 @@ check_id: Z
 name: "Constraint Drift Detection"
 applies_to: all
 ---
-[Z] CONSTRAINT DRIFT DETECTION
+[Z] CONSTRAINT DRIFT DETECTION — compare implementation against CLAUDE.md §16
 
-TWO MODES:
-  QUICK CHECK — runs at every task boundary (via scripts/quick-drift-check.sh)
-    Lightweight scan of only the files modified in THIS task for:
-      1. Layer rule violations — domain layer importing from delivery/infrastructure
-      2. Missing correlation ID — any API response without correlation_id field
-      3. Test data isolation — hand-constructed domain objects in test files
+Read CLAUDE.md "## What NOT to do" section (the 10 constraints from plan.md §16).
+For each constraint, verify that the files created or modified in this task
+do NOT violate it.
 
-    Print: "QUICK DRIFT CHECK: [N] files scanned, [N] violations, [PASS/FAIL]"
-    If FAIL: fix immediately. Do not proceed to completion report.
+For each constraint:
+  - PASS: no violation found in the files touched by this task
+  - FAIL: violation found — describe the violation with file:line references
+  - N/A: constraint is not applicable to the files touched by this task
 
-  FULL CHECK — runs at retro intervals only (triggered by workflow drift_check step)
-    Compare implementation against CLAUDE.md §16 constraints.
-    Read CLAUDE.md "## What NOT to do" section (the 10 constraints from plan.md §16).
-    For each constraint, verify that the files created or modified in this task
-    do NOT violate it.
+Common drift patterns to check:
+  1. Layer rule violations: did the implementation call a lower-layer class
+     directly from a higher-layer module? (e.g., domain → delivery)
+  2. Naming drift: did the implementation use names that contradict the
+     ubiquitous language from plan.md §2?
+  3. Missing correlation ID: did the implementation omit the correlation ID
+     header in API responses?
+  4. Test data isolation: are domain objects constructed by hand instead of
+     using factory functions from plan.md §13?
 
-    For each constraint:
-      - PASS: no violation found in the files touched by this task
-      - FAIL: violation found — describe the violation with file:line references
-      - N/A: constraint is not applicable to the files touched by this task
+For each FAIL: fix the violation immediately. Do not proceed until all
+constraints are PASS or N/A.
 
-    Common drift patterns to check:
-      1. Layer rule violations: did the implementation call a lower-layer class
-         directly from a higher-layer module? (e.g., domain → delivery)
-      2. Naming drift: did the implementation use names that contradict the
-         ubiquitous language from plan.md §2?
-      3. Missing correlation ID: did the implementation omit the correlation ID
-         header in API responses?
-      4. Test data isolation: are domain objects constructed by hand instead of
-         using factory functions from plan.md §13?
-
-    For each FAIL: fix the violation immediately. Do not proceed until all
-    constraints are PASS or N/A.
-
-    Print: "DRIFT CHECK: [N] constraints checked, [N] PASS, [N] FAIL, [N] N/A"
+Print: "DRIFT CHECK: [N] constraints checked, [N] PASS, [N] FAIL, [N] N/A"

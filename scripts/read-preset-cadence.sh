@@ -6,7 +6,7 @@
 # Usage: bash scripts/read-preset-cadence.sh <key> [preset_path]
 # Keys: simple, medium, complex, first_retro_threshold
 
-PRESET_FILE="${3:-ddd-clean-arch/preset.yml}"
+PRESET_FILE="${2:-ddd-clean-arch/preset.yml}"
 KEY="${1:-medium}"
 
 if [ ! -f "$PRESET_FILE" ]; then

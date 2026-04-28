@@ -1,6 +1,7 @@
 # Minimal check configuration — extracted from preset.yml for context efficiency.
-# Only checks[].applies_to and routing[] are needed by speckit.check.
-# Source of truth: preset.yml. Sync with: scripts/derive-routing.sh
+# Only checks[].applies_to is needed by speckit.check.
+# Routing table: derived from checks[].applies_to by scripts/derive-routing.sh.
+# Source of truth: preset.yml routing section.
 # Drift detection: scripts/validate-routing-table.sh preset-checks.yml
 
 # Quality checks: each check declares which task types it applies to.
@@ -68,16 +69,3 @@ checks:
   Z:
     name: "Constraint Drift Detection"
     applies_to: all
-
-# Derived routing table — auto-derived from checks[].applies_to.
-# Regenerate with: scripts/derive-routing.sh
-# Drift from derived values is flagged by: scripts/validate-routing-table.sh
-routing:
-  backend-domain:   [A, BC, D, E, I, L, M, P, S, Z]
-  backend-infra:    [A, BC, D, E, F, I, L, M, O, P, Q, S, Z]
-  backend-api:      [A, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z]
-  shared:           [BC, D, E, I, K, L, M, N, P, R, S, T, Z]
-  integration:      [BC, D, I, L, M, P, S, Z]
-  frontend-data:    [BC, D, G, I, L, M, O, P, S, Z]
-  frontend-feature: [BC, D, H, I, J, L, M, O, P, S, Z]
-  e2e:              [BC, D, H, I, L, M, P, S, Z]

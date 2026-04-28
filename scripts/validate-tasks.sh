@@ -66,7 +66,7 @@ while IFS= read -r line; do
     done
     # Update last line in task_deps_file for current_id (portable, no sed -i)
     {
-      grep -v "^${current_id}|" "$TASK_DEPS_FILE" || true
+      awk -F'|' -v id="$current_id" '$1 != id' "$TASK_DEPS_FILE" || true
       echo "${current_id}|${normalized}"
     } > "$TMP_DIR/deps_tmp"
     mv "$TMP_DIR/deps_tmp" "$TASK_DEPS_FILE"
@@ -85,13 +85,13 @@ echo ""
 
 # ── Helper: look up deps for a task ID ──────────────────────────
 get_deps() {
-  grep "^${1}|" "$TASK_DEPS_FILE" | head -1 | cut -d'|' -f2-
+  awk -F'|' -v id="$1" '$1 == id {print $2; exit}' "$TASK_DEPS_FILE"
 }
 
 # ── Helper: look up visit state for a task ID ───────────────────
 get_state() {
   local state
-  state=$(grep "^${1}|" "$VISIT_STATE_FILE" | head -1 | cut -d'|' -f2-)
+  state=$(awk -F'|' -v id="$1" '$1 == id {print $2; exit}' "$VISIT_STATE_FILE")
   echo "${state:-$VISIT_UNVISITED}"
 }
 
@@ -99,7 +99,7 @@ get_state() {
 set_state() {
   if grep -q "^${1}|" "$VISIT_STATE_FILE" 2>/dev/null; then
     {
-      grep -v "^${1}|" "$VISIT_STATE_FILE" || true
+      awk -F'|' -v id="$1" '$1 != id' "$VISIT_STATE_FILE" || true
       echo "${1}|${2}"
     } > "$TMP_DIR/state_tmp"
     mv "$TMP_DIR/state_tmp" "$VISIT_STATE_FILE"

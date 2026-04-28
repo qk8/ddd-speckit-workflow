@@ -33,7 +33,7 @@ REVISION HISTORY:
   If .specify/specs/[feature]/revision_history.md exists, read it.
   This file contains summaries of previous revision attempts from
   prior revise cycles. Do not repeat fixes that were already tried
-  and rejected. Reference the most recent 3 revisions when producing changes.
+  and rejected. Read the last 3 entries only. Do not attempt to read the entire file.
 
 ━━ TASK PLAN ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Task: TASK-[N] — [title]

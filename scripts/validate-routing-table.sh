@@ -107,24 +107,24 @@ if [ "$DRIFT_RC" -ne 0 ]; then
   ERRORS=$((ERRORS + 1))
 fi
 
-# Cross-check: preset-checks.yml vs preset.yml (checks + routing must match)
+# Cross-check: preset-checks.yml vs preset.yml (checks must match)
+# Note: routing: section is removed from preset-checks.yml (D4 fix).
+# Only checks: section is compared; routing is derived from checks[].applies_to.
 PRESET_DIR=$(dirname "$PRESET_FILE")
 PRESET_MAIN="$PRESET_DIR/preset.yml"
 if [ -f "$PRESET_MAIN" ]; then
+  # Extract check IDs from checks: section, normalized and sorted
+  EXTRACT_CHECK_IDS() {
+    awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$1" | sort -u
+  }
   CHECKS_FILE="$TMP_DIR/checks_preset.txt"
   CHECKS_MAIN_FILE="$TMP_DIR/checks_main.txt"
-  awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d' > "$CHECKS_FILE"
-  awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d' > "$CHECKS_MAIN_FILE"
+  EXTRACT_CHECK_IDS "$PRESET_FILE" > "$CHECKS_FILE"
+  EXTRACT_CHECK_IDS "$PRESET_MAIN" > "$CHECKS_MAIN_FILE"
   CHECKS_DIFF=$(diff "$CHECKS_FILE" "$CHECKS_MAIN_FILE") || true
-  ROUTING_FILE="$TMP_DIR/routing_preset.txt"
-  ROUTING_MAIN_FILE="$TMP_DIR/routing_main.txt"
-  awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d' > "$ROUTING_FILE"
-  awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d' > "$ROUTING_MAIN_FILE"
-  ROUTING_DIFF=$(diff "$ROUTING_FILE" "$ROUTING_MAIN_FILE") || true
-  if [ -n "$CHECKS_DIFF" ] || [ -n "$ROUTING_DIFF" ]; then
+  if [ -n "$CHECKS_DIFF" ]; then
     echo "DRIFT: preset-checks.yml diverges from preset.yml"
-    [ -n "$CHECKS_DIFF" ] && echo "$CHECKS_DIFF" | sed 's/^/  checks: /'
-    [ -n "$ROUTING_DIFF" ] && echo "$ROUTING_DIFF" | sed 's/^/  routing: /'
+    echo "$CHECKS_DIFF" | sed 's/^/  checks: /'
     ERRORS=$((ERRORS + 1))
   fi
 fi
