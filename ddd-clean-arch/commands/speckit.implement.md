@@ -186,6 +186,11 @@ If any check FAILS:
 
 A task cannot be marked DONE until every applicable check passes.
 
+GLOBAL ITERATION CAP:
+  Across all loops (correction, check-fix, regression), after 5 total
+  correction iterations, STOP and escalate to human review.
+  Print: "MAX CORRECTION ITERATIONS (5) REACHED — escalating to human review."
+
 ─────────────────────────────────────────
 STEP 4 — COMPLETION REPORT
 ─────────────────────────────────────────

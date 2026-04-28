@@ -67,9 +67,9 @@ steps:
     message: |
       Review the project-brief.md summary above.
       Does it correctly reflect your project?
-      If anything is wrong, edit project-brief.md and restart the workflow.
-    options: [approve, restart]
-    on_restart: abort
+      If anything is wrong, edit project-brief.md and abort the workflow.
+    options: [approve, abort]
+    on_abort: abort
 
   # ── PHASE 1: CLARIFY (bounded) ──────────────────────────────────
   - id: clarify_round
@@ -691,9 +691,11 @@ steps:
           if [ "$FAIL_COUNT" -gt 0 ]; then
             echo "FAIL: $FAIL_COUNT constraint violation(s) detected" >&2
             grep "FAIL" "$REPORT" >&2
-            exit 1
+            echo "DRIFT_DETECTED=true"
+          else
+            echo "PASS: All constraints satisfied"
           fi
-          echo "PASS: All constraints satisfied"
+          # Always exit 0 — drift_check_review gate handles the decision
 
       - id: drift_check_review
         type: gate

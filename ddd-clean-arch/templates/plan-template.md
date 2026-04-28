@@ -356,15 +356,14 @@ async_processing:
 
 error_philosophy: fail_fast | graceful_degradation | mixed
 circuit_breakers:
-  - dependency:
-    threshold:
-    fallback:
+  - dependency: [name]
+    threshold: [e.g., 5 failures / 10s]
+    fallback: [e.g., cached response, default value]
 
 structured_logging:
   format: JSON
-  levels_used:
-  request_correlation:
-  pii_fields_excluded:
+  request_correlation: [mechanism — must match §8]
+  pii_fields_excluded: [field names]
 
 metrics:
   healthy_system_definition:
@@ -380,26 +379,15 @@ alerting:
 
 health_checks:
   liveness:
-    path:
-    checks:  # must not check external deps
+    path: /healthz
+    checks: [internal only]
   readiness:
-    path:
-    checks:  # database, required external deps
-
-graceful_shutdown:
-  in_flight_requests:
-  background_jobs:
-  connection_draining:
+    path: /readyz
+    checks: [database, required external deps]
 
 frontend_observability:
-  error_tracking_tool:
-  metadata_attached_to_errors:
-    - [field — no PII]
-  performance_monitoring:
-  cross_stack_correlation:
-    mechanism: correlation ID from §8 read from API response header
-      and attached to every frontend error report
-    implementation_layer: frontend data layer
+  error_tracking_tool: [Sentry | other]
+  cross_stack_correlation: correlation ID from §8 attached to error reports
 
 ─────────────────────────────────
 §12 DATA DESIGN
@@ -675,57 +663,26 @@ contract_change_detection:
   failure_action:
 
 frontend_architecture:
-  layers:
-    ui:
-      allowed: [pure presentational components, typed props]
-      forbidden: [data fetching, global state access, business logic]
-      violation_detection:
-    feature:
-      allowed: [compose UI components, local state, call data layer]
-      forbidden: [direct API calls, business logic]
-      violation_detection:
-    data:
-      allowed: [all API communication, caching, data synchronization]
-      forbidden: [rendering, local UI state]
-      is_sole_consumer_of_api_contract: yes
-    shared_core:
-      allowed: [design system components, utilities, constants, cross-feature types]
-      forbidden: [feature-specific logic]
+  layers: [ui → feature → data → shared_core]
+  data_layer: sole consumer of api-contract.yaml (§8)
+  state_rule: if it can be local, it must be local
 
 state_management:
-  server_state_tool:
-  server_state_rationale:
-  client_state_tool:
-  client_state_rule: if it can be local, it must be local
-  cache_invalidation_alignment:
-    rule: frontend cache invalidation must be consistent with
-      cache-control and ETag values in §8
-    mechanism:
+  server_state_tool: [tanstack-query | swr | other]
+  client_state_tool: [zustand | jotai | none]
+  cache_invalidation: consistent with cache-control in §8
 
-form_validation_alignment:
-  strategy: generated_from_schema | shared_library | separate_with_review
-  rationale:
-  drift_detection:
+form_validation_alignment: generated_from_schema | shared_library
 
-frontend_auth_flow:
-  # Must be consistent with token_delivery in §8
-  token_storage:
-  auth_state_contents:
-  refresh_mechanism:
-  revocation_trigger:
+frontend_auth_flow: consistent with token_delivery in §8
+  token_storage: httpOnly cookie | localStorage (if no XSS risk)
 
-component_library:
-  choice: third_party | headless_primitives | custom
-  name:
-  rationale:
+component_library: third_party | headless_primitives | custom
 
 local_dev_setup:
   new_engineer_target_minutes: 15
   steps:
     - [step]
-  environment_variables:
-    committed: .env.example with all keys, no values
-    gitignored: .env.local
 
 ci_local_script: scripts/ci-local.sh
 # Path to the CI-local script. Populated in Phase 3C.
@@ -780,39 +737,22 @@ A feature is complete when:
 §18 SELF-CRITIQUE
 ─────────────────────────────────
 
-# The 3 weakest points. Do not soften.
+# 3 weakest points. Do not soften.
 
 WEAK_POINT: [name]
-  problem:
-  reason_accepted:
-  if_load_20x:
-  if_second_team:
-  if_key_dependency_lost:
-  early_warning_signs:
+  problem: [one line]
+  if_load_20x: [impact]
+  if_second_team: [impact]
 
 ─────────────────────────────────
 §19 ADR LOG
 ─────────────────────────────────
 
-# NOTE: For a living decision log (logged during implementation),
-# see DECISION_LOG.md. This section is for high-level architectural
-# decisions from the planning phase.
-
-# Only for: aggregate boundaries, locking strategies, tech stack,
-# bounded context patterns, token delivery, CORS, rendering strategy,
-# contract sharing, any irreversible decision.
+# High-level architectural decisions. For living log see DECISION_LOG.md.
 
 ADR-[N]: [title]
-  context:
-  decision:
-  rejected:
-    - option:
-      reason:
-  consequences:
-    easier:
-    harder:
-    irreversible: yes | no
-    reversal_cost:
+  decision: [one line]
+  consequences: easier: [yes] / harder: [yes]
 
 ─────────────────────────────────
 §20 ARCHITECTURAL TEST INVENTORY

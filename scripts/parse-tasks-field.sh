@@ -9,7 +9,7 @@ TASKS_FILE="${1:?Usage: bash scripts/parse-tasks-field.sh <tasks_file> <field_na
 FIELD="${2:?Usage: bash scripts/parse-tasks-field.sh <tasks_file> <field_name>}"
 
 awk -v field="$FIELD" '
-  /^## TASK-/ { task_header = $0; header = 1 }
+  /^## TASK-/ { task_header = $0; header = 1; found = 0 }
   /^Status: DONE/ { found = 1 }
   header && found && $0 ~ "^"field":" {
     val = $0; sub(/^[^:]*: */, "", val)
