@@ -8,6 +8,10 @@
 
 set -euo pipefail
 
+# ── Temp files for bash 3.2 compatibility ───────────────────────
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
 COMPARE_MODE=false
 if [ "${1:-}" = "--compare" ]; then
   COMPARE_MODE=true
@@ -46,13 +50,15 @@ format_routing() {
   local outf="${2:-}"
   for t in "${TYPES[@]}"; do
     local result=""
+    local _derive_tmp="$TMP_DIR/derive_tmp.txt"
+    derive_checks_for_type "$t" "$1" > "$_derive_tmp"
     while IFS= read -r check_id; do
       if [ -z "$result" ]; then
         result="[$check_id"
       else
         result="$result, $check_id"
       fi
-    done < <(derive_checks_for_type "$t" "$1")
+    done < "$_derive_tmp"
 
     if [ -z "$result" ]; then
       result="[]"
@@ -69,15 +75,12 @@ format_routing() {
 
 # --compare mode: derive routing and compare against manual routing in preset.yml
 if [ "$COMPARE_MODE" = true ]; then
-  DERIVED_FILE=$(mktemp)
-  trap "rm -f '$DERIVED_FILE'" EXIT
-
+  DERIVED_FILE="$TMP_DIR/derived.txt"
   : > "$DERIVED_FILE"
   format_routing "$PRESET_FILE" "$DERIVED_FILE"
 
   # Extract manual routing entries from preset.yml (only lines matching routing entries)
-  MANUAL_FILE=$(mktemp)
-  trap "rm -f '$DERIVED_FILE' '$MANUAL_FILE'" EXIT
+  MANUAL_FILE="$TMP_DIR/manual.txt"
 
   awk '/^routing:/{found=1; next} found && /^[a-z_]+:/{found=0} found && /^[[:space:]]+[a-z0-9-]+:.*\[/{print}' "$PRESET_FILE" > "$MANUAL_FILE"
 

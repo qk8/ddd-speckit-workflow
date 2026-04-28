@@ -12,6 +12,12 @@
 
 set -euo pipefail
 
+# ── Temp files for bash 3.2 compatibility ───────────────────────
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+CODE_ENDPOINTS_FILE="$TMP_DIR/code_endpoints.txt"
+touch "$CODE_ENDPOINTS_FILE"
+
 # ── YAML indentation levels for OpenAPI paths section parser ────
 INDENT_PATH=2
 INDENT_METHOD=4
@@ -131,8 +137,6 @@ echo ""
 # TypeScript: app.get, app.post, app.put, app.delete, app.patch
 # Python: @app.route, @router.get, @router.post, etc.
 
-declare -A CODE_ENDPOINTS
-
 SEARCH_PATTERNS=(
   # Java annotations
   '@RequestMapping'
@@ -178,7 +182,8 @@ if [ ${#SEARCH_DIRS[@]} -gt 0 ]; then
           elif echo "$pattern" | grep -qi "patch"; then method="patch"
           elif echo "$pattern" | grep -qi "requestmapping"; then method="any"
           fi
-          CODE_ENDPOINTS["${method^^}|${path}"]=1
+          # Store as METHOD|PATH per line (bash 3.2 compatible)
+          echo "${method^^}|${path}" >> "$CODE_ENDPOINTS_FILE"
         fi
       done <<< "$matches"
     fi
@@ -200,7 +205,9 @@ for endpoint in "${ENDPOINTS[@]}"; do
     found=true
   fi
 
-  if ! $found; then
+  # Check if this endpoint exists in code (bash 3.2 compatible lookup)
+  if ! grep -qxF "${method,,}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null && \
+     ! grep -qxF "${method^^}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null; then
     echo "  DRIFT: ${method^^} $path — defined in contract but not found in codebase."
     ERRORS=$((ERRORS + 1))
   fi

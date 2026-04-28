@@ -16,10 +16,11 @@ set -euo pipefail
 
 # Bash 3.2-compatible array reader.
 # Uses temp file + eval instead of namerefs (bash 4.3+) to support macOS default bash 3.2.
-# Usage: read_from_input VARNAME <<< "$(command)"
+# Usage: read_from_input VARNAME < input_file
+# Writes result to a global temp file; caller reads via read_array.
 read_from_input() {
   local _tmpfile
-  _tmpfile=$(mktemp)
+  _tmpfile=$(mktemp -p "$TMP_DIR")
   cat > "$_tmpfile"
   local _arr=()
   while IFS= read -r line; do
@@ -29,6 +30,10 @@ read_from_input() {
   # Write result back using eval (bash 3.2 compatible)
   eval "$1=(\"\${_arr[@]}\")"
 }
+
+# ── Temp files for bash 3.2 compatibility ───────────────────────
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 FIX_MODE=false
 CROSS_CHECK=false
@@ -48,13 +53,19 @@ CHECKS_DIR="$PRESET_DIR/commands/checks"
 ERRORS=0
 
 # Parse check IDs from checks: section (indented: "  A:" or "  BC:")
-read_from_input CHECK_IDS < <(awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE")
+CHECK_IDS_TMP="$TMP_DIR/check_ids.txt"
+awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE" > "$CHECK_IDS_TMP"
+read_from_input CHECK_IDS < "$CHECK_IDS_TMP"
 
 # Parse check IDs from routing: section (indented: "  backend-domain:    [A, B, ...]")
-read_from_input ROUTING_IDS < <(awk '/^routing:/{found=1; next} found && /^[a-z]/{found=0} found && /\[/{gsub(/.*\[/, ""); gsub(/\].*/, ""); gsub(/ /, ""); n=split($0, a, ","); for(i=1;i<=n;i++) print a[i]}' "$PRESET_FILE")
+ROUTING_IDS_TMP="$TMP_DIR/routing_ids.txt"
+awk '/^routing:/{found=1; next} found && /^[a-z]/{found=0} found && /\[/{gsub(/.*\[/, ""); gsub(/\].*/, ""); gsub(/ /, ""); n=split($0, a, ","); for(i=1;i<=n;i++) print a[i]}' "$PRESET_FILE" > "$ROUTING_IDS_TMP"
+read_from_input ROUTING_IDS < "$ROUTING_IDS_TMP"
 
 # Deduplicate routing IDs
-read_from_input UNIQUE_ROUTING_IDS < <(printf '%s\n' "${ROUTING_IDS[@]}" | sort -u)
+UNIQUE_ROUTING_IDS_TMP="$TMP_DIR/unique_routing_ids.txt"
+printf '%s\n' "${ROUTING_IDS[@]}" | sort -u > "$UNIQUE_ROUTING_IDS_TMP"
+read_from_input UNIQUE_ROUTING_IDS < "$UNIQUE_ROUTING_IDS_TMP"
 
 # Check 1: All routing IDs exist in checks section
 for rid in "${UNIQUE_ROUTING_IDS[@]}"; do
@@ -100,10 +111,16 @@ fi
 PRESET_DIR=$(dirname "$PRESET_FILE")
 PRESET_MAIN="$PRESET_DIR/preset.yml"
 if [ -f "$PRESET_MAIN" ]; then
-  CHECKS_DIFF=$(diff <(awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d') \
-                     <(awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d')) || true
-  ROUTING_DIFF=$(diff <(awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d') \
-                      <(awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d')) || true
+  CHECKS_FILE="$TMP_DIR/checks_preset.txt"
+  CHECKS_MAIN_FILE="$TMP_DIR/checks_main.txt"
+  awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d' > "$CHECKS_FILE"
+  awk '/^checks:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d' > "$CHECKS_MAIN_FILE"
+  CHECKS_DIFF=$(diff "$CHECKS_FILE" "$CHECKS_MAIN_FILE") || true
+  ROUTING_FILE="$TMP_DIR/routing_preset.txt"
+  ROUTING_MAIN_FILE="$TMP_DIR/routing_main.txt"
+  awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_FILE" | sed '/^$/d' > "$ROUTING_FILE"
+  awk '/^routing:/{found=1; next} found && /^[^ ]/{found=0} found' "$PRESET_MAIN" | sed '/^$/d' > "$ROUTING_MAIN_FILE"
+  ROUTING_DIFF=$(diff "$ROUTING_FILE" "$ROUTING_MAIN_FILE") || true
   if [ -n "$CHECKS_DIFF" ] || [ -n "$ROUTING_DIFF" ]; then
     echo "DRIFT: preset-checks.yml diverges from preset.yml"
     [ -n "$CHECKS_DIFF" ] && echo "$CHECKS_DIFF" | sed 's/^/  checks: /'

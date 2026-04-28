@@ -13,30 +13,37 @@
 
 set -euo pipefail
 
+# ── Temp files for bash 3.2 compatibility ───────────────────────
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+LABELS_FILE="$TMP_DIR/labels.txt"
+DESCS_FILE="$TMP_DIR/descs.txt"
+touch "$LABELS_FILE" "$DESCS_FILE"
+
 PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 LABELS_FILE="scripts/check-labels.yml"
 bash scripts/require-file.sh "$LABELS_FILE" check-labels.yml
 
-# ── Parse check-labels.yml (nested YAML: ID > label/desc) ─────────────────────
-declare -A LABELS DESCS
+# ── Parse check-labels.yml (nested YAML: ID > label/desc) ──────
+# Bash 3.2 compatible: uses temp files instead of associative arrays
 CURRENT_LABEL=""
 while IFS= read -r line; do
   # Check for check ID line: "A:", "BC:", "Z:" (1-2 uppercase letters at start of line)
-  if [[ "$line" =~ ^([A-Z][A-Z]?):$ ]]; then
-    CURRENT_LABEL="${BASH_REMATCH[1]}"
+  if echo "$line" | grep -qE '^[A-Z][A-Z]?:$'; then
+    CURRENT_LABEL=$(echo "$line" | sed 's/://')
     continue
   fi
   # Check for label/desc under current ID
   if [ -n "$CURRENT_LABEL" ]; then
-    if [[ "$line" =~ label:[[:space:]]+\"(.*)\" ]]; then
-      LABELS["$CURRENT_LABEL"]="${BASH_REMATCH[1]}"
-    elif [[ "$line" =~ desc:[[:space:]]+\"(.*)\" ]]; then
-      DESCS["$CURRENT_LABEL"]="${BASH_REMATCH[1]}"
+    if echo "$line" | grep -qE 'label:[[:space:]]+"'; then
+      echo "${CURRENT_LABEL}|$(echo "$line" | sed 's/.*label:[[:space:]]*"\([^"]*\)".*/\1/')" >> "$LABELS_FILE"
+    elif echo "$line" | grep -qE 'desc:[[:space:]]+"'; then
+      echo "${CURRENT_LABEL}|$(echo "$line" | sed 's/.*desc:[[:space:]]*"\([^"]*\)".*/\1/')" >> "$DESCS_FILE"
     fi
   fi
-done < "$LABELS_FILE"
+done < "scripts/check-labels.yml"
 
 # ── Emit table header ────────────────────────────────────────────────────────
 echo "| Check | What it does | Applies to |"
@@ -56,9 +63,9 @@ while IFS= read -r line; do
   # Detect section boundaries: blank line or comment (only after we've entered checks)
   if [ "$IN_CHECKS" = true ] && ([[ "$line" =~ ^$ ]] || [[ "$line" =~ ^# ]]); then
     # Emit pending check before leaving section
-    if [ -n "$CURRENT_ID" ] && [ -n "${LABELS[$CURRENT_ID]:-}" ] && [ -n "${DESCS[$CURRENT_ID]:-}" ] && [ -n "$_prev_applies" ]; then
-      label="${LABELS[$CURRENT_ID]}"
-      desc="${DESCS[$CURRENT_ID]}"
+    if [ -n "$CURRENT_ID" ] && grep -q "^${CURRENT_ID}|" "$LABELS_FILE" 2>/dev/null && grep -q "^${CURRENT_ID}|" "$DESCS_FILE" 2>/dev/null && [ -n "$_prev_applies" ]; then
+      label=$(grep "^${CURRENT_ID}|" "$LABELS_FILE" | head -1 | cut -d'|' -f2-)
+      desc=$(grep "^${CURRENT_ID}|" "$DESCS_FILE" | head -1 | cut -d'|' -f2-)
       if [ "$_prev_applies" = "all" ]; then
         applies_col="All"
       else
@@ -80,9 +87,9 @@ while IFS= read -r line; do
   # Detect check ID line: "  A:", "  BC:", "  Z:", etc. (1-2 uppercase letters, 2-space indent)
   if [[ "$line" =~ ^[[:space:]]{2}([A-Z][A-Z]?):[[:space:]]*$ ]]; then
     # Emit previous check if complete
-    if [ -n "$CURRENT_ID" ] && [ -n "${LABELS[$CURRENT_ID]:-}" ] && [ -n "${DESCS[$CURRENT_ID]:-}" ] && [ -n "$_prev_applies" ]; then
-      label="${LABELS[$CURRENT_ID]}"
-      desc="${DESCS[$CURRENT_ID]}"
+    if [ -n "$CURRENT_ID" ] && grep -q "^${CURRENT_ID}|" "$LABELS_FILE" 2>/dev/null && grep -q "^${CURRENT_ID}|" "$DESCS_FILE" 2>/dev/null && [ -n "$_prev_applies" ]; then
+      label=$(grep "^${CURRENT_ID}|" "$LABELS_FILE" | head -1 | cut -d'|' -f2-)
+      desc=$(grep "^${CURRENT_ID}|" "$DESCS_FILE" | head -1 | cut -d'|' -f2-)
       if [ "$_prev_applies" = "all" ]; then
         applies_col="All"
       else
