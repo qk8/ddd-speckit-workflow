@@ -7,6 +7,25 @@ applies_to: all
 
 STEP 1: Run only the test file created in Step 1.
   Required: all pass.
+
+  DIAGNOSE FIRST — before fixing anything:
+    Run the test with verbose output (e.g., --verbose, -v, or equivalent).
+    Check for these common test faults:
+      - Hardcoded values: assertion uses a literal number/string instead of a computed value
+      - Empty mocks: mock returns undefined/null/empty array for every call
+      - Wrong target: test asserts on a different method/class than the acceptance criterion
+      - Missing setup: test doesn't initialize required dependencies or fixtures
+      - Flaky timing: test depends on setTimeout, Promise, or async without awaiting
+
+    If ANY test fault is found:
+      Print: "TEST FAULT DETECTED — [fault type]: [details]"
+      Fix the TEST, not the implementation.
+      Re-run step 1.
+
+    If NO test fault is found:
+      Print: "Test fault check passed — fault is in implementation."
+      Proceed to fix the implementation.
+
   If any fail: fix the implementation. Do not weaken the tests to make them pass.
 
   FLAKY TEST PROTOCOL: follow guides/flaky-test-protocol.md.

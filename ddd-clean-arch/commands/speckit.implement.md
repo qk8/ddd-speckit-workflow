@@ -29,6 +29,12 @@ Check all Depends-on tasks. If any is not DONE:
   Print: Run /speckit.status to see what is unblocked.
   Stop.
 
+REVISION HISTORY:
+  If .specify/specs/[feature]/revision_history.md exists, read it.
+  This file contains summaries of previous revision attempts from
+  prior revise cycles. Do not repeat fixes that were already tried
+  and rejected. Reference the most recent 3 revisions when producing changes.
+
 ━━ TASK PLAN ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Task: TASK-[N] — [title]
 Type: [type]
@@ -98,7 +104,41 @@ If any test passes at this stage: STOP.
 A test that passes before implementation exists is testing nothing.
 Rewrite it to fail, then continue.
 
+CAPTURE RED PHASE EVIDENCE:
+  Print the exact test runner output showing the failure.
+  Include the assertion message (e.g., "expected 404 but got 200").
+  This output proves the test fails for the right reason.
+  Do NOT proceed to STEP 2 until this evidence is printed.
+
 Confirm: "Test file: [path] — [N] test cases, all failing. Proceeding."
+
+─────────────────────────────────────────
+STEP 1.5 — TEST AUDIT REPORT
+─────────────────────────────────────────
+Before writing any implementation, audit the tests you just wrote.
+Produce a TEST AUDIT REPORT with these sections:
+
+### Test Name → Acceptance Criterion Mapping
+For each test case:
+  Test: "[test name]"
+  Maps to: "Acceptance criterion #[N] from tasks.md"
+  Proof: "This test verifies [specific behavior] by asserting [specific value/condition]"
+
+### Assertion Quality Check
+For each test, verify:
+  - [ ] No trivial assertions (expect(true), expect(200).toBe(200), expect(x).toEqual(x))
+  - [ ] No empty mocks (jest.fn(), vi.fn() with no return value)
+  - [ ] No over-masking (mocking the layer under test instead of the boundary)
+  - [ ] Each assertion checks a meaningful outcome, not just "no error"
+  If any check fails: rewrite the test assertion. Do not proceed with weak assertions.
+
+### Test Data Verification
+  - [ ] Factory/fixture functions used (not hand-constructed domain objects)
+  - [ ] Each test creates its own data (no shared state between tests)
+  - [ ] Cleanup/teardown present for API and E2E tests
+
+Print: "TEST AUDIT: [N] tests audited, [N] issues fixed, [N] issues flagged for human review."
+Print the full audit report above.
 
 ─────────────────────────────────────────
 STEP 2 — IMPLEMENT

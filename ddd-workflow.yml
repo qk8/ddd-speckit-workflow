@@ -84,6 +84,9 @@ steps:
           args: >
             Read project-brief.md fully.
 
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
             Based on what you read, ask 3-5 targeted clarifying questions.
             Focus only on things that are genuinely ambiguous or missing and that
             would significantly affect architecture decisions.
@@ -136,6 +139,9 @@ steps:
         integration: claude
         input:
           args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
             Read .specify/specs/[feature]/spec.md. Then produce an adversarial
             audit with exactly these sections:
 
@@ -346,6 +352,9 @@ steps:
         integration: claude
         input:
           args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
             Read plan.md, docs/spec/api-contract.yaml, docs/spec/data-model.sql,
             scripts/ci-local.sh, .claude/CLAUDE.md, and .specify/memory/conventions.md.
 
@@ -422,6 +431,9 @@ steps:
         integration: claude
         input:
           args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
             Read plan.md and use ddd-clean-arch/templates/tasks-template.md.
 
             Produce one task per aggregate (domain layer), one per aggregate
@@ -663,6 +675,11 @@ steps:
             Then write a test that simulates this exact scenario.
             If the test fails, fix the implementation and re-test."
 
+      - id: quick_drift_check
+        type: shell
+        command: "bash scripts/quick-drift-check.sh"
+        ignore_failure: true
+
       - id: review-implement
         type: gate
         message: |
@@ -675,16 +692,26 @@ steps:
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
           [ ] Test file committed alongside implementation?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+          [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
+          [ ] Test audit: no trivial assertions or over-masking found?
           [ ] Test correctness: each test name proves its acceptance criterion (not stale or unrelated)?
           [ ] Test correctness: [BC] new tests PASS (not FLAKY) with correct assertions (HTTP status, response shape, field names)?
           [ ] Test correctness: factory/fixture used for test data isolation, no hand-constructed domain objects?
+          [ ] Red phase: failure evidence captured before implementation?
           [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
 
           Approve to continue to the next task.
           Revise to send the task back to implementation for test fixes.
-          Stop to pause the workflow (resume with: specify workflow resume <run-id>)
+          Pause to save state and stop (resume with: specify workflow resume <run-id>
+            or by running: bash scripts/resume-workflow.sh)
         options: [approve, revise, stop]
-        on_stop: abort
+        on_stop:
+          type: shell
+          command: >
+            mkdir -p "{{ steps.check_remaining.output.feature_dir }}" &&
+            echo '{"step": "review-implement", "paused_at": "'$(date -u '+%Y-%m-%dT%H:%M:%SZ')'"}'
+            > "{{ steps.check_remaining.output.feature_dir }}/workflow_state.json" &&
+            echo "Workflow paused at review-implement. Run 'bash scripts/resume-workflow.sh' to continue."
         on_revise:
           goto: implement_one
 
@@ -699,6 +726,9 @@ steps:
         integration: claude
         input:
           args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
             Run the full code review checklist.
             Every item must be PASS, FAIL, or N/A.
             For every FAIL: apply the fix immediately.
