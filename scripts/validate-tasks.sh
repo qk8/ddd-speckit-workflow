@@ -175,7 +175,7 @@ dfs_detect_cycles() {
       if [ "$deps" = "none" ]; then
         # No deps: mark done and pop
         set_state "$current_node" "$VISIT_DONE"
-        sed -i '$ d' "$stack_file"
+        head -n -1 "$stack_file" > "${stack_file}.tmp" && mv "${stack_file}.tmp" "$stack_file"
         continue
       fi
 
@@ -189,7 +189,7 @@ dfs_detect_cycles() {
 
         # Update dep_idx for current node on stack
         local new_idx=$((dep_idx + 1))
-        sed -i '$ d' "$stack_file"
+        head -n -1 "$stack_file" > "${stack_file}.tmp" && mv "${stack_file}.tmp" "$stack_file"
         echo "${current_node}|${new_idx}" >> "$stack_file"
 
         local dep_state
@@ -207,7 +207,7 @@ dfs_detect_cycles() {
       if [ "$has_more_deps" = false ]; then
         # All deps processed: mark done and pop (simulates recursive call exit)
         set_state "$current_node" "$VISIT_DONE"
-        sed -i '$ d' "$stack_file"
+        head -n -1 "$stack_file" > "${stack_file}.tmp" && mv "${stack_file}.tmp" "$stack_file"
       fi
     done
   done < "$TASK_IDS_FILE"
