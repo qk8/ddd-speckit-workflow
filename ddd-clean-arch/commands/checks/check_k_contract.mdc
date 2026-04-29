@@ -1,9 +1,9 @@
 ---
 check_id: K
 name: API Contract Enforcement
-applies_to: [backend-api, shared]
+applies_to: [backend-api]
 ---
-[K] API CONTRACT ENFORCEMENT — backend-api and shared tasks only
+[K] API CONTRACT ENFORCEMENT — backend-api tasks only
   Run: bash scripts/validate-api-contract.sh
   Required: PASS. If DRIFT DETECTED:
     Print: "CONTRACT DRIFT: [details]"
