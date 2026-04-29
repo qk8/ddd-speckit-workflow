@@ -556,6 +556,7 @@ steps:
       - id: validate-tasks
         type: shell
         command: "bash scripts/validate-tasks.sh"
+        ignore_failure: true
 
       - id: review-validate-tasks
         type: gate
@@ -581,7 +582,7 @@ steps:
   # Uses check-tasks-safe.sh which returns safe defaults if tasks.md is malformed.
   - id: implement_loop
     type: while
-    condition: "{{ steps.check_remaining.output.has_todo == 'true' }}"
+    condition: "true"
     max_iterations: 100
     steps:
 
@@ -615,7 +616,7 @@ steps:
               command: >
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
             on_continue:
-              goto: check_abandoned
+              goto: implement_one
             on_abandon:
               type: shell
               command: >
@@ -634,7 +635,15 @@ steps:
               Approve to continue with the next TODO task (ABANDONED tasks are skipped).
             options: [approve, revise]
             on_revise:
-              goto: check_remaining
+              - id: clean-abandoned-tasks
+                type: prompt
+                integration: claude
+                input:
+                  args: >
+                    Read tasks.md. For each ABANDONED task, either delete the
+                    task section or reset its status to TODO. Print a summary
+                    of changes.
+              - goto: check_remaining
 
       - id: should_retrospect
         type: if
@@ -702,7 +711,18 @@ steps:
           Approve to continue. Revise to re-run drift check.
         options: [approve, revise, abort]
         on_revise:
-          goto: run_drift_check
+          - id: trim-revision-history
+            type: shell
+            command: "bash scripts/record-revision.sh --trim 3"
+          - id: add-drift-fix-tasks
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read tasks.md and .artifacts/drift_check_report.md.
+                For each drift issue, add a fix task to tasks.md with clear
+                acceptance criteria. Print the list of added tasks.
+          - goto: run_drift_check
         on_abort: abort
 
       - id: implement_one
@@ -741,6 +761,7 @@ steps:
       - id: quick_drift_check
         type: shell
         command: "bash scripts/quick-drift-check.sh"
+        ignore_failure: true
 
       - id: review-implement
         type: gate
@@ -823,6 +844,14 @@ steps:
               bash scripts/record-revision.sh code_review_round
               "{{ steps.code_review_round_iteration.output.count || 1 }}"
               "Code review revision round {{ steps.code_review_round_iteration.output.count || 1 }}"
+          - id: plan-code-review-fixes
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read REVIEW_REPORT.md and tasks.md. For every FAIL item, add a
+                specific fix task to tasks.md with clear acceptance criteria.
+                Print the list of added tasks.
           - goto: code_review
         on_abort: abort
 
