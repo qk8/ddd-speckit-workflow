@@ -52,6 +52,7 @@ echo "|-------|-------------|-----------|"
 # ── Parse preset.yml checks section ──────────────────────────────────────────
 IN_CHECKS=false
 CURRENT_ID=""
+CHECKS_HAS_ENTRIES=false
 
 while IFS= read -r line; do
   # Detect start of checks section (must come BEFORE section boundary check)
@@ -99,6 +100,7 @@ while IFS= read -r line; do
     fi
     CURRENT_ID="${BASH_REMATCH[1]}"
     _prev_applies=""
+    CHECKS_HAS_ENTRIES=true
     continue
   fi
 
@@ -121,4 +123,11 @@ if [ -n "$CURRENT_ID" ] && grep -q "^${CURRENT_ID}|" "$LABELS_FILE" 2>/dev/null 
     applies_col=$(echo "$_prev_applies" | sed 's/,/, /g')
   fi
   echo "| [$CURRENT_ID] $label | $desc | $applies_col |"
+fi
+
+# Guard: checks: section detected but contained no check entries
+if [ "$IN_CHECKS" = true ] && [ "$CHECKS_HAS_ENTRIES" = false ]; then
+  echo "ERROR: 'checks:' section found in $PRESET_FILE but contains no check entries." >&2
+  echo "       A blank line or comment immediately follows 'checks:' — the parser exits." >&2
+  exit 1
 fi
