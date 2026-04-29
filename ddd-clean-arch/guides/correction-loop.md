@@ -68,6 +68,8 @@ Attempt 3:
        - failing_tests (name, file, error, T/I/E/R category)
        - correction_attempts (hypothesis, fix, files, result)
        - root_cause_hypothesis, recommended_human_action
-  2. Update tasks.md: Status: ABANDONED, Abandoned at: speckit.implement
+  2. Update tasks.md:
+       Status: ABANDONED
+       Abandoned at: speckit.implement
   3. Print: "ESCALATION: 3 correction attempts exhausted. See FAILURE_REPORT.md"
   4. Halt. Do NOT proceed to next step.
