@@ -183,7 +183,7 @@ if [ ${#SEARCH_DIRS[@]} -gt 0 ]; then
           elif echo "$pattern" | grep -qi "requestmapping"; then method="any"
           fi
           # Store as METHOD|PATH per line (bash 3.2 compatible)
-          echo "${method^^}|${path}" >> "$CODE_ENDPOINTS_FILE"
+          echo "${method}|${path}" >> "$CODE_ENDPOINTS_FILE"
         fi
       done <<< "$matches"
     fi
@@ -195,7 +195,7 @@ for endpoint in "${ENDPOINTS[@]}"; do
   IFS='|' read -r method path codes <<< "$endpoint"
 
   # Check if this endpoint exists in code (bash 3.2 compatible)
-  # CODE_ENDPOINTS_FILE stores METHOD|PATH in uppercase
+  # CODE_ENDPOINTS_FILE stores method|PATH in lowercase (matching ENDPOINTS)
   if ! grep -qxF "${method}|${path}" "$CODE_ENDPOINTS_FILE" 2>/dev/null; then
     echo "  DRIFT: ${method} $path — defined in contract but not found in codebase."
     ERRORS=$((ERRORS + 1))
