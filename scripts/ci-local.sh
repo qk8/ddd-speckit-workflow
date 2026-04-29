@@ -143,14 +143,14 @@ print_summary() {
 }
 
 if $E2E_ONLY; then
-  run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD"
+  run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD" || true
 else
   for i in "${!STAGE_NAMES[@]}"; do
     run_stage "$((i+1))" "${STAGE_NAMES[$i]}" "${STAGE_CMDS[$i]}" || true
   done
 
   if ! $FAST; then
-    run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD"
+    run_stage $((TOTAL_STAGES + 1)) "E2E tests (headless)" "$E2E_TEST_CMD" || true
   else
     echo ""
     echo -e "${YELLOW}[$((TOTAL_STAGES + 1))] E2E tests — SKIPPED (--fast mode)${NC}"
