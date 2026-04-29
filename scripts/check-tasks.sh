@@ -38,14 +38,24 @@ TASKS_FILE="$SANITIZED_FILE"
 
 DONE_COUNT=$(grep -c "^Status: DONE$" "$TASKS_FILE" || true)
 TODO_COUNT=$(grep -c "^Status: TODO$" "$TASKS_FILE" || true)
-IN_PROGRESS=$(grep -B1 "^Status: IN_PROGRESS$" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | head -1 | sed 's/^## //' || true)
+# Report ALL IN_PROGRESS tasks (comma-separated), not just the first one.
+# Multiple IN_PROGRESS tasks indicate workflow corruption (concurrent sessions).
+IN_PROGRESS_ALL=$(grep -B1 "^Status: IN_PROGRESS$" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | sed 's/^## //' | tr '\n' ',' | sed 's/,$//' || true)
+# Keep IN_PROGRESS as first one for backward compatibility with workflow conditions
+IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
 ABANDONED_COUNT=$(grep -c "^Status: ABANDONED$" "$TASKS_FILE" || true)
 TOTAL_TASKS=$(grep -c "^## TASK-" "$TASKS_FILE" || true)
 
-if [ -n "$IN_PROGRESS" ]; then
-  echo "WARNING: Status: IN_PROGRESS found — previous session interrupted." >&2
-  echo "  Task: $IN_PROGRESS" >&2
-  echo "  Mark it TODO to restart, or ABANDONED to discard partial work." >&2
+if [ -n "$IN_PROGRESS_ALL" ]; then
+  if echo "$IN_PROGRESS_ALL" | grep -q ','; then
+    echo "WARNING: Multiple IN_PROGRESS tasks detected — workflow state may be corrupted." >&2
+    echo "  Tasks: $IN_PROGRESS_ALL" >&2
+    echo "  Only the first task is active. Reset others to TODO or ABANDONED." >&2
+  else
+    echo "WARNING: Status: IN_PROGRESS found — previous session interrupted." >&2
+    echo "  Task: $IN_PROGRESS" >&2
+    echo "  Mark it TODO to restart, or ABANDONED to discard partial work." >&2
+  fi
 fi
 
 if [ "$ABANDONED_COUNT" -gt 0 ]; then
@@ -101,6 +111,7 @@ echo "has_todo=$HAS_TODO"
 echo "done_count=$DONE_COUNT"
 echo "todo_count=$TODO_COUNT"
 echo "in_progress=$IN_PROGRESS"
+echo "in_progress_all=$IN_PROGRESS_ALL"
 echo "abandoned_count=$ABANDONED_COUNT"
 echo "total_tasks=$TOTAL_TASKS"
 echo "complexity=$COMPLEXITY"

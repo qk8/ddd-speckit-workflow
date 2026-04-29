@@ -11,9 +11,21 @@ FIELD="${2:?Usage: bash scripts/parse-tasks-field.sh <tasks_file> <field_name>}"
 awk -v field="$FIELD" '
   BEGIN {
     # Escape regex metacharacters in field name
+    # Order matters: backslash first, then others
     escaped = field
     gsub(/\\/, "\\\\", escaped)   # backslash first
-    gsub(/[.[\]*+?(){}|^$]/, "\\\\&", escaped)
+    gsub(/\./, "\\.", escaped)    # dot
+    gsub(/\*/, "\\*", escaped)    # star
+    gsub(/\+/, "\\+", escaped)    # plus
+    gsub(/\?/, "\\?", escaped)    # question
+    gsub(/\(/, "\\(", escaped)    # open paren
+    gsub(/\)/, "\\)", escaped)    # close paren
+    gsub(/\{/, "\\{", escaped)    # open brace
+    gsub(/\}/, "\\}", escaped)    # close brace
+    gsub(/\^/, "\\^", escaped)    # caret
+    gsub(/\$/, "\\$", escaped)    # dollar
+    gsub(/\[/, "\\[", escaped)    # open bracket
+    gsub(/\]/, "\\]", escaped)    # close bracket
   }
   /^## TASK-/ { task_header = $0; header = 1; found = 0 }
   /^Status: DONE/ { found = 1 }

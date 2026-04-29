@@ -50,6 +50,17 @@ if $ALL_EMPTY; then
   exit 1
 fi
 
+# Check that critical commands are individually configured
+CRITICAL_MISSING=()
+if [ -z "$UNIT_TEST_CMD" ]; then CRITICAL_MISSING+=("UNIT_TEST_CMD"); fi
+if [ -z "$INTEGRATION_TEST_CMD" ] && [ -z "$E2E_TEST_CMD" ]; then CRITICAL_MISSING+=("INTEGRATION_TEST_CMD or E2E_TEST_CMD"); fi
+if [ -z "$LINT_CMD" ]; then CRITICAL_MISSING+=("LINT_CMD"); fi
+
+if [ ${#CRITICAL_MISSING[@]} -gt 0 ]; then
+  echo -e "${YELLOW}WARNING: Critical commands not configured: ${CRITICAL_MISSING[*]}${NC}"
+  echo "These stages will be skipped. Configure them in ci-local.sh COMMANDS section."
+fi
+
 FAST=false
 E2E_ONLY=false
 for arg in "$@"; do

@@ -87,13 +87,17 @@ check_test_data_isolation() {
 # ── Scan modified files ────────────────────────────────────────
 _COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
 if [ "$_COMMIT_COUNT" -lt 1 ]; then
-  echo "QUICK DRIFT CHECK: SKIPPED — no commits yet (first commit)."
-  echo "Run this after the first commit."
-  exit 0
-fi
-MODIFIED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || true)
-if [ -z "$MODIFIED_FILES" ]; then
-  MODIFIED_FILES=$(find "$FEATURE_DIR" -name '*.java' -o -name '*.ts' -o -name '*.js' -o -name '*.py' 2>/dev/null || true)
+  # First commit: scan uncommitted changes instead of skipping
+  MODIFIED_FILES=$(git diff --name-only --cached 2>/dev/null || true)
+  if [ -z "$MODIFIED_FILES" ]; then
+    # No staged changes — scan all tracked source files
+    MODIFIED_FILES=$(find . -name '*.java' -o -name '*.ts' -o -name '*.js' -o -name '*.py' 2>/dev/null | head -100 || true)
+  fi
+else
+  MODIFIED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || true)
+  if [ -z "$MODIFIED_FILES" ]; then
+    MODIFIED_FILES=$(find "$FEATURE_DIR" -name '*.java' -o -name '*.ts' -o -name '*.js' -o -name '*.py' 2>/dev/null || true)
+  fi
 fi
 
 if [ -z "$MODIFIED_FILES" ]; then

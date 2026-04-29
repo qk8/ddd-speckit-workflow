@@ -599,6 +599,87 @@ steps:
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
 
+      - id: check_parse_error
+        type: if
+        condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
+        then:
+          - id: parse_error_gate
+            type: gate
+            message: |
+              ⚠ Task tracking is BROKEN — check-tasks.sh failed to parse tasks.md.
+
+              The workflow cannot safely determine task state.
+              Manual inspection of tasks.md is required before continuing.
+
+              Options:
+                fix — Edit tasks.md to fix formatting, then restart the workflow.
+                skip — Proceed anyway (not recommended — task tracking will be unreliable).
+                abort — Cancel the workflow.
+            options: [fix, skip, abort]
+            on_skip:
+              type: shell
+              command: echo "TASKS_PARSE_ERROR=0"
+            on_abort: abort
+
+      - id: stagnation_check
+        type: if
+        condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR != '1' }}"
+        then:
+          - id: stagnation_check_run
+            type: shell
+            command: >
+              FEATURE_DIR="{{ steps.check_remaining.output.feature_dir }}" &&
+              STATE_FILE="$FEATURE_DIR/.stagnation_state" &&
+              mkdir -p "$FEATURE_DIR" &&
+              PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo 0) &&
+              CURRENT_DONE={{ steps.check_remaining.output.done_count }} &&
+              CONSECUTIVE=$(cat "$STATE_FILE.consec" 2>/dev/null || echo 0) &&
+              if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
+                echo "STAGNANT=false" &&
+                echo "$CURRENT_DONE" > "$STATE_FILE" &&
+                echo "0" > "$STATE_FILE.consec";
+              else
+                NEW_CONSEC=$((CONSECUTIVE + 1)) &&
+                echo "$NEW_CONSEC" > "$STATE_FILE.consec" &&
+                echo "$CURRENT_DONE" > "$STATE_FILE" &&
+                if [ "$NEW_CONSEC" -ge 3 ]; then
+                  echo "STAGNANT=true" &&
+                  echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
+                else
+                  echo "STAGNANT=false" &&
+                  echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
+                fi;
+              fi
+            ignore_failure: true
+
+      - id: stagnation_gate
+        type: if
+        condition: "{{ steps.stagnation_check_run.output.STAGNANT == 'true' }}"
+        then:
+          - id: stagnation_review
+            type: gate
+            message: |
+              ⚠ IMPLEMENTATION STAGNATION DETECTED
+
+              No new tasks completed for {{ steps.stagnation_check_run.output.CONSECUTIVE_NO_PROGRESS }} consecutive iterations.
+              Tasks may be blocked, flaky, or the spec may be unrealistic.
+
+              Options:
+                continue — Force-continue (risk wasting iterations).
+                troubleshoot — Run /speckit.status to diagnose, then decide.
+                abort — Cancel the workflow for manual review.
+            options: [continue, troubleshoot, abort]
+            on_troubleshoot:
+              - id: status_diagnose
+                command: speckit.status
+                integration: claude
+              - id: resume_from_troubleshoot
+                type: shell
+                command: |
+                  echo "STAGNANT=false" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state"
+                  echo "0" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state.consec"
+            on_abort: abort
+
       - id: check_in_progress
         type: if
         condition: "{{ steps.check_remaining.output.in_progress != '' }}"
@@ -606,8 +687,11 @@ steps:
           - id: resolve_in_progress
             type: gate
             message: |
-              ⚠ An IN_PROGRESS task was detected from a previous interrupted session:
+              ⚠ IN_PROGRESS task(s) detected from a previous interrupted session:
                 {{ steps.check_remaining.output.in_progress }}
+              {% if steps.check_remaining.output.in_progress_all != '' and steps.check_remaining.output.in_progress_all != steps.check_remaining.output.in_progress %}
+              Additional IN_PROGRESS tasks: {{ steps.check_remaining.output.in_progress_all }}
+              {% endif %}
 
               A previous session was interrupted before this task completed.
               The task may have partial files on disk.
@@ -626,11 +710,12 @@ steps:
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
               goto: check_remaining
             on_continue:
-              goto: implement_one
+              goto: implement_code
             on_abandon:
               type: shell
               command: >
-                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" ABANDONED
+                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" ABANDONED &&
+                echo "Task marked ABANDONED. Review partial files before restarting."
 
       - id: check_abandoned
         type: if
@@ -743,9 +828,13 @@ steps:
           - goto: run_drift_check
         on_abort: abort
 
-      - id: implement_one
+      - id: save_rollback_point
+        type: shell
+        command: "bash scripts/save-rollback-point.sh"
+
+      - id: implement_code
         type: prompt
-        command: speckit.implement
+        command: speckit.implement-code
         integration: claude
         input:
           args: >
@@ -775,6 +864,16 @@ steps:
 
             Then write a test that simulates this exact scenario.
             If the test fails, fix the implementation and re-test."
+
+      - id: implement_verify
+        type: prompt
+        command: speckit.implement-verify
+        integration: claude
+        input:
+          args: >
+            Continue from the just-completed implementation.
+            Run quality checks (STEP 3) and produce the completion report (STEP 4).
+            Do NOT re-implement — only verify and report.
 
       - id: quick_drift_check
         type: shell
@@ -814,7 +913,7 @@ steps:
             > "{{ steps.check_remaining.output.feature_dir }}/workflow_state.json" &&
             echo "Workflow paused at review-implement. Run 'bash scripts/resume-workflow.sh' to continue."
         on_revise:
-          goto: implement_one
+          goto: implement_code
 
   # ── PHASE 7: CODE REVIEW CHECKLIST (bounded) ────────────────────
   - id: code_review_round

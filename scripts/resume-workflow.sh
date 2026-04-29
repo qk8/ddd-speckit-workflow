@@ -37,22 +37,30 @@ if [ -n "${PAUSED_STEP:-}" ]; then
   esac
 fi
 
-# Reset only the first IN_PROGRESS task found
+# Reset ALL IN_PROGRESS tasks to TODO (multiple = workflow corruption)
 TMPFILE=$(mktemp)
-TASK_HEADER=$(grep -m1 "^Status: IN_PROGRESS$" "$FEATURE_DIR/tasks.md" -B5 | grep "^## TASK" | tail -1)
-TASK=$(echo "$TASK_HEADER" | sed 's/## TASK-\[//;s/\].*//')
-if [ -n "$TASK" ]; then
-  awk -v found_task="$TASK" '
-    $0 ~ /^## TASK-/ { task = ""; gsub(/[\[\]]/, ""); sub("## TASK-", ""); task = $0 }
-    task == found_task && $0 ~ /^Status: IN_PROGRESS$/ { print "Status: TODO"; task = ""; next }
+# Find all IN_PROGRESS tasks and reset them
+IN_PROGRESS_TASKS=$(grep -B1 "^Status: IN_PROGRESS$" "$FEATURE_DIR/tasks.md" 2>/dev/null | grep "^## TASK" | sed 's/^## //' || true)
+
+if [ -n "$IN_PROGRESS_TASKS" ]; then
+  # Build awk script to reset all IN_PROGRESS tasks
+  awk '
+    /^Status: IN_PROGRESS$/ { print "Status: TODO"; next }
     { print }
   ' "$FEATURE_DIR/tasks.md" > "$TMPFILE"
   mv "$TMPFILE" "$FEATURE_DIR/tasks.md"
-  echo "Reset TASK-$TASK to TODO. Run /speckit.implement to continue."
+
+  if echo "$IN_PROGRESS_TASKS" | grep -q ','; then
+    echo "Reset ALL IN_PROGRESS tasks to TODO (multiple detected):"
+    echo "$IN_PROGRESS_TASKS" | tr ',' '\n' | while read -r task; do
+      echo "  - $task"
+    done
+  else
+    echo "Reset TASK-$IN_PROGRESS_TASKS to TODO. Run /speckit.implement to continue."
+  fi
 else
   echo "No IN_PROGRESS task found. Workflow may already be at a checkpoint."
-  cat "$FEATURE_DIR/tasks.md" > "$TMPFILE"
-  mv "$TMPFILE" "$FEATURE_DIR/tasks.md"
+  rm -f "$TMPFILE"
 fi
 
 # Clean up state file
