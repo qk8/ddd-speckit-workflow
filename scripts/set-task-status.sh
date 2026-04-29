@@ -12,5 +12,6 @@ NEW_STATUS="${2:?Usage: bash scripts/set-task-status.sh <tasks_file> <new_status
 # Use temp file for cross-platform compatibility (GNU sed vs BSD sed).
 TMPFILE=$(mktemp)
 trap 'rm -f "$TMPFILE"' EXIT
-sed "s/^Status: IN_PROGRESS$/Status: $NEW_STATUS/" "$TASKS_FILE" > "$TMPFILE"
+_ESCAPED_STATUS=$(printf '%s\n' "$NEW_STATUS" | sed 's/[&/\]/\\&/g')
+sed "s/^Status: IN_PROGRESS$/Status: $_ESCAPED_STATUS/" "$TASKS_FILE" > "$TMPFILE"
 mv "$TMPFILE" "$TASKS_FILE"
