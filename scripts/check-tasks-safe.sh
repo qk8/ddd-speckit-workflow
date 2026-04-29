@@ -10,7 +10,9 @@ set -euo pipefail
 OUTPUT=$(bash scripts/check-tasks.sh) || {
   echo "ERROR: check-tasks.sh failed — tasks.md may be malformed or missing" >&2
   echo "       Run: bash scripts/check-tasks.sh (without safe wrapper) to diagnose" >&2
+  set +e
   source scripts/cadence-defaults.sh
+  set -e
   cat <<DEFAULTS
 has_todo=true
 done_count=0
