@@ -18,7 +18,12 @@ if [ "${1:-}" = "--compare" ]; then
   shift
 fi
 
-PRESET_FILE="${1:-ddd-clean-arch/preset-checks.yml}"
+# --compare mode needs routing section, which only exists in preset.yml
+if [ "$COMPARE_MODE" = true ]; then
+  PRESET_FILE="${1:-ddd-clean-arch/preset.yml}"
+else
+  PRESET_FILE="${1:-ddd-clean-arch/preset-checks.yml}"
+fi
 bash scripts/require-file.sh "$PRESET_FILE" preset.yml
 
 # The 8 task types in canonical order
