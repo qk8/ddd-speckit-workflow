@@ -4,7 +4,7 @@ name: Linter
 applies_to: all
 ---
 [D] LINTER
-  Run lint command from plan.md §14 task_runner.lint. Required: no errors.
+  Run lint command from plan.md §13 lint_command. Required: no errors.
 
   If errors/warnings found:
     1. Do NOT suppress them with @ts-ignore, eslint-disable, or equivalent.
