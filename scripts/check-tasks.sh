@@ -92,7 +92,7 @@ RETRO_TRIGGER=false
 if [ "$DONE_COUNT" -ge "$FIRST_RETRO_THRESHOLD" ]; then
   if [ "$DONE_COUNT" -eq "$FIRST_RETRO_THRESHOLD" ]; then
     RETRO_TRIGGER=true
-  elif [ $(( DONE_COUNT % RETRO_INTERVAL )) -eq 0 ]; then
+  elif [ $(( (DONE_COUNT - FIRST_RETRO_THRESHOLD) % RETRO_INTERVAL )) -eq 0 ]; then
     RETRO_TRIGGER=true
   fi
 fi
