@@ -10,7 +10,15 @@ applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
     - Infrastructure: Config that affects security headers, CORS settings, rate limiting
   NOT user-facing: domain models, repositories, internal utilities, test files, migrations
   If this task touches any user-facing code, verify every security
-  requirement from plan.md §9 is implemented:
+  requirement from plan.md §9 is implemented. If §9 is not fully
+  specified, use these defaults:
+    - No hardcoded secrets, API keys, or passwords in source code
+    - Authentication required for all non-public endpoints
+    - Input validation on all user-facing inputs
+    - Rate limiting on authentication endpoints
+    - CSP headers configured
+    - HTTPS enforced in production
+  Then verify each of the following:
 
   1. Input validation: Is every user-supplied input validated at the
      system boundary? (HTTP request body, query params, headers,
