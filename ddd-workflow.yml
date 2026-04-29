@@ -615,6 +615,7 @@ steps:
               type: shell
               command: >
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
+              goto: check_remaining
             on_continue:
               goto: implement_one
             on_abandon:
@@ -666,14 +667,14 @@ steps:
             on_revise:
               goto: run_retrospect
 
+      - id: cleanup_drift_report
+        type: shell
+        command: "rm -f .artifacts/drift_check_report.md"
+
       - id: drift_check
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
         then:
-          - id: cleanup_drift_report
-            type: shell
-            command: "rm -f .artifacts/drift_check_report.md"
-
           - id: run_drift_check
             type: prompt
             command: speckit.check
@@ -684,6 +685,8 @@ steps:
                 Compare the implementation just completed against CLAUDE.md §16
                 constraints. Report PASS/FAIL/N/A for each constraint.
                 For any FAIL: fix the violation immediately.
+                Write a detailed report to .artifacts/drift_check_report.md
+                with each constraint, its result, and file:line references for FAILs.
 
       - id: drift_check_result
         type: shell
