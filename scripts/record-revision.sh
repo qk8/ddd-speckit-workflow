@@ -27,7 +27,7 @@ if [ "$TRIM_MODE" = true ]; then
   else
     TRIM_COUNT=$((TOTAL - TRIM_MAX))
     awk -v trim="$TRIM_COUNT" '
-      /^### Revision/ { count++; next }
+      /^### Revision/ { count++; if (count > trim) print; next }
       count <= trim { next }
       { print }
     ' "$HISTORY" > "$TMPFILE"
