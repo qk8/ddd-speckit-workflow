@@ -10,10 +10,14 @@ applies_to: [backend-api, shared]
        Defaults (if not specified in plan.md): line=95, branch=90, function=95.
        If any below threshold: print "COVERAGE BELOW THRESHOLD — [metric]: [value]% < [threshold]%"
        Do not mark DONE. Write tests for uncovered paths or remove dead code.
-    2. type_check_command: Run [type_check_command]. Assert 0 errors.
+    2. Type checking: Run the project's type checker
+       (e.g., tsc --noEmit for TypeScript, go build for Go, mypy for Python,
+       javac for Java). Assert 0 errors.
        If errors: print "TYPE ERRORS: [N] errors found"
        Fix and re-run. Do not proceed.
-    3. build_command: Run [build_command]. Assert clean build (0 errors).
+    3. Build: Run the project's build command
+       (e.g., npm run build, mvn package, make, gradle build).
+       Assert clean build (0 errors).
        If errors: print "BUILD ERRORS: [N] errors found"
        Fix and re-run. Do not proceed.
 
