@@ -575,7 +575,16 @@ steps:
           Maximum 5 revision cycles ({{ steps.tasks_phase_iteration.output.count || 1 }}/5).
         options: [approve, revise]
         on_revise:
-          goto: tasks
+          - id: trim-revision-history
+            type: shell
+            command: "bash scripts/record-revision.sh --trim 3"
+          - id: record-validation-revision
+            type: shell
+            command: >
+              bash scripts/record-revision.sh tasks_phase
+              "{{ steps.tasks_phase_iteration.output.count || 1 }}"
+              "Validation revision round {{ steps.tasks_phase_iteration.output.count || 1 }}"
+          - goto: tasks
 
   # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
   # Max 100 iterations protects against stuck tasks (e.g., unfixable regression).
