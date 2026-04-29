@@ -28,7 +28,11 @@ read_from_input() {
   done < "$_tmpfile"
   rm -f "$_tmpfile"
   # Write result back using eval (bash 3.2 compatible)
-  eval "$1=(\"\${_arr[@]}\")"
+  if [ ${#_arr[@]} -gt 0 ]; then
+    eval "$1=(\"\${_arr[@]}\")"
+  else
+    eval "$1=()"
+  fi
 }
 
 # ── Temp files for bash 3.2 compatibility ───────────────────────
@@ -135,6 +139,9 @@ if [ "$FIX_MODE" = true ]; then
   ROUTING_LINE=$(grep -n '^routing:' "$PRESET_FILE" | head -1 | cut -d: -f1)
   # Find the last routing entry line (last line with '[' array after routing:)
   LAST_ENTRY_LINE=$(tail -n +"$ROUTING_LINE" "$PRESET_FILE" | grep -n '\[' | tail -1 | cut -d: -f1)
+  if [ -z "$LAST_ENTRY_LINE" ]; then
+    LAST_ENTRY_LINE=0
+  fi
   LAST_ENTRY_ABS=$((ROUTING_LINE + LAST_ENTRY_LINE - 1))
   # Everything from LAST_ENTRY_ABS+1 to next top-level key is preserved (blank lines, comments)
   {
