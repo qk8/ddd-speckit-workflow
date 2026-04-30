@@ -30,8 +30,39 @@ GLOBAL ITERATION CAP:
     3. GLOBAL CAP: max 5 total iterations across all loops combined
 
 ─────────────────────────────────────────
-STEP 4 — COMPLETION REPORT
+STEP 4 — SMOKE TEST (CODE-LEVEL VALIDATION)
 ─────────────────────────────────────────
+Before marking the task DONE, verify the code actually compiles/builds.
+This prevents the stagnation detector from counting tasks as done when
+the code does not actually work.
+
+Read plan.md §13 for the build/compile command:
+  [build_command from plan.md §13, or "none" if no build step]
+
+If build_command is not "none":
+  RUN: [build_command]
+  Use scripts/validate-tests.sh to capture and validate the result:
+    bash scripts/validate-tests.sh "[build_command]" "pass"
+  Read the output. If TEST_RESULT is "fail":
+    1. STOP — do NOT mark the task DONE.
+    2. Revert tasks.md Status from DONE back to IN_PROGRESS.
+    3. Print: "SMOKE TEST FAILED — reverted to IN_PROGRESS for review."
+    4. Print: "See: $TEST_OUTPUT_FILE"
+    5. Attempt to fix the build (max 2 attempts, same correction loop as STEP 2).
+    6. If still failing after 2 attempts: mark ABANDONED, print FAILURE_REPORT.md.
+
+If no build step (build_command is "none"):
+  Run a minimal import/load check instead:
+    - For Node.js/TypeScript: run "node -e 'require(\"./src/index\")'" or equivalent
+    - For Python: run "python -c 'import [main_module]'"
+    - For Go: run "go build ./..." in the module root
+    - For Ruby: run "ruby -c lib/**/*.rb"
+  Use scripts/validate-tests.sh with expected "pass".
+  If it fails: same fix-and-revert protocol as above.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 5 — COMPLETION REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Print:
 
@@ -50,6 +81,7 @@ Read templates/check-report-template.md for the 21-check results table.
 
 Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
 
+SMOKE TEST: [PASS — build/load verified | N/A — no build step]
 ROLLBACK FILES: [list of files restored/removed | none]
 ROLLBACK NOTE: [rollback note from tasks.md | none]
 

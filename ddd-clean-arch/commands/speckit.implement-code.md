@@ -95,17 +95,19 @@ TEST DATA ISOLATION — enforce before writing test code:
   If the factory location does not exist yet: create it as part of this task.
 
 RUN THE TESTS. Expected: FAIL (implementation does not exist yet).
-Print full output.
-  - Unit tests: fail with "class not found" or assertion errors — correct.
-  - API tests: fail with connection refused or 404 — both are correct.
-  - E2E tests: fail with "element not found" or navigation error — correct.
+Use scripts/validate-tests.sh to capture and validate the result:
+  bash scripts/validate-tests.sh "[test_runner_command_from_plan_md_§13]" "fail"
+Read the output variables: TEST_RESULT, TEST_FAILED, TEST_OUTPUT_FILE.
 
-If any test passes at this stage: STOP.
+If TEST_RESULT is "unexpected_pass": STOP.
 A test that passes before implementation exists is testing nothing.
-Rewrite it to fail, then continue.
+Rewrite it to fail, then re-run validate-tests.sh.
+
+If TEST_RESULT is "error": the test runner itself failed.
+Diagnose the issue (missing dependency? wrong command?) and fix before proceeding.
 
 CAPTURE RED PHASE EVIDENCE:
-  Print the exact test runner output showing the failure.
+  Read $TEST_OUTPUT_FILE and print the failure lines showing the test fails.
   Include the assertion message (e.g., "expected 404 but got 200").
   This output proves the test fails for the right reason.
   Do NOT proceed to STEP 2 until this evidence is printed.
@@ -154,16 +156,20 @@ Rules (non-negotiable):
 - Spec conflict found → stop and report. Never resolve unilaterally.
 
 After writing implementation, RUN THE TESTS and verify they pass:
-  [test runner command from plan.md §13]
-Print full output.
-  - All new tests must PASS
-  - Report: "Tests: [N] passed, [N] failed"
+  Use scripts/validate-tests.sh to capture and validate the result:
+    bash scripts/validate-tests.sh "[test_runner_command_from_plan_md_§13]" "pass"
+  Read the output variables: TEST_RESULT, TEST_PASSED, TEST_FAILED, TEST_OUTPUT_FILE.
+
+If TEST_RESULT is "fail":
+  - TEST_FAILED test(s) failed (exit code $TEST_EXIT_CODE)
+  - Do NOT proceed. Enter the INLINE CORRECTION LOOP.
+  - The full raw output is in: $TEST_OUTPUT_FILE
 
 Then RUN THE FULL REGRESSION SUITE:
-  [regression_command.all from plan.md §13]
-Print: "Regression: [total N] tests, [N] failed"
-  - Zero new failures allowed
-  - If any pre-existing test fails: STOP, diagnose root cause, fix, re-run
+  bash scripts/validate-tests.sh "[regression_command.all from plan.md §13]" "pass"
+  Read the output. If TEST_RESULT is "fail":
+    - Zero new failures allowed
+    - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
 
 INLINE CORRECTION LOOP (if tests fail)
   Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
