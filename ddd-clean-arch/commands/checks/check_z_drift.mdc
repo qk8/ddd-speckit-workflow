@@ -24,6 +24,13 @@ Common drift patterns to check:
   4. Test data isolation: are domain objects constructed by hand instead of
      using factory functions from plan.md §13?
 
+Generic constraint check (for any "Never [action]" constraint not covered above):
+  For each remaining constraint in CLAUDE.md "## What NOT to do":
+    - Convert "Never [action]" into a grep pattern
+    - Search the touched files for violations
+    - Example: "Never use SELECT *" → grep for "\bSELECT\s+\*\b" in SQL files
+    - Example: "Never commit secrets" → grep for common secret patterns
+
 For each FAIL: fix the violation immediately. Do not proceed until all
 constraints are PASS or N/A.
 

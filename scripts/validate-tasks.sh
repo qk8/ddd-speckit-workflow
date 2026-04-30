@@ -15,6 +15,17 @@ set -euo pipefail
 
 FEATURE_DIR="${FEATURE_DIR:-$(bash scripts/find-first-feature.sh)}"
 
+# Handle --batch-plan early (before validation checks)
+# Uses a flag to skip validation and jump to batch plan computation at the end
+if [ "${1:-}" = "--batch-plan" ]; then
+  if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
+    echo '{"levels":[]}'
+    exit 0
+  fi
+  # Set flag so validation is skipped and batch plan runs at end
+  SKIP_VALIDATION=1
+fi
+
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "No tasks.md found. Nothing to validate."
   exit 0
@@ -37,6 +48,142 @@ VISIT_UNVISITED=0
 VISIT_IN_PROGRESS=1
 VISIT_DONE=2
 
+# ── Batch Plan: compute dependency levels for parallel task batching ──
+# Usage: ./scripts/validate-tasks.sh --batch-plan
+# Outputs JSON with dependency levels for parallel batch processing.
+# Level 0 = no dependencies (or all deps DONE)
+# Level 1 = depends only on level 0 tasks
+# Level N = depends only on levels < N
+compute_batch_plan() {
+  local tasks_file="${FEATURE_DIR:-.}/tasks.md"
+  if [ ! -f "$tasks_file" ]; then
+    echo '{"levels":[]}'
+    return
+  fi
+
+  local btmp
+  btmp=$(mktemp -d)
+
+  local ids_file="$btmp/ids.txt"
+  local deps_file="$btmp/deps.txt"
+  touch "$ids_file" "$deps_file"
+
+  # Parse tasks (same logic as main script, self-contained)
+  local current_id=""
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##\ TASK-\[?([0-9]+)\]? ]]; then
+      current_id="${BASH_REMATCH[1]}"
+      echo "$current_id" >> "$ids_file"
+      echo "${current_id}|none" >> "$deps_file"
+    elif [[ "$line" =~ ^Depends\ on:\ (.*) ]] && [ -n "${current_id:-}" ]; then
+      local deps="${BASH_REMATCH[1]}"
+      local normalized=""
+      IFS=',' read -ra dep_list <<< "$deps"
+      for dep in "${dep_list[@]}"; do
+        dep=$(echo "$dep" | xargs)
+        local norm_dep=$(echo "$dep" | sed 's/^TASK-\[//;s/\]$//;s/^TASK-//')
+        if [ -n "$normalized" ]; then
+          normalized="$normalized, $norm_dep"
+        else
+          normalized="$norm_dep"
+        fi
+      done
+      {
+        awk -F'|' -v id="$current_id" '$1 != id' "$deps_file" || true
+        echo "${current_id}|${normalized}"
+      } > "$btmp/deps_tmp"
+      mv "$btmp/deps_tmp" "$deps_file"
+    fi
+  done < "$tasks_file"
+
+  local task_count
+  task_count=$(wc -l < "$ids_file" | xargs)
+  if [ "$task_count" -eq 0 ]; then
+    echo '{"levels":[]}'
+    return
+  fi
+
+  # BFS-based level computation
+  local levels_file="$btmp/levels.txt"
+  while IFS= read -r tid; do
+    echo "${tid}|0" >> "$levels_file"
+  done < "$ids_file"
+
+  local changed=true
+  local iterations=0
+  local max_iterations=$((task_count + 1))
+
+  while [ "$changed" = true ] && [ "$iterations" -lt "$max_iterations" ]; do
+    changed=false
+    iterations=$((iterations + 1))
+
+    while IFS='|' read -r task_id deps; do
+      if [ "$deps" = "none" ]; then
+        continue
+      fi
+      IFS=',' read -ra dep_list <<< "$deps"
+      local max_dep_level=0
+      for dep in "${dep_list[@]}"; do
+        dep=$(echo "$dep" | xargs)
+        local dep_level
+        dep_level=$(awk -F'|' -v id="$dep" '$1 == id {print $2; exit}' "$levels_file")
+        dep_level=${dep_level:-0}
+        if [ "$dep_level" -ge "$max_dep_level" ]; then
+          max_dep_level=$((dep_level + 1))
+        fi
+      done
+      local current_level
+      current_level=$(awk -F'|' -v id="$task_id" '$1 == id {print $2; exit}' "$levels_file")
+      current_level=${current_level:-0}
+      if [ "$max_dep_level" -gt "$current_level" ]; then
+        {
+          awk -F'|' -v id="$task_id" '$1 != id' "$levels_file" || true
+          echo "${task_id}|${max_dep_level}"
+        } > "$btmp/levels_tmp"
+        mv "$btmp/levels_tmp" "$levels_file"
+        changed=true
+      fi
+    done < "$deps_file"
+  done
+
+  # Output JSON
+  echo "{"
+  echo '  "levels": ['
+  local current_level=-1
+  local first_level=true
+  sort -t'|' -k2,2n -k1,1n "$levels_file" > "$btmp/sorted_levels.txt"
+
+  while IFS='|' read -r tid level; do
+    if [ "$level" -ne "$current_level" ]; then
+      if [ "$current_level" -ge 0 ]; then
+        echo ']'
+      fi
+      if [ "$first_level" = false ]; then
+        echo '    ],'
+      fi
+      echo "    \"level_${level}\": ["
+      first_level=false
+      current_level=$level
+      first_item=true
+    else
+      if [ "$first_item" = false ]; then
+        echo ","
+      fi
+      printf '      "TASK-%s"' "$tid"
+      first_item=false
+    fi
+  done < "$btmp/sorted_levels.txt"
+
+  if [ "$current_level" -ge 0 ]; then
+    echo ""
+    echo '    ]'
+  fi
+  echo '  ]'
+  echo "}"
+}
+
+# Validation runs unless --batch-plan was used (batch plan has its own parsing)
+if [ "${SKIP_VALIDATION:-}" != "1" ]; then
 echo "━━━ Task Dependency Graph Validation ━━━"
 echo ""
 
@@ -264,6 +411,15 @@ done
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
   echo "  Task ordering is correct."
 fi
+
+fi  # end SKIP_VALIDATION guard
+
+# Handle --batch-plan flag (always runs, even when SKIP_VALIDATION=1)
+if [ "${1:-}" = "--batch-plan" ]; then
+  compute_batch_plan
+  exit 0
+fi
+
 # ── Summary ──────────────────────────────────────────────────────
 source scripts/print-result.sh \
   "Issues found: $ERRORS error(s), $WARNINGS warning(s)." \

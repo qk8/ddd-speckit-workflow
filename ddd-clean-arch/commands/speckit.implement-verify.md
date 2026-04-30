@@ -19,15 +19,14 @@ If any check FAILS:
 
 A task cannot be marked DONE until every applicable check passes.
 
-GLOBAL ITERATION CAP:
-  Across all loops (correction, check-fix, regression), after 5 total
-  correction iterations, STOP and escalate to human review.
-  Print: "MAX CORRECTION ITERATIONS (5) REACHED — escalating to human review."
+PER-CHECK ITERATION CAP:
+  Each individual check gets up to 2 fix attempts before escalating.
+  The correction loop (STEP 2) gets up to 3 attempts per test failure.
+  There is NO global cap — each check is independent.
 
-  Cap hierarchy:
-    1. Correction loop (STEP 2): max 3 attempts per test failure
-    2. Check-fix loop (STEP 3): max 2 attempts per check violation
-    3. GLOBAL CAP: max 5 total iterations across all loops combined
+  If the SAME check fails 3 consecutive times:
+    Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
+    Do not retry this check; proceed to the next applicable check.
 
 ─────────────────────────────────────────
 STEP 4 — SMOKE TEST (CODE-LEVEL VALIDATION)

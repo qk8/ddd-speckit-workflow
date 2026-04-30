@@ -101,18 +101,20 @@ if [ "$TEST_TOTAL" -eq 0 ] && grep -q "passed" "$OUTPUT_FILE" 2>/dev/null; then
   TEST_TOTAL=$((TEST_PASSED + TEST_FAILED + TEST_SKIPPED))
 fi
 
-# Generic fallback: count "✓" and "✗" or "FAIL"/"PASS" markers
+# Generic fallback: use exit code as primary signal, then try structured parsing
 if [ "$TEST_TOTAL" -eq 0 ]; then
-  PASSED=$(grep -c "✓\|PASS\|✔\|ok\b" "$OUTPUT_FILE" 2>/dev/null || echo "0")
-  FAILED=$(grep -c "✗\|FAIL\|✘\|error\|AssertionError" "$OUTPUT_FILE" 2>/dev/null || echo "0")
-  if [ "$FAILED" -gt 0 ]; then
-    TEST_PASSED=$((PASSED - FAILED))
-    [ "$TEST_PASSED" -lt 0 ] && TEST_PASSED=0
-    TEST_FAILED="$FAILED"
-    TEST_TOTAL=$((TEST_PASSED + TEST_FAILED))
-  elif [ "$PASSED" -gt 0 ]; then
-    TEST_PASSED="$PASSED"
-    TEST_TOTAL="$PASSED"
+  # Attempt to extract counts from structured test output lines
+  # Uses Perl regex with word boundaries to avoid false matches on
+  # "PASS" inside variable names, "FAIL" in comments, etc.
+  if grep -qP '\b\d+\s+(passed|passing|failing|failed|skipped|pending)\b' "$OUTPUT_FILE" 2>/dev/null; then
+    TEST_PASSED=$(grep -oP '\b\d+\s+passed\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
+    TEST_FAILED=$(grep -oP '\b\d+\s+failed\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
+    TEST_SKIPPED=$(grep -oP '\b\d+\s+(skipped|pending)\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
+    # Default to 0 if extraction failed
+    TEST_PASSED=${TEST_PASSED:-0}
+    TEST_FAILED=${TEST_FAILED:-0}
+    TEST_SKIPPED=${TEST_SKIPPED:-0}
+    TEST_TOTAL=$((TEST_PASSED + TEST_FAILED + TEST_SKIPPED))
   fi
 fi
 

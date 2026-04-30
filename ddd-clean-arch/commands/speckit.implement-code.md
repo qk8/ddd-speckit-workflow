@@ -7,15 +7,13 @@ Read its plan.md and tasks.md.
 PARALLEL MODE (batch independent tasks):
   The workflow YAML passes this instruction via input.args. When you see this
   section, process tasks in batches instead of one at a time:
-  1. Find ALL TODO tasks whose Depends-on tasks are all DONE.
-  2. Group them by dependency level:
-     Level 0: tasks with no depends-on (or only DONE dependencies)
-     Level 1: tasks whose only depends-on are Level 0 tasks
-     Level 2+: tasks whose depends-on are all at lower levels
-  3. Process each level as a batch. Within a batch, process tasks sequentially.
-  4. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
-  5. Continue to the next level. Stop when no more TODO tasks with all dependencies met.
-  6. In batch mode, the completion report covers the entire batch.
+  1. Run: bash scripts/validate-tasks.sh --batch-plan
+  2. Read the JSON output for dependency levels (level_0, level_1, etc.)
+  3. Find ALL TODO tasks at the current level whose Depends-on tasks are all DONE.
+  4. Process each level as a batch. Within a batch, process tasks sequentially.
+  5. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
+  6. Continue to the next level. Stop when no more TODO tasks with all dependencies met.
+  7. In batch mode, the completion report covers the entire batch.
 
 Use targeted spec loading — read only the plan.md sections relevant to
 the next task's Type. Do not read plan.md end to end.

@@ -360,7 +360,11 @@ steps:
     command: |
       CLAUDE_MD=".claude/CLAUDE.md"
       if [ -f "$CLAUDE_MD" ]; then
+        # Count visual lines (wc -l counts newlines; add 1 if no trailing newline)
         LINES=$(wc -l < "$CLAUDE_MD" | xargs)
+        if [ -s "$CLAUDE_MD" ] && [ "$(tail -c1 "$CLAUDE_MD" | wc -l)" -eq 0 ]; then
+          LINES=$((LINES + 1))
+        fi
         if [ "$LINES" -gt 150 ]; then
           echo "ERROR: CLAUDE.md is $LINES lines, must be <= 150" >&2
           exit 1
@@ -621,6 +625,23 @@ steps:
               command: echo "TASKS_PARSE_ERROR=0"
             on_abort: abort
 
+      - id: check_all_done
+        type: if
+        condition: "{{ steps.check_remaining.output.has_todo == 'false' }}"
+        then:
+          - id: all_tasks_done_summary
+            type: shell
+            command: |
+              echo "=== IMPLEMENTATION COMPLETE ==="
+              echo "Tasks: {{ steps.check_remaining.output.done_count }}/{{ steps.check_remaining.output.total_tasks }} done"
+              {{ if steps.check_remaining.output.abandoned_count | int > 0 }}
+              echo "WARNING: {{ steps.check_remaining.output.abandoned_count }} task(s) ABANDONED"
+              {{ endif }}
+          - id: exit_implement_loop
+            type: shell
+            command: echo "LOOP_EXIT=true"
+            goto: phase_8_final_verify
+
       - id: stagnation_check
         type: if
         condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR != '1' }}"
@@ -631,10 +652,15 @@ steps:
               FEATURE_DIR="{{ steps.check_remaining.output.feature_dir }}" &&
               STATE_FILE="$FEATURE_DIR/.stagnation_state" &&
               mkdir -p "$FEATURE_DIR" &&
-              PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo 0) &&
+              PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1") &&
               CURRENT_DONE={{ steps.check_remaining.output.done_count }} &&
+              TOTAL_TASKS={{ steps.check_remaining.output.total_tasks }} &&
               CONSECUTIVE=$(cat "$STATE_FILE.consec" 2>/dev/null || echo 0) &&
               if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
+                echo "STAGNANT=false" &&
+                echo "$CURRENT_DONE" > "$STATE_FILE" &&
+                echo "0" > "$STATE_FILE.consec";
+              elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
                 echo "STAGNANT=false" &&
                 echo "$CURRENT_DONE" > "$STATE_FILE" &&
                 echo "0" > "$STATE_FILE.consec";
@@ -679,6 +705,17 @@ steps:
                   echo "STAGNANT=false" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state"
                   echo "0" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state.consec"
             on_abort: abort
+
+      - id: iteration_progress
+        type: shell
+        command: |
+          ITER={{ steps.implement_loop_iteration.output.count || 1 }}
+          if [ "$ITER" -eq 25 ] || [ "$ITER" -eq 50 ] || [ "$ITER" -eq 75 ] || [ "$ITER" -eq 100 ]; then
+            echo "=== ITERATION $ITER/100 ==="
+            echo "Done: {{ steps.check_remaining.output.done_count }}/{{ steps.check_remaining.output.total_tasks }} tasks"
+            echo "Todo: {{ steps.check_remaining.output.todo_count }}"
+            echo "In-progress: {{ steps.check_remaining.output.in_progress || 'none' }}"
+          fi
 
       - id: check_in_progress
         type: if
