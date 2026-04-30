@@ -374,6 +374,23 @@ steps:
         echo "SKIP: CLAUDE.md not yet created"
       fi
 
+  # ── VALIDATE CI-LOCAL.SH COMMANDS POPULATED ──────────────────
+  - id: validate-ci-local
+    type: shell
+    command: "bash scripts/validate-ci-local-cmds.sh"
+    ignore_failure: true
+
+  - id: review-ci-local
+    type: gate
+    message: |
+      Review the ci-local.sh command validation above.
+      If FAIL: go back to plan-devex or fill commands manually.
+      If PASS: proceed to plan review.
+    options: [approve, revise, abort]
+    on_revise:
+      - goto: plan-devex
+    on_abort: abort
+
   # ── BOUNDED PLAN REVIEW ─────────────────────────────────────────
   # Replaces the unbounded review-plan-consolidated-gate.
   # Max 3 revisions prevent infinite revise cycles.
@@ -473,6 +490,33 @@ steps:
               "Plan review revision round {{ steps.plan_review_revision_iteration.output.count || 1 }}"
           - goto: plan-consolidated-review
         on_abort: abort
+
+  # ── POST-PLAN DESIGN QUALITY GATE ─────────────────────────────
+  - id: speckit_review_design
+    command: speckit.review
+    integration: claude
+    input:
+      args: >
+        Review the design quality of the completed plan.
+        Run all 5 dimensions: Ubiquitous Language, Invariant Enforcement,
+        Hidden Coupling, Conventions Consistency, Readability.
+        Report any violations with file:line references.
+        For blocking findings: fix immediately.
+        For new conventions: confirm with user before adding.
+
+  - id: review-speckit-review
+    type: gate
+    message: |
+      Review the speckit.review design quality assessment above.
+      Approve to proceed to task generation.
+      Revise to send back for design fixes.
+    options: [approve, revise, abort]
+    on_revise:
+      - id: trim-revision-history
+        type: shell
+        command: "bash scripts/record-revision.sh --trim 3"
+      - goto: speckit_review_design
+    on_abort: abort
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -637,6 +681,20 @@ steps:
               {{ if steps.check_remaining.output.abandoned_count | int > 0 }}
               echo "WARNING: {{ steps.check_remaining.output.abandoned_count }} task(s) ABANDONED"
               {{ endif }}
+          - id: post_impl_drift_check
+            command: speckit.check
+            integration: claude
+            input:
+              args: >
+                Run a lightweight constraint drift check.
+                Check only constraint drift for the 3 most common violation
+                patterns from quick-drift-check.sh:
+                  1. Layer rule violations
+                  2. Missing correlation ID
+                  3. Test data isolation violations
+                Report PASS/FAIL for each. If any FAIL: note it but do not block.
+                Write findings to .artifacts/post-implementation-drift.md.
+                This is advisory — the full speckit.verify will run in Phase 8.
           - id: exit_implement_loop
             type: shell
             command: echo "LOOP_EXIT=true"
@@ -699,11 +757,22 @@ steps:
               - id: status_diagnose
                 command: speckit.status
                 integration: claude
+              - id: speckit_context_load
+                command: speckit.context
+                integration: claude
+                input:
+                  args: >
+                    Load focused context for the stuck task.
+                    Read tasks.md, identify the IN_PROGRESS or first TODO task.
+                    Read plan.md sections relevant to that task.
+                    Produce a targeted context window: task scope, acceptance
+                    criteria, relevant plan sections, and any error history.
               - id: resume_from_troubleshoot
                 type: shell
                 command: |
                   echo "STAGNANT=false" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state"
                   echo "0" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state.consec"
+                  echo "CONTEXT LOADED — resume from speckit.context"
             on_abort: abort
 
       - id: iteration_progress

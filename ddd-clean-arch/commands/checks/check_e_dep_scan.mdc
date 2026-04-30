@@ -10,4 +10,8 @@ applies_to: [backend-domain, backend-infra, backend-api, shared]
     Print: SECURITY BLOCK — [CVE ID]: [package] [severity]
     Do not mark DONE. User must update the dependency or document an accepted
     risk in plan.md §9 with justification and remediation deadline.
-  If tool not installed: install it now. Add to CI. Document in plan.md §9.
+  If tool not installed:
+    Print: "WARNING: Dependency scanning tool not found. Report to human for confirmation before installing."
+    Do NOT install any tool without explicit user confirmation.
+    Record in completion report: tool name, where it should be obtained,
+    and why it is needed for dependency vulnerability scanning (plan.md §9).

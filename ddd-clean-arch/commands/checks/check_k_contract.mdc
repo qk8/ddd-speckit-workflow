@@ -1,7 +1,7 @@
 ---
 check_id: K
 name: API Contract Enforcement
-applies_to: [backend-api]
+applies_to: [backend-api, shared]
 ---
 [K] API CONTRACT ENFORCEMENT — backend-api tasks only
   Run: bash scripts/validate-api-contract.sh

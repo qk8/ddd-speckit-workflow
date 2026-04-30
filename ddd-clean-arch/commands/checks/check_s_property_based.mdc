@@ -4,15 +4,23 @@ name: Property-Based Test Coverage
 applies_to: all
 ---
 [S] PROPERTY-BASED TEST COVERAGE
-  Read plan.md §13 property_based_tests.invariants. For each invariant:
+  SKIP LOGIC:
+    Read plan.md §13 property_based_tests.invariants.
+    If invariants is empty, undefined, or contains only comments:
+      Print: "SKIP: No invariants defined in plan.md §13 property_based_tests.invariants"
+      Print: "Property-based testing not applicable for this task."
+      Set result to SKIP and exit. Do NOT write any tests.
+    If invariants has items: proceed.
+
+  For each invariant:
     1. Search the codebase for property-based tests that assert this invariant.
        Look in test files for patterns like fc.property, fc.assert, property(,
        prop_(, or framework-specific equivalents.
-    2. If found with ≥ 100 generations (default from plan.md §13): print "COVERED: [name] — [file]"
-    3. If found with < 100 generations: print "WEAK: [name] — [N] generations < 100"
-    4. If not found: print "MISSING: [name] — add property-based test"
+    2. If found with >= 100 generations (default from plan.md §13): print "COVERED: [name] - [file]"
+    3. If found with < 100 generations: print "WEAK: [name] - [N] generations < 100"
+    4. If not found: print "MISSING: [name] - add property-based test"
 
   For each MISSING invariant: write the property-based test now.
   Do not proceed until all invariants are COVERED.
 
-  Print: "PROPERTY-BASED: [N] covered, [N] weak — all invariants must reach COVERED before marking DONE."
+  Print: "PROPERTY-BASED: [N] covered, [N] weak - all invariants must reach COVERED before marking DONE."

@@ -37,15 +37,15 @@ get_builtin_schema() {
 has_todo:bool
 done_count:int
 todo_count:int
-in_progress:text
-in_progress_all:text
+in_progress:optional
+in_progress_all:optional
 abandoned_count:int
 total_tasks:int
 complexity:text
 retro_interval:int
 first_retro_threshold:int
 retro_trigger:bool
-feature_dir:path
+feature_dir:optional
 SCHEMA
       ;;
     validate-tests)
@@ -66,15 +66,15 @@ TASKS_PARSE_ERROR:optional
 has_todo:bool
 done_count:int
 todo_count:int
-in_progress:text
-in_progress_all:text
+in_progress:optional
+in_progress_all:optional
 abandoned_count:int
 total_tasks:int
 complexity:text
 retro_interval:int
 first_retro_threshold:int
 retro_trigger:bool
-feature_dir:path
+feature_dir:optional
 SCHEMA
       ;;
   esac
@@ -103,27 +103,32 @@ OUTPUT=$(bash "$SCRIPT_TO_RUN" "${SCRIPT_ARGS[@]}" 2>/dev/null) || {
   exit 1
 }
 
-# Parse schema into arrays
-declare -A EXPECTED_TYPES
-while IFS=: read -r var_name var_type; do
-  # Skip empty lines and comments
-  [[ -z "$var_name" || "$var_name" =~ ^# ]] && continue
-  EXPECTED_TYPES["$var_name"]="$var_type"
-done < "$SCHEMA"
+# Parse schema into temp file: "var_name\tvar_type" per line (tab-separated)
+SCHEMA_PARSED=$(mktemp /tmp/schema-parsed-XXXXXX)
+OUTPUT_PARSED=$(mktemp /tmp/output-parsed-XXXXXX)
+trap 'rm -f "$SCHEMA" "$SCHEMA_PARSED" "$OUTPUT_PARSED"' EXIT
 
-# Parse output into associative array
-declare -A ACTUAL_VALUES
+while IFS=: read -r var_name var_type; do
+  [[ -z "$var_name" || "$var_name" =~ ^# ]] && continue
+  printf '%s\t%s\n' "$var_name" "$var_type"
+done < "$SCHEMA" > "$SCHEMA_PARSED"
+
+# Parse output into temp file: "key\tvalue" per line
 while IFS='=' read -r key value; do
-  # Skip empty lines
   [[ -z "$key" ]] && continue
-  ACTUAL_VALUES["$key"]="$value"
-done <<< "$OUTPUT"
+  printf '%s\t%s\n' "$key" "$value"
+done <<< "$OUTPUT" > "$OUTPUT_PARSED"
+
+# Lookup function: search temp file for var_name, return the value or ""
+lookup_var() {
+  local target="$1" file="$2"
+  grep -m1 "^${target}	" "$file" 2>/dev/null | cut -f2- || true
+}
 
 # Validate each expected variable
 FAILURES=0
-for var_name in "${!EXPECTED_TYPES[@]}"; do
-  expected_type="${EXPECTED_TYPES[$var_name]}"
-  value="${ACTUAL_VALUES[$var_name]:-}"
+while IFS='	' read -r var_name expected_type; do
+  value=$(lookup_var "$var_name" "$OUTPUT_PARSED")
 
   # Check if variable exists
   if [ -z "$value" ] && [ "$expected_type" != "optional" ]; then
@@ -152,8 +157,9 @@ for var_name in "${!EXPECTED_TYPES[@]}"; do
       fi
       ;;
     path)
-      if ! [[ "$value" =~ ^/ ]]; then
-        echo "FAIL: '$var_name' expected absolute path, got '$value'" >&2
+      # Accept relative paths (.specify/...) OR absolute paths (/)
+      if ! [[ "$value" =~ ^(/|\./) ]]; then
+        echo "FAIL: '$var_name' expected path, got '$value'" >&2
         FAILURES=$((FAILURES + 1))
       fi
       ;;
@@ -168,12 +174,12 @@ for var_name in "${!EXPECTED_TYPES[@]}"; do
       echo "WARN: unknown type '$expected_type' for '$var_name', skipping" >&2
       ;;
   esac
-done
+done < "$SCHEMA_PARSED"
 
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES validation error(s)" >&2
   exit 1
 else
-  echo "PASS: all ${#EXPECTED_TYPES[@]} variables validated"
+  echo "PASS: all variables validated"
   exit 0
 fi

@@ -4,6 +4,19 @@ name: Test Quality Review
 applies_to: all
 ---
 [P] TEST QUALITY REVIEW — all tasks
+  PRE-CHECK (automated):
+    Read plan.md §13 regression_command.api_only to get the test command.
+    Run: bash scripts/validate-tests.sh "[test_command]" "pass"
+    If TEST_RESULT is "fail":
+      Print: "FAIL: Automated test validation failed. Fix tests before LLM review."
+      Do not proceed to LLM review until tests pass.
+    Parse TEST_OUTPUT_FILE for test file existence:
+      Search for *.test.*, *Test.*, *Spec.* in the test directory.
+    If no test files found:
+      Print: "FAIL: No test files found — tests must be committed with implementation"
+      Do not proceed until tests are created.
+
+  REVIEW (manual, after pre-check passes):
   Review each test in the test file from Step 1:
 
   1. Behavior vs implementation: Does each test assert on observable

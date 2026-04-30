@@ -11,12 +11,18 @@ applies_to: [backend-api, frontend-feature]
     Default: autocannon -n 1000 -c 10 (1000 requests, 10 concurrent).
     Override with plan.md §13 regression_command.api_only if different.
     Compare p95 against backend budget from §10.
-    If p95 exceeds budget: print WARNING — "p95=[N]ms exceeds budget [budget]ms"
-    Note in completion report for retrospect review.
+    If p95 exceeds budget:
+      Print: "FAIL: p95=[N]ms exceeds budget [budget]ms"
+      This is a blocking FAIL. Do not mark the task DONE.
+      Either optimize the endpoint or update plan.md §10 budget
+      (after user confirmation). Record the deviation in spec learnings.
 
   For frontend-feature:
     Run the E2E test headlessly, measure LCP via Playwright MCP:
       Evaluate: () => performance.getEntriesByType('paint').find(e => e.name === 'largest-contentful-paint')?.startTime || 0
     Compare LCP against frontend budget from §10.
-    If LCP exceeds budget: print WARNING — "LCP=[N]ms exceeds budget [budget]ms"
-    Note in completion report for retrospect review.
+    If LCP exceeds budget:
+      Print: "FAIL: LCP=[N]ms exceeds budget [budget]ms"
+      This is a blocking FAIL. Do not mark the task DONE.
+      Either optimize the page or update plan.md §10 budget
+      (after user confirmation). Record the deviation in spec learnings.

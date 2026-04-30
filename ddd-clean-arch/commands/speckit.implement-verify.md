@@ -93,6 +93,27 @@ ROLLBACK NOTE: [rollback note from tasks.md | none]
 For each finding: propose a change to plan.md [section.field → new value].
 Do NOT apply until user confirms. List all and wait for confirmation.
 After confirmation: update plan.md and record in tasks.md.
+
+# ── PERSIST UNAPPLIED LEARNINGS ───────────────────────────
+# If any spec learning was proposed but NOT applied (user rejected or not yet
+# confirmed), persist it to a pending file so speckit.retrospect can cross-check.
+
+Read the current feature directory from tasks.md (the directory containing tasks.md).
+PENDING_DIR="[feature_dir]/.artifacts"
+mkdir -p "$PENDING_DIR"
+PENDING_FILE="$PENDING_DIR/pending-learnings.md"
+
+For each learning that was proposed but NOT applied:
+  Append to pending-learnings.md:
+    ## TASK-[N] — [date in UTC]
+    - Type: [A|B|C|D from spec learnings categories]
+    - Description: [the learning]
+    - Proposed change: [plan.md section.field -> new value]
+    - Status: PENDING
+    - Rejected: [yes/no/unknown]
+
+Print: "Pending learnings written to $PENDING_FILE"
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Update tasks.md for TASK-[N]:

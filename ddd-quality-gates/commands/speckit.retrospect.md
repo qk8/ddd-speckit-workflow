@@ -120,6 +120,26 @@ CONSIDER (no urgency):
 
 If nothing: "Retrospective complete. Spec and implementation are aligned."
 
+━━ SECTION 8: PENDING LEARNINGS CHECK ━━━
+
+Look for .artifacts/pending-learnings.md or
+.specify/specs/[feature]/.artifacts/pending-learnings.md.
+
+If file exists and is non-empty:
+  The implement-verify step produced spec learnings that were NOT applied.
+  These were proposed but rejected or not yet confirmed.
+
+  Cross-check each pending learning:
+    [N] [Type] — [Description]
+      Proposed: [change]
+      Decision needed: APPLY | REJECT | DEFER
+
+  For each learning the user wants to apply: update plan.md.
+  For each rejected: remove from pending-learnings.md.
+
+If file does not exist or is empty:
+  No pending spec learnings.
+
 ━━ WAITING FOR DECISIONS ━━━━━━━━━━━━━━
 
 For each MUST DO: ask user. Wait for response.
