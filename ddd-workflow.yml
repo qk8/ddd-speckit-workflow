@@ -741,10 +741,9 @@ steps:
                 Report PASS/FAIL for each. If any FAIL: note it but do not block.
                 Write findings to .artifacts/post-implementation-drift.md.
                 This is advisory — the full speckit.verify will run in Phase 8.
-          - id: exit_implement_loop
+          - id: post_impl_drift_complete
             type: shell
             command: echo "LOOP_EXIT=true"
-            goto: phase_8_final_verify
 
       # ── Step 4: Stagnation Detection ──
       - id: stagnation_check_run
@@ -903,13 +902,9 @@ steps:
             type: gate
             message: |
               Review the retrospect report.
-              Respond to all MUST DO items before continuing.
-              Confirm or reject each proposed spec change.
-              Confirm or reject each proposed edge-case task addition.
               Approve when all blocking issues are resolved.
-            options: [approve, revise]
-            on_revise:
-              goto: run_retrospect
+              Select abort if further iteration is needed (will trigger again next implement_loop iteration).
+            options: [approve, abort]
 
       # ── Step 9: Drift Check (every 5 tasks) ──
       - id: cleanup_drift_report
