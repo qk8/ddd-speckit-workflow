@@ -10,6 +10,7 @@ case "$GATE_TYPE" in
   plan)          THRESHOLD=2 ;;
   tasks)         THRESHOLD=3 ;;
   implement)     THRESHOLD=2 ;;
+  design)        THRESHOLD=3 ;;
   code-review)   THRESHOLD=2 ;;
   *)             THRESHOLD=3 ;;
 esac

@@ -519,32 +519,58 @@ steps:
           - goto: plan-consolidated-review
         on_abort: abort
 
-  # ── POST-PLAN DESIGN QUALITY GATE ─────────────────────────────
-  - id: speckit_review_design
-    command: speckit.review
-    integration: claude
-    input:
-      args: >
-        Review the design quality of the completed plan.
-        Run all 5 dimensions: Ubiquitous Language, Invariant Enforcement,
-        Hidden Coupling, Conventions Consistency, Readability.
-        Report any violations with file:line references.
-        For blocking findings: fix immediately.
-        For new conventions: confirm with user before adding.
+  # ── BOUNDED DESIGN REVIEW ─────────────────────────────────────
+  # Replaces the unbounded speckit_review_design flat gate.
+  # Max 3 revisions prevent infinite revise cycles.
+  - id: design_review_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: speckit_review_design
+        command: speckit.review
+        integration: claude
+        input:
+          args: >
+            Review the design quality of the completed plan.
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md
+            exists, read it. Do not repeat fixes that were already tried and
+            rejected. Read the last 3 entries only.
 
-  - id: review-speckit-review
-    type: gate
-    message: |
-      Review the speckit.review design quality assessment above.
-      Approve to proceed to task generation.
-      Revise to send back for design fixes.
-    options: [approve, revise, abort]
-    on_revise:
-      - id: trim-revision-history
+            Run all 5 dimensions: Ubiquitous Language, Invariant Enforcement,
+            Hidden Coupling, Conventions Consistency, Readability.
+            Report any violations with file:line references.
+            For blocking findings: fix immediately.
+            For new conventions: confirm with user before adding.
+
+      - id: check_design_threshold
         type: shell
-        command: "bash scripts/record-revision.sh --trim 3"
-      - goto: speckit_review_design
-    on_abort: abort
+        command: "bash scripts/gate-threshold.sh design {{ steps.design_review_round_iteration.output.count || 1 }}"
+
+      - id: review-speckit-review
+        type: gate
+        message: |
+          ━━ DESIGN REVIEW REVISION {{ steps.design_review_round_iteration.output.count || 1 }}/3 ━━
+
+          Review the speckit.review design quality assessment above.
+          Approve to proceed to task generation.
+          Revise to send back for design fixes ({{ steps.design_review_round_iteration.output.count || 1 }}/3 used).
+          {% if steps.check_design_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise, abort]
+        on_revise:
+          - id: trim-revision-history
+            type: shell
+            command: "bash scripts/record-revision.sh --trim 3"
+          - id: record-design-revision
+            type: shell
+            command: >
+              bash scripts/record-revision.sh design_review_round
+              "{{ steps.design_review_round_iteration.output.count || 1 }}"
+              "Design review revision round {{ steps.design_review_round_iteration.output.count || 1 }}"
+          - goto: speckit_review_design
+        on_abort: abort
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -903,14 +929,17 @@ steps:
             message: |
               Review the retrospect report.
               Approve when all blocking issues are resolved.
-              Select abort if further iteration is needed (will trigger again next implement_loop iteration).
-            options: [approve, abort]
+              Revise to send back for more iteration (within implement_loop).
+              Select abort if further iteration is not warranted
+              (will trigger again next implement_loop iteration).
+            options: [approve, revise, abort]
+            on_revise:
+              - id: trim-revision-history-retro
+                type: shell
+                command: "bash scripts/record-revision.sh --trim 3"
+              - goto: run_retrospect
 
       # ── Step 9: Drift Check (every 5 tasks) ──
-      - id: cleanup_drift_report
-        type: shell
-        command: "rm -f .artifacts/drift_check_report.md"
-
       - id: run_drift_check
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
