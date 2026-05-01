@@ -4,6 +4,20 @@ Determine the current feature: scan .specify/specs/ and find the feature
 whose tasks.md contains the first TODO task.
 Read its plan.md and tasks.md.
 
+CHECKPOINT RECOVERY (read .workflow-state.json first):
+  If .workflow-state.json exists in the feature directory, read it.
+  This file contains structured checkpoint data from previous iterations:
+    - Task statuses (DONE, IN_PROGRESS, ABANDONED) with timestamps
+    - Check results per task (deterministic and batched Claude checks)
+    - Stagnation state and retrospective schedule
+  Use the checkpoint to:
+    1. Verify task state consistency with tasks.md (flag discrepancies)
+    2. Skip re-running checks that already passed (read .checks from checkpoint)
+    3. Recover from interruption: if tasks.md shows IN_PROGRESS but checkpoint
+       shows DONE, trust tasks.md (it is the source of truth)
+    4. If tasks.md is missing or unreadable, fall back to checkpoint data
+  Print: "Checkpoint loaded: [N] tasks tracked" if checkpoint found.
+
 PARALLEL MODE (batch independent tasks):
   The workflow YAML passes this instruction via input.args. When you see this
   section, process tasks in batches instead of one at a time:

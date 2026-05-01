@@ -182,3 +182,20 @@ Update tasks.md for TASK-[N]:
 Count total DONE tasks. The workflow (check-tasks.sh) handles adaptive retrospective
 cadence based on project complexity. Print a completion notice:
   "[N] tasks completed."
+
+# ── PERSIST CHECKPOINT ──────────────────────────────────────
+# After updating tasks.md, write structured checkpoint data
+# so future sessions can resume without re-parsing tasks.md.
+
+FEATURE_DIR="[feature_dir from tasks.md location]"
+TASK_ID="[current task ID, e.g. TASK-3]"
+TASK_TYPE="[task type from tasks.md]"
+BUILT="[one sentence from Built field]"
+TEST_FILE="[path from Test file field]"
+
+mkdir -p "$FEATURE_DIR/.artifacts"
+
+# Write checkpoint using check-point.sh helper (bash 3.2 compatible)
+bash scripts/check-point.sh write "$FEATURE_DIR" task_done "$TASK_ID" "$TASK_TYPE" "$BUILT" "$TEST_FILE" 2>/dev/null || true
+
+echo "Checkpoint updated: $TASK_ID marked DONE in .workflow-state.json"
