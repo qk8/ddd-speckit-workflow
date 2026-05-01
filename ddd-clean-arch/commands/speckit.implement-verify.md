@@ -23,29 +23,58 @@ TIER FILTERING:
   If this is the last task of that type (count remaining TODO/IN_PROGRESS tasks
   of the same type), also run secondary-tier checks for that module.
 
-For each applicable check [X], read and execute the sub-check file
-from commands/checks/check_[X]_[name].mdc.
+─────────────────────────────────────────
+STEP 3A — DETERMINISTIC CHECKS (check-runner.sh)
+─────────────────────────────────────────
+Run the deterministic check engine:
 
-Execute each check in order. Record result: PASS | FAIL — details.
-If any check FAILS:
-  1. Attempt to fix. If fixable, re-run all checks from the beginning.
-  2. If not fixable after 2 attempts: mark ABANDONED.
+  bash scripts/check-runner.sh "[feature_dir]" "[task_type]"
 
-A task cannot be marked DONE until every applicable check passes.
+This executes all deterministic checks (A, BC, D, E, F, I, K, L, R, Z) in parallel.
+Results are written to .artifacts/check-results/<check-id>.result (PASS/FAIL).
 
+If check-runner.sh exits 0: all deterministic checks passed. Proceed to STEP 3B.
+If check-runner.sh exits 1: deterministic checks failed. Proceed to STEP 3C.
+
+─────────────────────────────────────────
+STEP 3B — BATCHED CLAUDE CHECKS
+─────────────────────────────────────────
+For non-deterministic checks that need Claude judgment (G, H, J, M, N, O, P, Q, S, T, U):
+
+If this is the LAST task of the current module type, run these checks:
+  - Read the sub-check file from commands/checks/check_[X]_[name].mdc for each
+  - Execute each check. Record result: PASS | FAIL — details.
+
+For non-last tasks, skip batched Claude checks (handled at module boundary).
+
+─────────────────────────────────────────
+STEP 3C — FIX DETERMINISTIC CHECK FAILURES
+─────────────────────────────────────────
+If check-runner.sh reported failures:
+  1. Read .artifacts/check-results/[X].result for each failed check.
+  2. Attempt to fix the underlying issue.
+  3. Re-run check-runner.sh from the beginning.
+  4. If not fixable after 2 attempts: mark ABANDONED.
+
+─────────────────────────────────────────
+STEP 3D — ERROR BUDGET & ESCALATION
+─────────────────────────────────────────
 ERROR BUDGET:
   - Critical checks: 0 error budget — ALL must pass. No exceptions.
   - Secondary checks: 1 error budget — at most one may fail (logged as warning).
   - If error budget exceeded: stop revising, produce summary report, escalate.
 
 PER-CHECK ITERATION CAP:
-  Each individual check gets up to 2 fix attempts before escalating.
+  Deterministic checks (check-runner.sh): up to 2 fix attempts.
+  Batched Claude checks: up to 2 fix attempts.
   The correction loop (STEP 2) gets up to 3 attempts per test failure.
   There is NO global cap — each check is independent.
 
   If the SAME check fails 3 consecutive times:
     Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
     Do not retry this check; proceed to the next applicable check.
+
+A task cannot be marked DONE until every applicable check passes.
 
 ─────────────────────────────────────────
 STEP 4 — SMOKE TEST (CODE-LEVEL VALIDATION)
