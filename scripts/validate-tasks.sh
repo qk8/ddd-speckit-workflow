@@ -13,6 +13,11 @@
 
 set -euo pipefail
 
+JSON_MODE=false
+if [ "${1:-}" = "--json" ]; then
+  JSON_MODE=true
+fi
+
 FEATURE_DIR="${FEATURE_DIR:-$(bash scripts/find-first-feature.sh)}"
 
 # Handle --batch-plan early (before validation checks)
@@ -27,7 +32,19 @@ if [ "${1:-}" = "--batch-plan" ]; then
 fi
 
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
-  echo "No tasks.md found. Nothing to validate."
+  if [ "$JSON_MODE" = true ]; then
+    echo "{"
+    echo '  "valid": true,'
+    echo '  "errors": 0,'
+    echo '  "warnings": 0,'
+    echo '  "task_count": 0,'
+    echo '  "circular_deps": [],'
+    echo '  "missing_refs": [],'
+    echo '  "ordering_warnings": []'
+    echo "}"
+  else
+    echo "No tasks.md found. Nothing to validate."
+  fi
   exit 0
 fi
 
@@ -42,7 +59,11 @@ TASK_IDS_FILE="$TMP_DIR/task_ids.txt"
 TASK_DEPS_FILE="$TMP_DIR/task_deps.txt"
 VISIT_STATE_FILE="$TMP_DIR/visit_state.txt"
 ORDERED_FILE="$TMP_DIR/ordered_ids.txt"
+MISSING_REFS_FILE="$TMP_DIR/missing_refs.txt"
+CIRCULAR_DEPS_FILE="$TMP_DIR/circular_deps.txt"
+ORDERING_WARNINGS_FILE="$TMP_DIR/ordering_warnings.txt"
 touch "$TASK_IDS_FILE" "$TASK_DEPS_FILE" "$VISIT_STATE_FILE" "$ORDERED_FILE"
+touch "$MISSING_REFS_FILE" "$CIRCULAR_DEPS_FILE" "$ORDERING_WARNINGS_FILE"
 
 VISIT_UNVISITED=0
 VISIT_IN_PROGRESS=1
@@ -226,7 +247,19 @@ done < "$TASKS_FILE"
 task_count=$(wc -l < "$TASK_IDS_FILE" | xargs)
 
 if [ "$task_count" -eq 0 ]; then
-  echo "No tasks found in $TASKS_FILE."
+  if [ "$JSON_MODE" = true ]; then
+    echo "{"
+    echo '  "valid": true,'
+    echo '  "errors": 0,'
+    echo '  "warnings": 0,'
+    echo '  "task_count": 0,'
+    echo '  "circular_deps": [],'
+    echo '  "missing_refs": [],'
+    echo '  "ordering_warnings": []'
+    echo "}"
+  else
+    echo "No tasks found in $TASKS_FILE."
+  fi
   exit 0
 fi
 
@@ -275,6 +308,8 @@ while IFS='|' read -r task_id deps; do
     if ! task_exists "$dep"; then
       echo "  ERROR: TASK-$task_id depends on TASK-$dep, but TASK-$dep does not exist."
       ERRORS=$((ERRORS + 1))
+      # Collect for JSON
+      echo "\"$task_id -> $dep\"" >> "$MISSING_REFS_FILE"
     fi
   done
 done < "$TASK_DEPS_FILE"
@@ -344,6 +379,8 @@ dfs_detect_cycles() {
         if [ "$dep_state" -eq "$VISIT_IN_PROGRESS" ]; then
           echo "  ERROR: Circular dependency detected: TASK-$current_node -> TASK-$dep -> ... -> TASK-$current_node"
           ERRORS=$((ERRORS + 1))
+          # Collect for JSON
+          echo "\"TASK-$current_node -> TASK-$dep\"" >> "$CIRCULAR_DEPS_FILE"
         elif [ "$dep_state" -eq "$VISIT_UNVISITED" ]; then
           # Mark IN_PROGRESS before pushing (simulates recursive call entry)
           set_state "$dep" "$VISIT_IN_PROGRESS"
@@ -404,6 +441,8 @@ for ((i=1; i<${#ORDERED_IDS[@]}; i++)); do
       echo "  WARNING: TASK-$dep should appear before TASK-$task_id in tasks.md."
       echo "           TASK-$task_id depends on TASK-$dep but it appears later in the file."
       WARNINGS=$((WARNINGS + 1))
+      # Collect for JSON
+      echo "\"TASK-$task_id depends on TASK-$dep (ordering)\"" >> "$ORDERING_WARNINGS_FILE"
     fi
   done
 done
@@ -418,6 +457,50 @@ fi  # end SKIP_VALIDATION guard
 if [ "${1:-}" = "--batch-plan" ]; then
   compute_batch_plan
   exit 0
+fi
+
+# ── JSON output (when --json flag is used) ──────────────────────
+if [ "$JSON_MODE" = true ]; then
+  # Determine validity
+  if [ "$ERRORS" -eq 0 ]; then
+    _valid="true"
+  else
+    _valid="false"
+  fi
+
+  # Build arrays from temp files (bash 3.2 compatible)
+  build_json_array() {
+    local file="$1"
+    if [ ! -s "$file" ]; then
+      echo "[]"
+      return
+    fi
+    echo -n "["
+    local first=true
+    while IFS= read -r line; do
+      if [ "$first" = true ]; then
+        echo -n "$line"
+        first=false
+      else
+        echo -n ", $line"
+      fi
+    done < "$file"
+    echo -n "]"
+  }
+
+  _circular=$(build_json_array "$CIRCULAR_DEPS_FILE")
+  _missing=$(build_json_array "$MISSING_REFS_FILE")
+  _ordering=$(build_json_array "$ORDERING_WARNINGS_FILE")
+
+  echo "{"
+  echo "  \"valid\": $_valid,"
+  echo "  \"errors\": $ERRORS,"
+  echo "  \"warnings\": $WARNINGS,"
+  echo "  \"task_count\": $task_count,"
+  echo "  \"circular_deps\": $_circular,"
+  echo "  \"missing_refs\": $_missing,"
+  echo "  \"ordering_warnings\": $_ordering"
+  echo "}"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────

@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Usage: ./scripts/check-tasks.sh
+# Usage: ./scripts/check-tasks.sh [--json]
 # Outputs shell variables for ddd-workflow.yml:
 #   has_todo, done_count, todo_count, in_progress, abandoned_count
+#
+# When --json is passed, also writes JSON state to {{feature_dir}}/.tasks-state.json
 
 set -euo pipefail
+
+JSON_MODE=false
+if [ "${1:-}" = "--json" ]; then
+  JSON_MODE=true
+fi
 
 FEATURE_DIR=$(bash scripts/find-first-feature.sh)
 
@@ -24,6 +31,23 @@ if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "in_progress="; echo "abandoned_count=0"; echo "total_tasks=0"
   echo "complexity=medium"; echo "retro_interval=$DEFAULT_RETRO_INTERVAL"; echo "first_retro_threshold=$DEFAULT_FIRST_RETRO_THRESHOLD"
   echo "retro_trigger=false"
+  echo "feature_dir=${FEATURE_DIR:-}"
+  if [ "$JSON_MODE" = true ] && [ -n "${FEATURE_DIR:-}" ]; then
+    PARSED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+    cat > "$FEATURE_DIR/.tasks-state.json" <<EJSON
+{
+  "done": 0,
+  "todo": 0,
+  "in_progress": [],
+  "abandoned": 0,
+  "total": 0,
+  "complexity": "medium",
+  "retro_interval": ${DEFAULT_RETRO_INTERVAL},
+  "retro_trigger": false,
+  "parsed_at": "${PARSED_AT}"
+}
+EJSON
+  fi
   exit 0
 fi
 
@@ -119,3 +143,48 @@ echo "retro_interval=$RETRO_INTERVAL"
 echo "first_retro_threshold=$FIRST_RETRO_THRESHOLD"
 echo "retro_trigger=$RETRO_TRIGGER"
 echo "feature_dir=$FEATURE_DIR"
+
+# ── JSON output (when --json flag is used) ──────────────────────
+if [ "$JSON_MODE" = true ]; then
+  # Build in_progress JSON array (bash 3.2 compatible)
+  IN_PROGRESS_JSON="[]"
+  if [ -n "$IN_PROGRESS_ALL" ]; then
+    IN_PROGRESS_JSON="["
+    first=true
+    OLD_IFS="$IFS"
+    IFS=','
+    for item in $IN_PROGRESS_ALL; do
+      item=$(echo "$item" | xargs)
+      if [ "$first" = true ]; then
+        IN_PROGRESS_JSON="${IN_PROGRESS_JSON}\"$item\""
+        first=false
+      else
+        IN_PROGRESS_JSON="${IN_PROGRESS_JSON}, \"$item\""
+      fi
+    done
+    IFS="$OLD_IFS"
+    IN_PROGRESS_JSON="${IN_PROGRESS_JSON}]"
+  fi
+
+  PARSED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+
+  JSON_OUT=$(cat <<STATEOF
+{
+  "done": ${DONE_COUNT},
+  "todo": ${TODO_COUNT},
+  "in_progress": ${IN_PROGRESS_JSON},
+  "abandoned": ${ABANDONED_COUNT},
+  "total": ${TOTAL_TASKS},
+  "complexity": "${COMPLEXITY}",
+  "retro_interval": ${RETRO_INTERVAL},
+  "retro_trigger": ${RETRO_TRIGGER},
+  "parsed_at": "${PARSED_AT}"
+}
+STATEOF
+)
+
+  if [ -n "$FEATURE_DIR" ]; then
+    echo "$JSON_OUT" > "$FEATURE_DIR/.tasks-state.json"
+    echo "Wrote task state to $FEATURE_DIR/.tasks-state.json" >&2
+  fi
+fi

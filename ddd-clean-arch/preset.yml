@@ -40,66 +40,89 @@ commands:
 checks:
   A:
     name: "Architectural Tests"
+    tier: critical
     applies_to: [backend-domain, backend-infra, backend-api]
   BC:
     name: "New Tests + Regression"
+    # BC = TEST EXECUTION: new tests run AND full regression suite passes. Failure = new tests fail OR existing tests broke.
+    tier: critical
     applies_to: all
   D:
     name: "Linter"
+    tier: critical
     applies_to: all
   E:
     name: "Dependency Vulnerability Scan"
+    tier: secondary
     applies_to: [backend-domain, backend-infra, backend-api, shared]
   F:
     name: "Migration Test"
+    tier: secondary
     applies_to: [backend-infra]
   G:
     name: "Error Handling Assertions"
+    tier: secondary
     applies_to: [backend-api, frontend-data]
   H:
     name: "Browser Verification"
+    tier: tertiary
     applies_to: [frontend-feature, e2e]
   I:
     name: "Secret Scanning"
+    tier: critical
     applies_to: all
   J:
     name: "Performance Budget"
+    tier: secondary
     applies_to: [backend-api, frontend-feature]
   K:
     name: "API Contract Enforcement"
+    tier: secondary
     applies_to: [backend-api, shared]
   L:
     name: "Anti-Hallucination Check"
+    tier: critical
     applies_to: all
   M:
     name: "Failure Mode Coverage"
+    tier: secondary
     applies_to: all
   N:
     name: "Cross-Cutting Concern Audit"
+    tier: secondary
     applies_to: [backend-api, shared]
   O:
     name: "Security Hardening"
+    tier: secondary
     applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
   P:
     name: "Test Quality Review"
+    # P = TEST DESIGN: assertions prove acceptance criteria, factory/fixture usage, no stale/unrelated tests. Complementary to BC (BC=runs, P=well-written).
+    tier: tertiary
     applies_to: all
   Q:
     name: "Resilience Testing"
+    tier: tertiary
     applies_to: [backend-api, backend-infra]
   R:
     name: "Quantitative Pass Gate"
+    tier: tertiary
     applies_to: [backend-api, shared]
   S:
     name: "Property-Based Test Coverage"
+    tier: tertiary
     applies_to: all
   T:
     name: "Adversarial Input Testing"
+    tier: tertiary
     applies_to: [backend-api, shared]
   U:
     name: "Session & Token Security"
+    tier: tertiary
     applies_to: [backend-api]
   Z:
     name: "Constraint Drift Detection"
+    tier: critical
     applies_to: all
 
 # Derived routing table — auto-derived from checks[].applies_to.
@@ -114,6 +137,29 @@ routing:
   frontend-data:    [BC, D, G, I, L, M, O, P, S, Z]
   frontend-feature: [BC, D, H, I, J, L, M, O, P, S, Z]
   e2e:              [BC, D, H, I, L, M, P, S, Z]
+
+# Routing tables by tier — which checks apply to each module type per tier.
+# routing_critical: checks that run on every task execution.
+# routing_secondary: checks that run only when the LAST task for a module type completes.
+routing_critical:
+  backend-domain:   [A, BC, D, I, L, Z]
+  backend-infra:    [A, BC, D, I, L, Z]
+  backend-api:      [A, BC, D, I, L, Z]
+  shared:           [BC, D, I, L, Z]
+  integration:      [BC, D, I, L, Z]
+  frontend-data:    [BC, D, I, L, Z]
+  frontend-feature: [BC, D, I, L, Z]
+  e2e:              [BC, D, I, L, Z]
+
+routing_secondary:
+  backend-domain:   [E, M]
+  backend-infra:    [E, F, M, O, Q]
+  backend-api:      [E, G, J, K, M, N, O, R, T]
+  shared:           [E, K, M, N, R, T]
+  integration:      [M]
+  frontend-data:    [G, M, O]
+  frontend-feature: [J, M, O]
+  e2e:              [M]
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.

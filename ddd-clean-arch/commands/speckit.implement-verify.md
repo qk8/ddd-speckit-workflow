@@ -8,7 +8,21 @@ Read plan.md §13 and CLAUDE.md for layer rules and constraints.
 STEP 3 — RUN QUALITY CHECKS
 ─────────────────────────────────────────
 Read the current task type from tasks.md.
-Load applicable checks from preset-checks.yml checks[].applies_to.
+Load applicable checks from ddd-clean-arch/preset.yml, filtered by tier:
+
+TIER FILTERING:
+  preset.yml assigns each check a tier:
+  - critical (A, BC, D, I, L, Z): run every task — non-negotiable quality gates
+  - secondary (E, F, G, J, K, M, N, O): run only when the LAST task for a
+    module type completes (e.g., last backend-api task)
+  - tertiary (H, P, Q, R, S, T, U): skip entirely during per-task execution —
+    handled in Phase 6 code review and Phase 7 final verify
+
+  For this task, run only critical-tier checks.
+  Check which module type this task belongs to (from tasks.md Type field).
+  If this is the last task of that type (count remaining TODO/IN_PROGRESS tasks
+  of the same type), also run secondary-tier checks for that module.
+
 For each applicable check [X], read and execute the sub-check file
 from commands/checks/check_[X]_[name].mdc.
 
@@ -18,6 +32,11 @@ If any check FAILS:
   2. If not fixable after 2 attempts: mark ABANDONED.
 
 A task cannot be marked DONE until every applicable check passes.
+
+ERROR BUDGET:
+  - Critical checks: 0 error budget — ALL must pass. No exceptions.
+  - Secondary checks: 1 error budget — at most one may fail (logged as warning).
+  - If error budget exceeded: stop revising, produce summary report, escalate.
 
 PER-CHECK ITERATION CAP:
   Each individual check gets up to 2 fix attempts before escalating.

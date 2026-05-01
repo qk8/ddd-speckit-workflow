@@ -96,6 +96,10 @@ steps:
             obligations, external system API constraints, and expected
             data volumes for the most critical operations.
 
+      - id: check_clarify_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh clarify {{ steps.clarify_round_iteration.output.count || 1 }}"
+
       - id: review-clarify
         type: gate
         message: |
@@ -104,6 +108,10 @@ steps:
           Answer the clarifying questions above.
           Edit your answers directly in this gate if needed.
           Approve when requirements are well-understood.
+          {% if steps.check_clarify_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded** ({{ steps.clarify_round_iteration.output.count || 1 }}/3).
+          Approving on next iteration.
+          {% endif %}
         options: [approve, re-clarify]
         on_re-clarify:
           - id: trim-revision-history
@@ -174,6 +182,10 @@ steps:
             Print the audit. Do NOT modify spec.md yet. The human will
             review and decide what to add.
 
+      - id: check_audit_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh spec {{ steps.audit_round_iteration.output.count || 1 }}"
+
       - id: review-audit
         type: gate
         message: |
@@ -183,6 +195,9 @@ steps:
           Edit spec.md to resolve every item: add missing requirements,
           clarify ambiguities, document contradictions resolved.
           Approve when the spec is unambiguous and complete.
+          {% if steps.check_audit_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
         options: [approve, revise]
         on_revise:
           - id: trim-revision-history
@@ -316,7 +331,7 @@ steps:
           Format: KEY=placeholder_value (one per line, no blank lines between entries).
           Commit this file. Do NOT commit .env or .env.local.
 
-        CLAUDE.md (update, max 150 lines):
+        CLAUDE.md (update, advisory max 100 lines):
           Use ddd-clean-arch/templates/claude-md-template.md as the structure.
           Fill in every placeholder from plan.md:
             [PROJECT_NAME]       → from project-brief.md Project name
@@ -329,8 +344,9 @@ steps:
             Test conventions     → from §13 (all frameworks, locations, runners)
             Regression commands  → from §13 regression_command (all three)
             Definition of done   → from §17 verbatim
-          The output must be ≤150 lines. If it exceeds 150 lines, condense the
-          Architecture and Module boundaries sections — never cut §16 or §17.
+          Target ≤100 lines. This is advisory — do not cut §16 or §17.
+          If the file exceeds 100 lines, condense the Architecture and Module
+          boundaries sections, but never omit §16 or §17.
 
         scripts/ci-local.sh (fill in the COMMANDS section):
           Populate the command variables at the top of scripts/ci-local.sh
@@ -354,24 +370,29 @@ steps:
 
         End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete."
 
-  # ── ENFORCE CLAUDE.md 150-LINE CAP ──────────────────────────────
+  # ── CLAUDE.md LINE COUNT (advisory, soft warning) ───────────────
+  # Previously a hard cap at 150 lines. Converted to advisory at 100 lines
+  # to prevent Claude from paraphrasing or omitting essential content.
   - id: check-claude-md-lines
     type: shell
     command: |
       CLAUDE_MD=".claude/CLAUDE.md"
       if [ -f "$CLAUDE_MD" ]; then
-        # Count visual lines (wc -l counts newlines; add 1 if no trailing newline)
         LINES=$(wc -l < "$CLAUDE_MD" | xargs)
         if [ -s "$CLAUDE_MD" ] && [ "$(tail -c1 "$CLAUDE_MD" | wc -l)" -eq 0 ]; then
           LINES=$((LINES + 1))
         fi
-        if [ "$LINES" -gt 150 ]; then
-          echo "ERROR: CLAUDE.md is $LINES lines, must be <= 150" >&2
-          exit 1
+        if [ "$LINES" -gt 100 ]; then
+          echo "WARN: CLAUDE.md is $LINES lines (advisory limit: 100). "
+          echo "       Consider condensing Architecture and Module boundaries."
+          echo "CLAUDE_MD_LINES_WARN=true"
+        else
+          echo "PASS: CLAUDE.md is $LINES lines (limit: 100)"
+          echo "CLAUDE_MD_LINES_WARN=false"
         fi
-        echo "PASS: CLAUDE.md is $LINES lines (limit: 150)"
       else
         echo "SKIP: CLAUDE.md not yet created"
+        echo "CLAUDE_MD_LINES_WARN=false"
       fi
 
   # ── VALIDATE CI-LOCAL.SH COMMANDS POPULATED ──────────────────
@@ -470,6 +491,10 @@ steps:
             items are PASS. Print a summary of all sections at the end.
             End with: "Consolidated plan review complete. All sections PASS."
 
+      - id: check_plan_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh plan {{ steps.plan_review_revision_iteration.output.count || 1 }}"
+
       - id: review-plan-revision-gate
         type: gate
         message: |
@@ -477,6 +502,9 @@ steps:
 
           Review all 3 sections. Approve to continue implementation.
           Revise to send back for changes ({{ steps.plan_review_revision_iteration.output.count || 1 }}/3 used).
+          {% if steps.check_plan_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
         options: [approve, revise, abort]
         on_revise:
           - id: trim-revision-history
@@ -575,6 +603,10 @@ steps:
               - All Depends-on fields must reference earlier tasks.
               - No circular dependencies.
 
+      - id: check_tasks_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh tasks {{ steps.tasks_phase_iteration.output.count || 1 }}"
+
       - id: review-tasks
         type: gate
         message: |
@@ -588,6 +620,9 @@ steps:
           [ ] All Depends-on references are to earlier tasks?
 
           Approving proceeds to task dependency graph validation before implementation.
+          {% if steps.check_tasks_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
         options: [approve, revise]
         on_revise:
           - id: trim-revision-history
@@ -604,7 +639,10 @@ steps:
       - id: validate-tasks
         type: shell
         command: "bash scripts/validate-tasks.sh"
-        ignore_failure: true
+
+      - id: check_validate_tasks_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh tasks {{ steps.tasks_phase_iteration.output.count || 1 }}"
 
       - id: review-validate-tasks
         type: gate
@@ -621,6 +659,9 @@ steps:
           If there are errors, select "revise" to fix tasks.md.
           If clean, select "approve" to start implementation.
           Maximum 5 revision cycles ({{ steps.tasks_phase_iteration.output.count || 1 }}/5).
+          {% if steps.check_validate_tasks_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
         options: [approve, revise]
         on_revise:
           - id: trim-revision-history
@@ -635,12 +676,13 @@ steps:
           - goto: tasks
 
   # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
-  # Max 100 iterations protects against stuck tasks (e.g., unfixable regression).
+  # Max 50 iterations protects against stuck tasks (e.g., unfixable regression).
+  # After 3 cumulative stagnation events, auto-abort regardless of user choice.
   # Uses check-tasks-safe.sh which returns safe defaults if tasks.md is malformed.
   - id: implement_loop
     type: while
     condition: "true"
-    max_iterations: 100
+    max_iterations: 50
     steps:
 
       - id: check_remaining
@@ -951,26 +993,6 @@ steps:
             In single-task mode (no --parallel): implement only the first TODO task.
             Always check Depends-on before starting.
 
-            After implementation, check plan.md §15 highest_risk_paths.
-            If the task touches any path listed there, run this adversarial
-            hardening prompt on the implementation:
-
-            "Review the code you just wrote for this critical module.
-            Assume the following catastrophic scenario happens simultaneously:
-            1. The database connection drops mid-transaction.
-            2. An idempotency key is evicted or never created.
-            3. The client retries the request 5 times within 100ms.
-            4. A downstream service returns a 503 halfway through.
-
-            Rewrite the implementation to guarantee:
-            - Database ACID compliance (transactions with proper rollback)
-            - Idempotency (duplicate requests produce exactly one effect)
-            - Exponential backoff with jitter on retries
-            - Graceful degradation (partial failures don't corrupt state)
-
-            Then write a test that simulates this exact scenario.
-            If the test fails, fix the implementation and re-test."
-
       - id: implement_verify
         type: prompt
         command: speckit.implement-verify
@@ -985,6 +1007,10 @@ steps:
         type: shell
         command: "bash scripts/quick-drift-check.sh"
         ignore_failure: true
+
+      - id: check_implement_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
 
       - id: review-implement
         type: gate
@@ -1010,6 +1036,9 @@ steps:
           Revise to send the task back to implementation for test fixes.
           Pause to save state and stop (resume with: specify workflow resume <run-id>
             or by running: bash scripts/resume-workflow.sh)
+          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
         options: [approve, revise, stop]
         on_stop:
           type: shell
@@ -1021,7 +1050,22 @@ steps:
         on_revise:
           goto: implement_code
 
-  # ── PHASE 7: CODE REVIEW CHECKLIST (bounded) ────────────────────
+  # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────
+  # Adversarial hardening runs once before the code review loop.
+  # Moved from per-task implement_code to avoid over-engineering simple tasks.
+  - id: adversarial_hardening
+    command: speckit.code-review
+    integration: claude
+    input:
+      args: >
+        Run the catastrophic scenario hardening review:
+        Read plan.md §15 highest_risk_paths.
+        For each path, simulate: database drop mid-transaction, idempotency key
+        eviction, client retry storm (5x in 100ms), downstream 503 halfway through.
+        Verify or fix: ACID compliance, idempotency, exponential backoff with jitter,
+        graceful degradation.
+        Write findings to .artifacts/hardening-report.md.
+
   - id: code_review_round
     type: while
     condition: "true"
@@ -1040,6 +1084,10 @@ steps:
             For every FAIL: apply the fix immediately.
             Produce REVIEW_REPORT.md documenting the outcome.
 
+      - id: check_code_review_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh code-review {{ steps.code_review_round_iteration.output.count || 1 }}"
+
       - id: review-code-review
         type: gate
         message: |
@@ -1053,6 +1101,9 @@ steps:
           [ ] All maintainability items: PASS
           [ ] All accessibility items: PASS, N/A
           [ ] REVIEW_REPORT.md produced
+          {% if steps.check_code_review_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
 
           Approve to continue to final verify.
           Revise to send the checklist back for fixes.
@@ -1078,7 +1129,7 @@ steps:
           - goto: code_review
         on_abort: abort
 
-  # ── PHASE 8: FINAL VERIFY ───────────────────────────────────────
+  # ── PHASE 7: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
     command: speckit.verify
     integration: claude
