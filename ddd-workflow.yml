@@ -675,9 +675,10 @@ steps:
               "Validation revision round {{ steps.tasks_phase_iteration.output.count || 1 }}"
           - goto: tasks
 
-  # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
-  # Max 50 iterations protects against stuck tasks (e.g., unfixable regression).
-  # After 3 cumulative stagnation events, auto-abort regardless of user choice.
+  # ── PHASE 5: IMPLEMENT LOOP (DAG-structured) ──────────────────
+  # Linear flow: no goto jumps within the iteration.
+  # Each step flows to the next. Loops are handled by the while wrapper.
+  # Max 50 iterations protects against stuck tasks.
   # Uses check-tasks-safe.sh which returns safe defaults if tasks.md is malformed.
   - id: implement_loop
     type: while
@@ -685,10 +686,12 @@ steps:
     max_iterations: 50
     steps:
 
+      # ── Step 1: Task State ──
       - id: check_remaining
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
 
+      # ── Step 2: Parse Error ──
       - id: check_parse_error
         type: if
         condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
@@ -711,6 +714,7 @@ steps:
               command: echo "TASKS_PARSE_ERROR=0"
             on_abort: abort
 
+      # ── Step 3: All Done ──
       - id: check_all_done
         type: if
         condition: "{{ steps.check_remaining.output.has_todo == 'false' }}"
@@ -742,41 +746,38 @@ steps:
             command: echo "LOOP_EXIT=true"
             goto: phase_8_final_verify
 
-      - id: stagnation_check
-        type: if
-        condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR != '1' }}"
-        then:
-          - id: stagnation_check_run
-            type: shell
-            command: >
-              FEATURE_DIR="{{ steps.check_remaining.output.feature_dir }}" &&
-              STATE_FILE="$FEATURE_DIR/.stagnation_state" &&
-              mkdir -p "$FEATURE_DIR" &&
-              PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1") &&
-              CURRENT_DONE={{ steps.check_remaining.output.done_count }} &&
-              TOTAL_TASKS={{ steps.check_remaining.output.total_tasks }} &&
-              CONSECUTIVE=$(cat "$STATE_FILE.consec" 2>/dev/null || echo 0) &&
-              if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
-                echo "STAGNANT=false" &&
-                echo "$CURRENT_DONE" > "$STATE_FILE" &&
-                echo "0" > "$STATE_FILE.consec";
-              elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
-                echo "STAGNANT=false" &&
-                echo "$CURRENT_DONE" > "$STATE_FILE" &&
-                echo "0" > "$STATE_FILE.consec";
-              else
-                NEW_CONSEC=$((CONSECUTIVE + 1)) &&
-                echo "$NEW_CONSEC" > "$STATE_FILE.consec" &&
-                echo "$CURRENT_DONE" > "$STATE_FILE" &&
-                if [ "$NEW_CONSEC" -ge 3 ]; then
-                  echo "STAGNANT=true" &&
-                  echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
-                else
-                  echo "STAGNANT=false" &&
-                  echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
-                fi;
-              fi
-            ignore_failure: true
+      # ── Step 4: Stagnation Detection ──
+      - id: stagnation_check_run
+        type: shell
+        command: >
+          FEATURE_DIR="{{ steps.check_remaining.output.feature_dir }}" &&
+          STATE_FILE="$FEATURE_DIR/.stagnation_state" &&
+          mkdir -p "$FEATURE_DIR" &&
+          PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1") &&
+          CURRENT_DONE={{ steps.check_remaining.output.done_count }} &&
+          TOTAL_TASKS={{ steps.check_remaining.output.total_tasks }} &&
+          CONSECUTIVE=$(cat "$STATE_FILE.consec" 2>/dev/null || echo 0) &&
+          if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
+            echo "STAGNANT=false" &&
+            echo "$CURRENT_DONE" > "$STATE_FILE" &&
+            echo "0" > "$STATE_FILE.consec";
+          elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
+            echo "STAGNANT=false" &&
+            echo "$CURRENT_DONE" > "$STATE_FILE" &&
+            echo "0" > "$STATE_FILE.consec";
+          else
+            NEW_CONSEC=$((CONSECUTIVE + 1)) &&
+            echo "$NEW_CONSEC" > "$STATE_FILE.consec" &&
+            echo "$CURRENT_DONE" > "$STATE_FILE" &&
+            if [ "$NEW_CONSEC" -ge 3 ]; then
+              echo "STAGNANT=true" &&
+              echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
+            else
+              echo "STAGNANT=false" &&
+              echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
+            fi;
+          fi
+        ignore_failure: true
 
       - id: stagnation_gate
         type: if
@@ -817,6 +818,7 @@ steps:
                   echo "CONTEXT LOADED — resume from speckit.context"
             on_abort: abort
 
+      # ── Step 5: Progress Logging ──
       - id: iteration_progress
         type: shell
         command: |
@@ -828,6 +830,11 @@ steps:
             echo "In-progress: {{ steps.check_remaining.output.in_progress || 'none' }}"
           fi
 
+      # ── Step 6: Interrupted Session Recovery ──
+      # No goto on actions — iteration flows naturally to next step.
+      # on_restart: marks task TODO; iteration continues (next while iteration picks up the task)
+      # on_continue: falls through to next step
+      # on_abandon: marks task ABANDONED; iteration continues
       - id: check_in_progress
         type: if
         condition: "{{ steps.check_remaining.output.in_progress != '' }}"
@@ -846,25 +853,22 @@ steps:
 
               Choose how to proceed:
                 restart  — Mark the task TODO and restart it cleanly.
-                          Recommended if the partial files should be discarded.
                 continue — Leave it IN_PROGRESS and attempt to resume.
-                          Use only if you know what was completed in the last session.
                 abandon  — Mark it ABANDONED and skip to the next TODO task.
-                          Use if the partial work is unrecoverable.
             options: [restart, continue, abandon]
             on_restart:
               type: shell
               command: >
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
-              goto: check_remaining
-            on_continue:
-              goto: implement_code
+              # No goto — iteration continues; next while iteration picks up the task
             on_abandon:
               type: shell
               command: >
                 bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" ABANDONED &&
-                echo "Task marked ABANDONED. Review partial files before restarting."
+                echo "Task marked ABANDONED. Review partial files before continuing."
+            # on_continue: no action — falls through
 
+      # ── Step 7: Abandoned Task Warning ──
       - id: check_abandoned
         type: if
         condition: "{{ steps.check_remaining.output.abandoned_count | int > 0 }}"
@@ -873,9 +877,7 @@ steps:
             type: gate
             message: |
               ⚠ {{ steps.check_remaining.output.abandoned_count }} ABANDONED task(s) found.
-              These tasks were interrupted and left with partial files on disk.
-              Review them in tasks.md and clean up any partial files before continuing.
-              Approve to continue with the next TODO task (ABANDONED tasks are skipped).
+              Approve to continue. Revise to clean up abandoned tasks.
             options: [approve, revise]
             on_revise:
               - id: clean-abandoned-tasks
@@ -884,10 +886,10 @@ steps:
                 input:
                   args: >
                     Read tasks.md. For each ABANDONED task, either delete the
-                    task section or reset its status to TODO. Print a summary
-                    of changes.
-              - goto: check_remaining
+                    task section or reset its status to TODO. Print a summary.
+              # No goto — iteration continues; next while iteration re-checks
 
+      # ── Step 8: Periodic Retrospect ──
       - id: should_retrospect
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
@@ -909,15 +911,16 @@ steps:
             on_revise:
               goto: run_retrospect
 
+      # ── Step 9: Drift Check (every 5 tasks) ──
       - id: cleanup_drift_report
         type: shell
         command: "rm -f .artifacts/drift_check_report.md"
 
-      - id: drift_check
+      - id: run_drift_check
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
         then:
-          - id: run_drift_check
+          - id: execute_drift_check
             type: prompt
             command: speckit.check
             integration: claude
@@ -934,7 +937,7 @@ steps:
             type: shell
             command: |
               echo "DRIFT_SKIP=true"
-              echo "Drift check skipped — retro_trigger is false (fewer than 5 tasks done)."
+              echo "Drift check skipped — retro_trigger is false."
 
       - id: drift_check_result
         type: shell
@@ -959,27 +962,18 @@ steps:
         message: |
           Drift check: {{ steps.drift_check_result.output || "skipped (no retro trigger)" }}
           Review the report at .artifacts/drift_check_report.md.
-          Approve to continue. Revise to re-run drift check.
-        options: [approve, revise, abort]
-        on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
-          - id: add-drift-fix-tasks
-            type: prompt
-            integration: claude
-            input:
-              args: >
-                Read tasks.md and .artifacts/drift_check_report.md.
-                For each drift issue, add a fix task to tasks.md with clear
-                acceptance criteria. Print the list of added tasks.
-          - goto: run_drift_check
+          Approve to continue.
+        options: [approve, abort]
         on_abort: abort
 
-      - id: save_rollback_point
+      # ── Step 10: Generate Prompt Context ──
+      - id: generate_prompt_context
         type: shell
-        command: "bash scripts/save-rollback-point.sh"
+        command: >
+          bash scripts/prompt-context.sh "{{ steps.check_remaining.output.feature_dir }}"
+        ignore_failure: true
 
+      # ── Step 11: Implement Code ──
       - id: implement_code
         type: prompt
         command: speckit.implement-code
@@ -992,7 +986,10 @@ steps:
             same batch sequentially. After the batch, report completion.
             In single-task mode (no --parallel): implement only the first TODO task.
             Always check Depends-on before starting.
+            Use the prompt context at .artifacts/prompts/[task_id]/context.md
+            if available — it contains targeted plan sections for this task.
 
+      # ── Step 12: Verify Implementation ──
       - id: implement_verify
         type: prompt
         command: speckit.implement-verify
@@ -1003,15 +1000,17 @@ steps:
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
 
-      - id: quick_drift_check
+      # ── Step 13: Save Rollback Point ──
+      - id: save_rollback_point
         type: shell
-        command: "bash scripts/quick-drift-check.sh"
-        ignore_failure: true
+        command: "bash scripts/save-rollback-point.sh"
 
+      # ── Step 14: Threshold Check ──
       - id: check_implement_threshold
         type: shell
         command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
 
+      # ── Step 15: Review ──
       - id: review-implement
         type: gate
         message: |
@@ -1033,7 +1032,7 @@ steps:
           [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
 
           Approve to continue to the next task.
-          Revise to send the task back to implementation for test fixes.
+          Revise to send the task back for fixes (will re-implement next iteration).
           Pause to save state and stop (resume with: specify workflow resume <run-id>
             or by running: bash scripts/resume-workflow.sh)
           {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
@@ -1048,7 +1047,12 @@ steps:
             > "{{ steps.check_remaining.output.feature_dir }}/workflow_state.json" &&
             echo "Workflow paused at review-implement. Run 'bash scripts/resume-workflow.sh' to continue."
         on_revise:
-          goto: implement_code
+          - id: revise-mark-in-progress
+            type: shell
+            command: >
+              bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" IN_PROGRESS &&
+              echo "Task sent back for revision — will be re-implemented next iteration."
+          # No goto — iteration ends naturally; next while iteration re-implements
 
   # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────
   # Adversarial hardening runs once before the code review loop.
