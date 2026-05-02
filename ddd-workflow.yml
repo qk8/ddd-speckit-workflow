@@ -116,7 +116,7 @@ steps:
         on_re-clarify:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-clarify-revision
             type: shell
             command: >
@@ -202,7 +202,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-audit-revision
             type: shell
             command: >
@@ -491,7 +491,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-plan-revision
             type: shell
             command: >
@@ -544,7 +544,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-design-revision
             type: shell
             command: >
@@ -635,7 +635,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-tasks-revision
             type: shell
             command: >
@@ -674,7 +674,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-validation-revision
             type: shell
             command: >
@@ -892,7 +892,7 @@ steps:
             on_revise:
               - id: trim-revision-history-retro
                 type: shell
-                command: "bash scripts/record-revision.sh --trim 3"
+                command: "bash scripts/trim-revision.sh"
               - goto: run_retrospect
 
       # ── Step 9: Drift Check (every 5 tasks) ──
@@ -1082,7 +1082,7 @@ steps:
         on_revise:
           - id: trim-revision-history
             type: shell
-            command: "bash scripts/record-revision.sh --trim 3"
+            command: "bash scripts/trim-revision.sh"
           - id: record-code-review-revision
             type: shell
             command: >
