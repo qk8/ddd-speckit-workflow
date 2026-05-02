@@ -729,12 +729,11 @@ steps:
         then:
           - id: all_tasks_done_summary
             type: shell
-            command: |
-              echo "=== IMPLEMENTATION COMPLETE ==="
-              echo "Tasks: {{ steps.check_remaining.output.done_count }}/{{ steps.check_remaining.output.total_tasks }} done"
-              {{ if steps.check_remaining.output.abandoned_count | int > 0 }}
-              echo "WARNING: {{ steps.check_remaining.output.abandoned_count }} task(s) ABANDONED"
-              {{ endif }}
+            command: >
+              bash scripts/log-impl-complete.sh
+              "{{ steps.check_remaining.output.done_count }}"
+              "{{ steps.check_remaining.output.total_tasks }}"
+              "{{ steps.check_remaining.output.abandoned_count | int }}"
           - id: post_impl_drift_check
             command: speckit.check
             integration: claude
@@ -1011,10 +1010,9 @@ steps:
         on_stop:
           type: shell
           command: >
-            mkdir -p "{{ steps.check_remaining.output.feature_dir }}" &&
-            echo '{"step": "review-implement", "paused_at": "'$(date -u '+%Y-%m-%dT%H:%M:%SZ')'"}'
-            > "{{ steps.check_remaining.output.feature_dir }}/workflow_state.json" &&
-            echo "Workflow paused at review-implement. Run 'bash scripts/resume-workflow.sh' to continue."
+            bash scripts/save-pause-state.sh
+            "{{ steps.check_remaining.output.feature_dir }}"
+            "review-implement"
         on_revise:
           - id: revise-mark-in-progress
             type: shell
