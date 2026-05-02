@@ -375,25 +375,7 @@ steps:
   # to prevent Claude from paraphrasing or omitting essential content.
   - id: check-claude-md-lines
     type: shell
-    command: |
-      CLAUDE_MD=".claude/CLAUDE.md"
-      if [ -f "$CLAUDE_MD" ]; then
-        LINES=$(wc -l < "$CLAUDE_MD" | xargs)
-        if [ -s "$CLAUDE_MD" ] && [ "$(tail -c1 "$CLAUDE_MD" | wc -l)" -eq 0 ]; then
-          LINES=$((LINES + 1))
-        fi
-        if [ "$LINES" -gt 100 ]; then
-          echo "WARN: CLAUDE.md is $LINES lines (advisory limit: 100). "
-          echo "       Consider condensing Architecture and Module boundaries."
-          echo "CLAUDE_MD_LINES_WARN=true"
-        else
-          echo "PASS: CLAUDE.md is $LINES lines (limit: 100)"
-          echo "CLAUDE_MD_LINES_WARN=false"
-        fi
-      else
-        echo "SKIP: CLAUDE.md not yet created"
-        echo "CLAUDE_MD_LINES_WARN=false"
-      fi
+    command: "bash scripts/check-claude-md-lines.sh"
 
   # ── VALIDATE CI-LOCAL.SH COMMANDS POPULATED ──────────────────
   - id: validate-ci-local
@@ -775,33 +757,10 @@ steps:
       - id: stagnation_check_run
         type: shell
         command: >
-          FEATURE_DIR="{{ steps.check_remaining.output.feature_dir }}" &&
-          STATE_FILE="$FEATURE_DIR/.stagnation_state" &&
-          mkdir -p "$FEATURE_DIR" &&
-          PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1") &&
-          CURRENT_DONE={{ steps.check_remaining.output.done_count }} &&
-          TOTAL_TASKS={{ steps.check_remaining.output.total_tasks }} &&
-          CONSECUTIVE=$(cat "$STATE_FILE.consec" 2>/dev/null || echo 0) &&
-          if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
-            echo "STAGNANT=false" &&
-            echo "$CURRENT_DONE" > "$STATE_FILE" &&
-            echo "0" > "$STATE_FILE.consec";
-          elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
-            echo "STAGNANT=false" &&
-            echo "$CURRENT_DONE" > "$STATE_FILE" &&
-            echo "0" > "$STATE_FILE.consec";
-          else
-            NEW_CONSEC=$((CONSECUTIVE + 1)) &&
-            echo "$NEW_CONSEC" > "$STATE_FILE.consec" &&
-            echo "$CURRENT_DONE" > "$STATE_FILE" &&
-            if [ "$NEW_CONSEC" -ge 3 ]; then
-              echo "STAGNANT=true" &&
-              echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
-            else
-              echo "STAGNANT=false" &&
-              echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC";
-            fi;
-          fi
+          bash scripts/check-stagnation.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
+          "{{ steps.check_remaining.output.done_count }}"
+          "{{ steps.check_remaining.output.total_tasks }}"
         ignore_failure: true
 
       - id: stagnation_gate
@@ -837,23 +796,21 @@ steps:
                     criteria, relevant plan sections, and any error history.
               - id: resume_from_troubleshoot
                 type: shell
-                command: |
-                  echo "STAGNANT=false" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state"
-                  echo "0" > "{{ steps.check_remaining.output.feature_dir }}/.stagnation_state.consec"
-                  echo "CONTEXT LOADED — resume from speckit.context"
+                command: >
+                  bash scripts/reset-stagnation.sh
+                  "{{ steps.check_remaining.output.feature_dir }}"
             on_abort: abort
 
       # ── Step 5: Progress Logging ──
       - id: iteration_progress
         type: shell
-        command: |
-          ITER={{ steps.implement_loop_iteration.output.count || 1 }}
-          if [ "$ITER" -eq 25 ] || [ "$ITER" -eq 50 ] || [ "$ITER" -eq 75 ] || [ "$ITER" -eq 100 ]; then
-            echo "=== ITERATION $ITER/100 ==="
-            echo "Done: {{ steps.check_remaining.output.done_count }}/{{ steps.check_remaining.output.total_tasks }} tasks"
-            echo "Todo: {{ steps.check_remaining.output.todo_count }}"
-            echo "In-progress: {{ steps.check_remaining.output.in_progress || 'none' }}"
-          fi
+        command: >
+          bash scripts/log-iteration-progress.sh
+          "{{ steps.implement_loop_iteration.output.count || 1 }}"
+          "{{ steps.check_remaining.output.done_count }}"
+          "{{ steps.check_remaining.output.total_tasks }}"
+          "{{ steps.check_remaining.output.todo_count }}"
+          "{{ steps.check_remaining.output.in_progress || 'none' }}"
 
       # ── Step 6: Interrupted Session Recovery ──
       # No goto on actions — iteration flows naturally to next step.
@@ -965,21 +922,9 @@ steps:
 
       - id: drift_check_result
         type: shell
-        command: |
-          REPORT=".artifacts/drift_check_report.md"
-          mkdir -p .artifacts
-          if [ ! -f "$REPORT" ]; then
-            echo "DRIFT_SKIP=true"
-            echo "No drift report — check [Z] was not triggered this round."
-            exit 0
-          fi
-          FAIL_COUNT=$(grep -E '^\s*[0-9]+\.' "$REPORT" | grep -c 'FAIL' || true)
-          if [ "$FAIL_COUNT" -gt 0 ]; then
-            echo "DRIFT_DETECTED=true"
-            grep "FAIL" "$REPORT" >&2
-          else
-            echo "DRIFT_CLEAN=true"
-          fi
+        command: >
+          bash scripts/check-drift.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
 
       - id: drift_check_review
         type: gate
