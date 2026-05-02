@@ -166,7 +166,9 @@ else
   # No validate-tests.sh — run directly
   OUTPUT=""
   EXIT_CODE=0
-  OUTPUT=$(eval "$REGRESSION_COMMAND" 2>&1) || EXIT_CODE=$?
+  # Use bash -c instead of eval to avoid executing in current shell context.
+  # plan.md commands are human-approved, but bash -c adds a safety boundary.
+  OUTPUT=$(bash -c "$REGRESSION_COMMAND" 2>&1) || EXIT_CODE=$?
 
   echo "REGRESSION: ${REGRESSION_COMMAND}"
   if [ -n "$OUTPUT" ]; then

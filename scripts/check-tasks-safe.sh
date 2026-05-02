@@ -52,8 +52,6 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
     # Extract IN_PROGRESS task IDs
     IN_PROGRESS_ALL=""
     if [ "$_in_prog" -gt 0 ] 2>/dev/null; then
-      # Each task entry has "TASK-N": { ... "status": "IN_PROGRESS" ... }
-      # Extract task IDs by finding lines with both TASK- and IN_PROGRESS
       IN_PROGRESS_ALL=$(awk '
         /"TASK-[0-9]+"/ {
           match($0, /"TASK-[0-9]+"/)
@@ -64,7 +62,6 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
           tid = ""
         }
       ' "$JSON_FILE" 2>/dev/null || true)
-      # Clean up trailing comma
       IN_PROGRESS_ALL=$(echo "$IN_PROGRESS_ALL" | sed 's/,$//')
     fi
     IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
@@ -78,21 +75,37 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
     _next_due=${_next_due:-5}
     _done_count_check=${_done}
 
-    # Determine retro_trigger: true if done_count >= next_due
-    _retro_trigger="false"
-    if [ "$_done_count_check" -ge "$_next_due" ] 2>/dev/null; then
-      # Check if we already triggered (no revision history would indicate this)
-      _retro_trigger="true"
+    # ── Stale state validation: cross-check against tasks.md ──
+    _layer1_valid=true
+    if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/tasks.md" ]; then
+      # Count actual DONE tasks in tasks.md
+      _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
+      # If JSON done count differs from tasks.md by more than 1, skip layer 1
+      _diff=$((_done - _actual_done))
+      [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
+      if [ "$_diff" -gt 1 ]; then
+        _layer1_valid=false
+      fi
     fi
 
-    # Determine has_todo
-    if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
-      HAS_TODO="true"
-    else
-      HAS_TODO="false"
-    fi
+    if [ "$_layer1_valid" = true ]; then
+      # Determine retro_trigger using modulo formula (same as check-tasks.sh)
+      _retro_trigger="false"
+      if [ "$_done_count_check" -ge "$_next_due" ] 2>/dev/null; then
+        _remainder=$(( (_done_count_check - _next_due) % _retro_interval ))
+        if [ "$_remainder" -eq 0 ]; then
+          _retro_trigger="true"
+        fi
+      fi
 
-    OUTPUT="has_todo=${HAS_TODO}
+      # Determine has_todo
+      if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
+        HAS_TODO="true"
+      else
+        HAS_TODO="false"
+      fi
+
+      OUTPUT="has_todo=${HAS_TODO}
 done_count=${_done}
 todo_count=${_todo}
 in_progress=${IN_PROGRESS}
@@ -101,9 +114,11 @@ abandoned_count=${_abandoned}
 total_tasks=${_total}
 complexity=${_complexity}
 retro_interval=${_retro_interval}
-first_retro_threshold=5
+first_retro_threshold=${_next_due}
 retro_trigger=${_retro_trigger}
 feature_dir=${FEATURE_DIR}"
+    fi
+    # If _layer1_valid is false, fall through to layer 2/3
   fi
 fi
 

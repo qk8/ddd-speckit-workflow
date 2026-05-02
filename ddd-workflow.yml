@@ -774,6 +774,12 @@ steps:
                 troubleshoot — Run /speckit.status to diagnose, then decide.
                 abort — Cancel the workflow for manual review.
             options: [continue, troubleshoot, abort]
+            on_continue:
+              - id: reset_stagnation_on_continue
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --reset
+                  "{{ steps.check_remaining.output.feature_dir }}"
             on_troubleshoot:
               - id: status_diagnose
                 command: speckit.status
@@ -922,8 +928,15 @@ steps:
         message: |
           Drift check: {{ steps.drift_check_result.output || "skipped (no retro trigger)" }}
           Review the report at .artifacts/drift_check_report.md.
+          {% if steps.drift_check_result.output.DRIFT_DETECTED == 'true' %}
+          **DRIFT DETECTED** ({{ steps.drift_check_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
+          {{ steps.drift_check_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
+          Fix the violations above and revise to re-run drift detection.
+          {% endif %}
           Approve to continue.
-        options: [approve, abort]
+        options: [approve, revise, abort]
+        on_revise:
+          - goto: execute_drift_check
         on_abort: abort
 
       # ── Step 10: Generate Prompt Context ──

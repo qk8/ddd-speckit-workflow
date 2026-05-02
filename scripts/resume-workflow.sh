@@ -37,26 +37,31 @@ if [ -n "${PAUSED_STEP:-}" ]; then
   esac
 fi
 
-# Reset ALL IN_PROGRESS tasks to TODO (multiple = workflow corruption)
+# Smart IN_PROGRESS reset: only reset if there's exactly one IN_PROGRESS task.
+# Multiple IN_PROGRESS tasks may be legitimate (e.g., from a revise cycle).
 TMPFILE=$(mktemp)
-# Find all IN_PROGRESS tasks and reset them
 IN_PROGRESS_TASKS=$(grep -B1 "^Status: IN_PROGRESS$" "$FEATURE_DIR/tasks.md" 2>/dev/null | grep "^## TASK" | sed 's/^## //' || true)
 
 if [ -n "$IN_PROGRESS_TASKS" ]; then
-  # Build awk script to reset all IN_PROGRESS tasks
-  awk '
-    /^Status: IN_PROGRESS$/ { print "Status: TODO"; next }
-    { print }
-  ' "$FEATURE_DIR/tasks.md" > "$TMPFILE"
-  mv "$TMPFILE" "$FEATURE_DIR/tasks.md"
+  IN_PROGRESS_COUNT=$(echo "$IN_PROGRESS_TASKS" | grep -c . || true)
 
-  if echo "$IN_PROGRESS_TASKS" | grep -q ','; then
-    echo "Reset ALL IN_PROGRESS tasks to TODO (multiple detected):"
+  if [ "$IN_PROGRESS_COUNT" -eq 1 ]; then
+    # Single IN_PROGRESS task — safe to reset
+    awk '
+      /^Status: IN_PROGRESS$/ { print "Status: TODO"; next }
+      { print }
+    ' "$FEATURE_DIR/tasks.md" > "$TMPFILE"
+    mv "$TMPFILE" "$FEATURE_DIR/tasks.md"
+    echo "Reset TASK-$IN_PROGRESS_TASKS to TODO. Run /speckit.implement to continue."
+  else
+    # Multiple IN_PROGRESS tasks — warn but don't reset
+    echo "WARNING: $IN_PROGRESS_COUNT IN_PROGRESS tasks detected:"
     echo "$IN_PROGRESS_TASKS" | tr ',' '\n' | while read -r task; do
       echo "  - $task"
     done
-  else
-    echo "Reset TASK-$IN_PROGRESS_TASKS to TODO. Run /speckit.implement to continue."
+    echo "  Multiple IN_PROGRESS tasks are not automatically reset."
+    echo "  Edit tasks.md manually to reset or abandon tasks as needed."
+    rm -f "$TMPFILE"
   fi
 else
   echo "No IN_PROGRESS task found. Workflow may already be at a checkpoint."

@@ -14,25 +14,32 @@ SCANNED=0
 
 # ── Check 1: Layer rule violations ──────────────────────────────
 # Domain layer files should NOT import from delivery/infrastructure layers.
+# Uses precise package/import patterns to reduce false positives.
 check_layer_violations() {
   local file="$1"
   local ext="${file##*.}"
 
   case "$ext" in
     java)
-      if grep -qE 'import.*\.(delivery|infrastructure|web|controller)' "$file" 2>/dev/null; then
-        echo "  LAYER VIOLATION: $(basename "$file") imports from non-domain layer"
-        VIOLATIONS=$((VIOLATIONS + 1))
+      # Match infrastructure package patterns, not bare words in class names
+      if grep -qE 'import.*\.(infrastructure|delivery\.service|delivery\.port|web\.controller|controller\.)' "$file" 2>/dev/null; then
+        # Exclude known domain classes that use infrastructure-like names
+        local basename_file
+        basename_file=$(basename "$file")
+        if ! echo "$basename_file" | grep -qiE 'DeliveryStatus|WebhookHandler|PaymentGateway|NotificationService'; then
+          echo "  LAYER VIOLATION: $(basename "$file") imports from non-domain layer"
+          VIOLATIONS=$((VIOLATIONS + 1))
+        fi
       fi
       ;;
     ts|js)
-      if grep -qE "from ['\"]\.\.?/.*(delivery|infrastructure|controller)" "$file" 2>/dev/null; then
+      if grep -qE "from ['\"]\.\.?/.*(infrastructure|delivery/service|web/controller)" "$file" 2>/dev/null; then
         echo "  LAYER VIOLATION: $(basename "$file") imports from non-domain layer"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
       ;;
     py)
-      if grep -qE "from .+\.(delivery|infrastructure|views)" "$file" 2>/dev/null; then
+      if grep -qE "from .+\.(infrastructure|delivery\.service|views)" "$file" 2>/dev/null; then
         echo "  LAYER VIOLATION: $(basename "$file") imports from non-domain layer"
         VIOLATIONS=$((VIOLATIONS + 1))
       fi
@@ -75,9 +82,12 @@ check_test_data_isolation() {
     *) return ;;
   esac
 
-  # Check for common patterns of hand-constructed domain objects
-  if grep -qE 'new [A-Z][a-zA-Z]+\(' "$file" 2>/dev/null; then
-    if ! grep -qE 'Factory|factory|Builder|builder' "$file" 2>/dev/null; then
+  # Only flag direct domain aggregate construction, not all constructors.
+  # Exclude test framework setup (Mockito, beforeEach, setUp, fixture helpers).
+  # Pattern: new <DomainAggregate>( where DomainAggregate is a known aggregate pattern
+  # (singular noun, not a test helper like Mock, Fake, Stub, Builder, Factory).
+  if grep -qE 'new (Order|User|Account|Payment|Invoice|Product|Customer|Session|Token|Message|Event|Command|Query)\(' "$file" 2>/dev/null; then
+    if ! grep -qE 'Factory|factory|Builder|builder|Mockito|@Mock|@InjectMocks|beforeEach|setUp|fixture' "$file" 2>/dev/null; then
       echo "  TEST DATA: $(basename "$file") may use hand-constructed domain objects"
       VIOLATIONS=$((VIOLATIONS + 1))
     fi

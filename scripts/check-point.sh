@@ -71,23 +71,39 @@ do_task_abandoned_jq() {
     "$CHECKPOINT_FILE" > "$tmp" && mv "$tmp" "$CHECKPOINT_FILE"
 }
 
-# ── Fallback (no jq) ────────────────────────────────────────────
+# ── Fallback (no jq) — uses sed to produce valid JSON ───────────
 do_task_done_fallback() {
   local tid="$1" tt="$2" built="$3" tf="$4"
   init_checkpoint
-  cat >> "$CHECKPOINT_FILE" <<EOF
+  local tmp; tmp=$(mktemp)
 
-  "$tid": {"status":"DONE","type":"$tt","built":"$built","test_file":"$tf","completed_at":"$TS"}
-EOF
+  # Use awk to insert the new task entry into the tasks object
+  awk -v tid="$tid" -v tt="$tt" -v built="$built" -v tf="$tf" -v ts="$TS" '
+    /^  "tasks": \{/ { in_tasks=1 }
+    in_tasks && /^  "batch_plan"/ {
+      # Before closing tasks object, add new entry
+      printf "    \"%s\": {\"status\":\"DONE\",\"type\":\"%s\",\"built\":\"%s\",\"test_file\":\"%s\",\"completed_at\":\"%s\"},\n", tid, tt, built, tf, ts
+      in_tasks=0
+    }
+    { print }
+  ' "$CHECKPOINT_FILE" > "$tmp"
+  mv "$tmp" "$CHECKPOINT_FILE"
 }
 
 do_task_in_progress_fallback() {
   local tid="$1" tt="$2"
   init_checkpoint
-  cat >> "$CHECKPOINT_FILE" <<EOF
+  local tmp; tmp=$(mktemp)
 
-  "$tid": {"status":"IN_PROGRESS","type":"$tt","started_at":"$TS"}
-EOF
+  awk -v tid="$tid" -v tt="$tt" -v ts="$TS" '
+    /^  "tasks": \{/ { in_tasks=1 }
+    in_tasks && /^  "batch_plan"/ {
+      printf "    \"%s\": {\"status\":\"IN_PROGRESS\",\"type\":\"%s\",\"started_at\":\"%s\"},\n", tid, tt, ts
+      in_tasks=0
+    }
+    { print }
+  ' "$CHECKPOINT_FILE" > "$tmp"
+  mv "$tmp" "$CHECKPOINT_FILE"
 }
 
 # ── Read mode ───────────────────────────────────────────────────
@@ -104,7 +120,6 @@ fi
 if [ "$MODE" = "write" ]; then
   case "$ACTION" in
     task_done)
-      # Args: feature_dir task_id type built test_file
       if [ "$HAS_JQ" = true ]; then
         do_task_done_jq "$4" "$5" "$6" "$7"
       else
