@@ -748,9 +748,6 @@ steps:
                 Report PASS/FAIL for each. If any FAIL: note it but do not block.
                 Write findings to .artifacts/post-implementation-drift.md.
                 This is advisory — the full speckit.verify will run in Phase 8.
-          - id: post_impl_drift_complete
-            type: shell
-            command: echo "LOOP_EXIT=true"
 
       # ── Step 4: Stagnation Detection ──
       - id: stagnation_check_run
