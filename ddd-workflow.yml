@@ -836,8 +836,10 @@ steps:
             on_abandon:
               type: shell
               command: >
-                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" ABANDONED &&
-                echo "Task marked ABANDONED. Review partial files before continuing."
+                bash scripts/set-task-status.sh
+                "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                ABANDONED
+                "Task marked ABANDONED. Review partial files before continuing."
             # on_continue: no action — falls through
 
       # ── Step 7: Abandoned Task Warning ──
@@ -998,8 +1000,10 @@ steps:
           - id: revise-mark-in-progress
             type: shell
             command: >
-              bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" IN_PROGRESS &&
-              echo "Task sent back for revision — will be re-implemented next iteration."
+              bash scripts/set-task-status.sh
+              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+              IN_PROGRESS
+              "Task sent back for revision — will be re-implemented next iteration."
           # No goto — iteration ends naturally; next while iteration re-implements
 
   # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────
