@@ -951,17 +951,12 @@ steps:
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
 
-      # ── Step 13: Save Rollback Point ──
-      - id: save_rollback_point
-        type: shell
-        command: "bash scripts/save-rollback-point.sh"
-
-      # ── Step 14: Threshold Check ──
+      # ── Step 13: Threshold Check ──
       - id: check_implement_threshold
         type: shell
         command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
 
-      # ── Step 15: Review ──
+      # ── Step 14: Review ──
       - id: review-implement
         type: gate
         message: |
