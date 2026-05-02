@@ -912,12 +912,6 @@ steps:
                 For any FAIL: fix the violation immediately.
                 Write a detailed report to .artifacts/drift_check_report.md
                 with each constraint, its result, and file:line references for FAILs.
-        else:
-          - id: skip_drift_check
-            type: shell
-            command: |
-              echo "DRIFT_SKIP=true"
-              echo "Drift check skipped — retro_trigger is false."
 
       - id: drift_check_result
         type: shell
