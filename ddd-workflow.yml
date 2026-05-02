@@ -120,9 +120,8 @@ steps:
           - id: record-clarify-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh clarify_round
+              bash scripts/record-phase-revision.sh clarify_round
               "{{ steps.clarify_round_iteration.output.count || 1 }}"
-              "Clarification round {{ steps.clarify_round_iteration.output.count || 1 }}"
           - goto: clarify
 
   # ── PHASE 2: SPEC ─────────────────────────────────────────────
@@ -206,9 +205,8 @@ steps:
           - id: record-audit-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh audit_round
+              bash scripts/record-phase-revision.sh audit_round
               "{{ steps.audit_round_iteration.output.count || 1 }}"
-              "Adversarial audit revision round {{ steps.audit_round_iteration.output.count || 1 }}"
           - goto: audit-spec
 
   # ── PHASE 3: PLAN — CONSOLIDATED IN 3 BATCHES ──────────────────
@@ -495,9 +493,8 @@ steps:
           - id: record-plan-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh plan_review_revision
+              bash scripts/record-phase-revision.sh plan_review_revision
               "{{ steps.plan_review_revision_iteration.output.count || 1 }}"
-              "Plan review revision round {{ steps.plan_review_revision_iteration.output.count || 1 }}"
           - goto: plan-consolidated-review
         on_abort: abort
 
@@ -548,9 +545,8 @@ steps:
           - id: record-design-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh design_review_round
+              bash scripts/record-phase-revision.sh design_review_round
               "{{ steps.design_review_round_iteration.output.count || 1 }}"
-              "Design review revision round {{ steps.design_review_round_iteration.output.count || 1 }}"
           - goto: speckit_review_design
         on_abort: abort
 
@@ -639,9 +635,8 @@ steps:
           - id: record-tasks-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh tasks_phase
+              bash scripts/record-phase-revision.sh tasks_phase
               "{{ steps.tasks_phase_iteration.output.count || 1 }}"
-              "Tasks revision round {{ steps.tasks_phase_iteration.output.count || 1 }}"
           - goto: tasks
 
       - id: validate-tasks
@@ -678,9 +673,8 @@ steps:
           - id: record-validation-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh tasks_phase
+              bash scripts/record-phase-revision.sh validation_revision
               "{{ steps.tasks_phase_iteration.output.count || 1 }}"
-              "Validation revision round {{ steps.tasks_phase_iteration.output.count || 1 }}"
           - goto: tasks
 
   # ── PHASE 5: IMPLEMENT LOOP (DAG-structured) ──────────────────
@@ -1077,9 +1071,8 @@ steps:
           - id: record-code-review-revision
             type: shell
             command: >
-              bash scripts/record-revision.sh code_review_round
+              bash scripts/record-phase-revision.sh code_review_round
               "{{ steps.code_review_round_iteration.output.count || 1 }}"
-              "Code review revision round {{ steps.code_review_round_iteration.output.count || 1 }}"
           - id: plan-code-review-fixes
             type: prompt
             integration: claude
