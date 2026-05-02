@@ -65,8 +65,11 @@ steps:
     message: |
       Review the project-brief.md summary above.
       Does it correctly reflect your project?
-      If anything is wrong, edit project-brief.md and abort the workflow.
-    options: [approve, abort]
+      Revise to send back for clarification fixes.
+      Select abort if the project brief needs significant rewriting.
+    options: [approve, revise, abort]
+    on_revise:
+      - goto: clarify
     on_abort: abort
 
   # ── PHASE 1: CLARIFY (bounded) ──────────────────────────────────
@@ -665,7 +668,8 @@ steps:
           {% if steps.check_validate_tasks_threshold.output.AUTO_APPROVE == 'true' %}
           **Revision threshold exceeded**. Approving on next iteration.
           {% endif %}
-        options: [approve, revise]
+        options: [approve, revise, abort]
+        on_abort: abort
         on_revise:
           - id: trim-revision-history
             type: shell
@@ -887,6 +891,11 @@ steps:
               - id: trim-revision-history-retro
                 type: shell
                 command: "bash scripts/trim-revision.sh"
+              - id: record-retrospect-revision
+                type: shell
+                command: >
+                  bash scripts/record-phase-revision.sh implement_loop
+                  "{{ steps.implement_loop_iteration.output.count || 1 }}"
               - goto: run_retrospect
 
           - id: execute_drift_check
@@ -1096,7 +1105,8 @@ steps:
         For each issue, decide: fix in code (align to spec) or fix in spec
         (intentional deviation). Add fix tasks to tasks.md if needed,
         then select "fix-needed" to resume the implement loop.
-    options: [approved-clean, fix-needed]
+    options: [approved-clean, fix-needed, abort]
+    on_abort: abort
     on_fix-needed:
       - id: add-fix-tasks
         type: prompt
