@@ -450,6 +450,71 @@ done
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
   echo "  Task ordering is correct."
 fi
+echo ""
+
+# ── Check 4: Parallel batch conflict detection ──────────────────
+echo "Check 4: Parallel batch conflicts"
+
+# Extract file paths from acceptance criteria for each task
+TASK_FILES_FILE="$TMP_DIR/task_files.txt"
+touch "$TASK_FILES_FILE"
+
+current_id=""
+while IFS= read -r line; do
+  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+    current_id="${BASH_REMATCH[1]}"
+    current_id="${current_id#\[}"
+    current_id="${current_id%\]}"
+  fi
+  if [ -n "$current_id" ] && [[ "$line" =~ ^[[:space:]]*-[[:space:]]*\[.*\] ]]; then
+    # Extract file paths from acceptance criterion
+    echo "$line" | grep -oE '[a-zA-Z0-9_/.-]+\.(java|ts|js|py|kt|scala|go|rb|php|sql|yaml|yml|json|toml|xml|md|html|css|scss)' 2>/dev/null | while read -r fpath; do
+      echo "${current_id}|${fpath}"
+    done >> "$TASK_FILES_FILE" || true
+  fi
+done < "$TASKS_FILE"
+
+# Compute batch levels and check for file overlaps within each level
+OVERLAP_FILE="$TMP_DIR/overlaps.txt"
+touch "$OVERLAP_FILE"
+
+# For each pair of tasks at the same dependency level, check file overlap
+# We use the task file list to detect potential conflicts
+awk -F'|' '{print $1}' "$TASK_FILES_FILE" | sort -u | while read -r tid; do
+  # Get all files for this task
+  grep "^${tid}|" "$TASK_FILES_FILE" | cut -d'|' -f2 | sort -u > "$TMP_DIR/files_${tid}.txt"
+done
+
+# Check all pairs of tasks for file overlap
+task_ids=()
+while IFS= read -r line; do
+  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+    tid="${BASH_REMATCH[1]}"
+    tid="${tid#\[}"
+    tid="${tid%\]}"
+    task_ids+=("$tid")
+  fi
+done < "$TASKS_FILE"
+
+for ((i=0; i<${#task_ids[@]}; i++)); do
+  for ((j=i+1; j<${#task_ids[@]}; j++)); do
+    tid_a="${task_ids[$i]}"
+    tid_b="${task_ids[$j]}"
+    # Check if both tasks reference the same file
+    overlap=$(comm -12 \
+      <(grep "^${tid_a}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
+      <(grep "^${tid_b}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
+    if [ -n "$overlap" ]; then
+      echo "  WARNING: TASK-$tid_a and TASK-$tid_b both reference: $overlap"
+      WARNINGS=$((WARNINGS + 1))
+      echo "\"TASK-$tid_a <-> TASK-$tid_b: $overlap\"" >> "$OVERLAP_FILE"
+    fi
+  done
+done
+
+if [ "$WARNINGS" -eq 0 ] && [ ! -s "$OVERLAP_FILE" ]; then
+  echo "  No parallel batch conflicts detected."
+fi
 
 fi  # end SKIP_VALIDATION guard
 

@@ -100,7 +100,7 @@ fi
   if [ -f "$TASKS_FILE" ]; then
     # Extract task block, skip the ## header line, skip Status/Type/Depends on lines
     # (Type and Depends on are added below from the map)
-    extract_task "$TASKS_FILE" "$TASK_ID" | { grep -v "^## " || true; } | { grep -v "^Status:" || true; } | { grep -v "^Type:" || true; } | { grep -v "^Depends on:" || true; } | head -20
+    extract_task "$TASKS_FILE" "$TASK_ID" | { grep -v "^## " || true; } | { grep -v "^Status:" || true; } | { grep -v "^Type:" || true; } | { grep -v "^Depends on:" || true; } | head -15
     # Include Type and Depends on explicitly
     echo "Type: ${TASK_TYPE}"
     deps=$(awk -v tid="## TASK-[${TASK_ID#TASK-}]" 'BEGIN { found=0 }
@@ -126,7 +126,7 @@ fi
     # Extract all §N references
     echo "$SECTION_MAP" | { grep -oE '§[0-9]+' || true; } | sed 's/§//' | while read -r sec_num; do
       echo "### §${sec_num}"
-      extract_section "$PLAN_FILE" "$sec_num" | head -30
+      extract_section "$PLAN_FILE" "$sec_num" | head -25
       echo ""
     done
   fi
@@ -142,12 +142,11 @@ fi
   echo ""
 
   # ── Constraints ───────────────────────────────────────────────
-  echo "## CONSTRAINTS (§16)"
-  if [ -f "$PLAN_FILE" ]; then
-    extract_constraints "$PLAN_FILE" | head -20
-  else
-    echo "  (plan.md not found)"
-  fi
+  # NOTE: Constraints (§16) are NOT included here.
+  # Claude can read them directly from plan.md when needed.
+  # Including them pre-emptively wastes context window.
+  echo "## CONSTRAINTS"
+  echo "  See plan.md §16 for full constraints. Read section when relevant."
   echo ""
 
 } > "$OUTPUT_FILE"

@@ -124,6 +124,12 @@ checks:
     name: "Constraint Drift Detection"
     tier: critical
     applies_to: all
+  AS:
+    name: "API Surface Consistency"
+    # AS = CROSS-TASK: method signatures, domain events, repository interfaces
+    # consistent across all implemented tasks. Flags API drift between batches.
+    tier: critical
+    applies_to: all
 
 # Derived routing table — auto-derived from checks[].applies_to.
 # Regenerate with: scripts/derive-routing.sh
@@ -142,14 +148,14 @@ routing:
 # routing_critical: checks that run on every task execution.
 # routing_secondary: checks that run only when the LAST task for a module type completes.
 routing_critical:
-  backend-domain:   [A, BC, D, I, L, Z]
-  backend-infra:    [A, BC, D, I, L, Z]
-  backend-api:      [A, BC, D, I, L, Z]
-  shared:           [BC, D, I, L, Z]
-  integration:      [BC, D, I, L, Z]
-  frontend-data:    [BC, D, I, L, Z]
-  frontend-feature: [BC, D, I, L, Z]
-  e2e:              [BC, D, I, L, Z]
+  backend-domain:   [A, AS, BC, D, I, L, Z]
+  backend-infra:    [A, AS, BC, D, I, L, Z]
+  backend-api:      [A, AS, BC, D, I, L, Z]
+  shared:           [AS, BC, D, I, L, Z]
+  integration:      [AS, BC, D, I, L, Z]
+  frontend-data:    [AS, BC, D, I, L, Z]
+  frontend-feature: [AS, BC, D, I, L, Z]
+  e2e:              [AS, BC, D, I, L, Z]
 
 routing_secondary:
   backend-domain:   [E, M]

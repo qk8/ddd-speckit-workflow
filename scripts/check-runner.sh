@@ -23,6 +23,7 @@
 #   L:  scripts/run-antihallucination.sh
 #   R:  scripts/run-quantitative.sh
 #   Z:  scripts/quick-drift-check.sh  (already exists)
+#   AS: scripts/api-surface-check.sh   (new: cross-task API consistency)
 #
 # Non-deterministic (stay as Claude prompts): G, H, J, M, N, O, P, Q, S, T, U, Z(full)
 
@@ -89,6 +90,7 @@ get_check_script() {
     L)              echo "run-antihallucination.sh" ;;
     R)              echo "run-quantitative.sh" ;;
     Z)              echo "quick-drift-check.sh" ;;
+    AS)             echo "api-surface-check.sh" ;;
     *)              echo "" ;;
   esac
 }

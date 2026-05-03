@@ -184,6 +184,14 @@ Then RUN THE FULL REGRESSION SUITE:
     - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
 
 INLINE CORRECTION LOOP (if tests fail)
+  BEFORE classifying the failure, run the independent diagnostic:
+    bash scripts/diagnostic-classifier.sh \
+      "$(bash scripts/find-first-feature.sh)" \
+      "[task_type]" \
+      "$(cat $TEST_OUTPUT_FILE)" \
+      "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
+  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE.
+  Pass this evidence to the LLM classification — do NOT self-classify without it.
   Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
 
 When STEP 2 completes successfully, print:
