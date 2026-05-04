@@ -92,12 +92,12 @@ compute_batch_plan() {
   # Parse tasks (same logic as main script, self-contained)
   local current_id=""
   while IFS= read -r line; do
-    if [[ "$line" =~ ^##\ TASK-\[?([0-9]+)\]? ]]; then
-      current_id="${BASH_REMATCH[1]}"
+    if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
+      current_id=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
       echo "$current_id" >> "$ids_file"
       echo "${current_id}|none" >> "$deps_file"
-    elif [[ "$line" =~ ^Depends\ on:\ (.*) ]] && [ -n "${current_id:-}" ]; then
-      local deps="${BASH_REMATCH[1]}"
+    elif echo "$line" | grep -qE '^Depends on: ' && [ -n "${current_id:-}" ]; then
+      local deps=$(echo "$line" | sed 's/^Depends on: //')
       local normalized=""
       IFS=',' read -ra dep_list <<< "$deps"
       for dep in "${dep_list[@]}"; do
@@ -214,15 +214,13 @@ echo ""
 
 current_id=""
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+  if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
     # Strip brackets: TASK-[3] → 3, TASK-3 → 3
-    current_id="${BASH_REMATCH[1]}"
-    current_id="${current_id#\[}"
-    current_id="${current_id%\]}"
+    current_id=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
     echo "$current_id" >> "$TASK_IDS_FILE"
     echo "${current_id}|none" >> "$TASK_DEPS_FILE"
-  elif [[ "$line" =~ ^Depends\ on:\ (.*) ]] && [ -n "${current_id:-}" ]; then
-    deps="${BASH_REMATCH[1]}"
+  elif echo "$line" | grep -qE '^Depends on: ' && [ -n "${current_id:-}" ]; then
+    deps=$(echo "$line" | sed 's/^Depends on: //')
     normalized=""
     IFS=',' read -ra dep_list <<< "$deps"
     for dep in "${dep_list[@]}"; do
@@ -410,11 +408,9 @@ echo "Check 3: Task ordering"
 # Build ordered list of task IDs (in file order) — regular indexed array (bash 3.2 compatible)
 ORDERED_IDS=()
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
+  if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
     # Strip brackets: TASK-[3] → 3, TASK-3 → 3
-    _tid="${BASH_REMATCH[1]}"
-    _tid="${_tid#\[}"
-    _tid="${_tid%\]}"
+    _tid=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
     ORDERED_IDS+=("$_tid")
   fi
 done < "$TASKS_FILE"
@@ -461,12 +457,10 @@ touch "$TASK_FILES_FILE"
 
 current_id=""
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
-    current_id="${BASH_REMATCH[1]}"
-    current_id="${current_id#\[}"
-    current_id="${current_id%\]}"
+  if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
+    current_id=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
   fi
-  if [ -n "$current_id" ] && [[ "$line" =~ ^[[:space:]]*-[[:space:]]*\[.*\] ]]; then
+  if [ -n "$current_id" ] && echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[.*\]'; then
     # Extract file paths from acceptance criterion
     echo "$line" | grep -oE '[a-zA-Z0-9_/.-]+\.(java|ts|js|py|kt|scala|go|rb|php|sql|yaml|yml|json|toml|xml|md|html|css|scss)' 2>/dev/null | while read -r fpath; do
       echo "${current_id}|${fpath}"
@@ -488,10 +482,8 @@ done
 # Check all pairs of tasks for file overlap
 task_ids=()
 while IFS= read -r line; do
-  if [[ "$line" =~ ^##\ TASK-(\[\]?[0-9]+\]?) ]]; then
-    tid="${BASH_REMATCH[1]}"
-    tid="${tid#\[}"
-    tid="${tid%\]}"
+  if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
+    tid=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
     task_ids+=("$tid")
   fi
 done < "$TASKS_FILE"

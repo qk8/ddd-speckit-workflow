@@ -10,7 +10,7 @@
 PRESET_DIR="$(cd "$(dirname "$0")/../ddd-clean-arch" && pwd)"
 PRESET_FILE="$PRESET_DIR/preset.yml"
 
-if [[ $# -ne 2 ]]; then
+if [ $# -ne 2 ]; then
   echo "Usage: $0 <task_type> <tier>" >&2
   exit 1
 fi
@@ -18,7 +18,7 @@ fi
 TASK_TYPE="$1"
 TIER="$2"
 
-if [[ ! -f "$PRESET_FILE" ]]; then
+if [ ! -f "$PRESET_FILE" ]; then
   echo "ERROR: preset.yml not found at $PRESET_FILE" >&2
   exit 1
 fi
@@ -35,7 +35,7 @@ esac
 
 # For critical and secondary tiers, use routing tables directly.
 # For tertiary, there is no routing table — return all tertiary checks.
-if [[ "$TIER" == "tertiary" ]]; then
+if [ "$TIER" = "tertiary" ]; then
   # Return all tertiary checks (no per-module filtering for tertiary)
   awk '
     /^checks:/ { in_checks=1; next }
@@ -48,7 +48,7 @@ if [[ "$TIER" == "tertiary" ]]; then
 fi
 
 # Use routing table (routing_critical or routing_secondary)
-if [[ "$TIER" == "critical" ]]; then
+if [ "$TIER" = "critical" ]; then
   TABLE="routing_critical"
 else
   TABLE="routing_secondary"

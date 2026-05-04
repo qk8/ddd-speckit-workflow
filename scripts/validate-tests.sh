@@ -48,7 +48,8 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 # Use || true to prevent set -e from killing the script when tests fail
 # (the expected case for red-phase testing where we expect failure)
 TEST_EXIT_CODE=0
-( eval "$TEST_COMMAND" ) >"$OUTPUT_FILE" 2>&1 || TEST_EXIT_CODE=$?
+# Use bash -c instead of eval to avoid executing in current shell context.
+( bash -c "$TEST_COMMAND" ) >"$OUTPUT_FILE" 2>&1 || TEST_EXIT_CODE=$?
 
 # Parse test results from output
 # Try common test runner patterns

@@ -261,7 +261,8 @@ run_cmd() {
   local cmd="$1"
   local outfile="$2"
   local exit_code=0
-  ( eval "$cmd" ) > "$outfile" 2>&1 || exit_code=$?
+  # Use bash -c instead of eval to avoid executing in current shell context.
+  ( bash -c "$cmd" ) > "$outfile" 2>&1 || exit_code=$?
   echo "$exit_code"
 }
 

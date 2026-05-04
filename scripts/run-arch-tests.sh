@@ -56,7 +56,7 @@ echo "ARCH TESTS: ${ARCH_COMMAND}"
 # ── Execute the command, capture output and exit code ──────────
 OUTPUT=""
 EXIT_CODE=0
-OUTPUT=$(eval "$ARCH_COMMAND" 2>&1) || EXIT_CODE=$?
+OUTPUT=$(bash -c "$ARCH_COMMAND" 2>&1) || EXIT_CODE=$?
 
 # Print captured output
 if [ -n "$OUTPUT" ]; then

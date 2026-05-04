@@ -210,10 +210,12 @@ fi
 if [ -f "$VALIDATE_SCRIPT" ]; then
   # Use the validation harness for structured output
   # validate-tests.sh expects: <command> [expected_result]
-  ( eval "$MIGRATION_CMD" ) >"$OUTPUT_FILE" 2>&1 || EXIT_CODE=$?
+  # Use bash -c instead of eval to avoid executing in current shell context.
+  # plan.md commands are human-approved, but bash -c adds a safety boundary.
+  ( bash -c "$MIGRATION_CMD" ) >"$OUTPUT_FILE" 2>&1 || EXIT_CODE=$?
 else
   # Run directly and capture output
-  ( eval "$MIGRATION_CMD" ) >"$OUTPUT_FILE" 2>&1 || EXIT_CODE=$?
+  ( bash -c "$MIGRATION_CMD" ) >"$OUTPUT_FILE" 2>&1 || EXIT_CODE=$?
 fi
 
 # ── Step 6: Verify result ─────────────────────────────────────

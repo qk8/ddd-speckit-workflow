@@ -239,7 +239,7 @@ else
   # No validate-tests.sh — run directly
   LINT_OUTPUT=""
   LINT_EXIT_CODE=0
-  LINT_OUTPUT=$(eval "$LINT_COMMAND" 2>&1) || LINT_EXIT_CODE=$?
+  LINT_OUTPUT=$(bash -c "$LINT_COMMAND" 2>&1) || LINT_EXIT_CODE=$?
 
   echo "LINTER: ${LINT_COMMAND}"
   if [ -n "$LINT_OUTPUT" ]; then

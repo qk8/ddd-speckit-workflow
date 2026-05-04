@@ -235,7 +235,7 @@ if [ -f "$SCRIPTS_DIR/validate-tests.sh" ]; then
   EXIT_CODE="$VALIDATE_EXIT"
 else
   # Run directly
-  OUTPUT=$(eval "$SCANNER_CMD" 2>&1) || EXIT_CODE=$?
+  OUTPUT=$(bash -c "$SCANNER_CMD" 2>&1) || EXIT_CODE=$?
 fi
 
 # Parse vulnerability count
