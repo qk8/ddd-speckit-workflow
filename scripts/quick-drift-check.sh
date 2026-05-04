@@ -48,18 +48,20 @@ check_layer_violations() {
 }
 
 # ── Check 2: Missing correlation ID in API responses ───────────
+# Only flag files that clearly produce HTTP responses (res.json, res.send,
+# return Response, return HttpResponse) without correlation_id.
+# This avoids false positives from variables named "result" or "response".
 check_correlation_id() {
   local file="$1"
   local ext="${file##*.}"
 
   case "$ext" in
     ts|js)
-      if grep -qE 'response|Response|result|Result' "$file" 2>/dev/null; then
+      # Must have actual HTTP response patterns, not just variable names
+      if grep -qE 'res\.(json|send|status|end|write)|return\s+(Response|HttpResponse)' "$file" 2>/dev/null; then
         if ! grep -q 'correlation_id\|correlationId' "$file" 2>/dev/null; then
-          if grep -qE 'status|statusCode|json\(|res\.' "$file" 2>/dev/null; then
-            echo "  CORRELATION ID: $(basename "$file") may be missing correlation_id in response"
-            VIOLATIONS=$((VIOLATIONS + 1))
-          fi
+          echo "  CORRELATION ID: $(basename "$file") may be missing correlation_id in response"
+          VIOLATIONS=$((VIOLATIONS + 1))
         fi
       fi
       ;;
@@ -67,6 +69,10 @@ check_correlation_id() {
 }
 
 # ── Check 3: Test data isolation — hand-constructed domain objects ──
+# Only flag direct domain aggregate construction in test files.
+# Exclude test framework setup (Mockito, beforeEach, setUp, fixture helpers).
+# Uses a broader set of aggregate names to reduce false negatives.
+# Also excludes files with test helper patterns (Mock, Fake, Stub, TestDouble).
 check_test_data_isolation() {
   local file="$1"
   local basename_file
@@ -82,12 +88,16 @@ check_test_data_isolation() {
     *) return ;;
   esac
 
-  # Only flag direct domain aggregate construction, not all constructors.
-  # Exclude test framework setup (Mockito, beforeEach, setUp, fixture helpers).
-  # Pattern: new <DomainAggregate>( where DomainAggregate is a known aggregate pattern
-  # (singular noun, not a test helper like Mock, Fake, Stub, Builder, Factory).
-  if grep -qE 'new (Order|User|Account|Payment|Invoice|Product|Customer|Session|Token|Message|Event|Command|Query)\(' "$file" 2>/dev/null; then
-    if ! grep -qE 'Factory|factory|Builder|builder|Mockito|@Mock|@InjectMocks|beforeEach|setUp|fixture' "$file" 2>/dev/null; then
+  # Exclude test doubles and helpers — they legitimately construct domain objects
+  if echo "$basename_file" | grep -qiE 'Mock|Fake|Stub|TestDouble|TestHelper'; then
+    return
+  fi
+
+  # Flag direct new AggregateName( patterns where AggregateName starts with
+  # a capital letter and is not a known test utility class.
+  # Exclude files that use Factory/Builder/Mockito/beforeEach (proper patterns).
+  if grep -qE 'new [A-Z][a-zA-Z]+\(.*\)' "$file" 2>/dev/null; then
+    if ! grep -qE 'Factory|factory|Builder|builder|Mockito|@Mock|@InjectMocks|beforeEach|setUp|fixture|create[A-Z]|make[A-Z]' "$file" 2>/dev/null; then
       echo "  TEST DATA: $(basename "$file") may use hand-constructed domain objects"
       VIOLATIONS=$((VIOLATIONS + 1))
     fi
