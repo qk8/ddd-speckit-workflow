@@ -975,6 +975,11 @@ steps:
           Approve to continue.
         options: [approve, revise, abort]
         on_revise:
+          - id: reset_stagnation_on_drift_fix
+            type: shell
+            command: >
+              bash scripts/check-stagnation.sh --reset
+              "{{ steps.check_remaining.output.feature_dir }}"
           - goto: execute_drift_check
         on_abort: abort
 
