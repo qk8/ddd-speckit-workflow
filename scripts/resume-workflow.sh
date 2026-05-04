@@ -40,7 +40,7 @@ fi
 # Smart IN_PROGRESS reset: only reset if there's exactly one IN_PROGRESS task.
 # Multiple IN_PROGRESS tasks may be legitimate (e.g., from a revise cycle).
 TMPFILE=$(mktemp)
-IN_PROGRESS_TASKS=$(grep -B1 "^Status: IN_PROGRESS$" "$FEATURE_DIR/tasks.md" 2>/dev/null | grep "^## TASK" | sed 's/^## //' || true)
+IN_PROGRESS_TASKS=$(awk '/^## TASK/{header=$0} /^Status: IN_PROGRESS$/{gsub(/^## /,"",header); print header}' "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
 
 if [ -n "$IN_PROGRESS_TASKS" ]; then
   IN_PROGRESS_COUNT=$(echo "$IN_PROGRESS_TASKS" | grep -c . || true)

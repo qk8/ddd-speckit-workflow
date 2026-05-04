@@ -66,27 +66,35 @@ do_task_abandoned_jq() {
   local tid="$1" reason="$2"
   init_checkpoint
   local tmp; tmp=$(mktemp)
-  jq --arg tid "$tid" --arg r "$reason" \
-    '.tasks[$tid].status="ABANDONED" | .tasks[$tid].abandoned_reason=$r | .metadata.updated_at=now_utc' \
+  jq --arg tid "$tid" --arg r "$reason" --arg ts "$TS" \
+    '.tasks[$tid].status="ABANDONED" | .tasks[$tid].abandoned_reason=$r | .tasks[$tid].abandoned_at=$ts | .metadata.updated_at=$ts' \
     "$CHECKPOINT_FILE" > "$tmp" && mv "$tmp" "$CHECKPOINT_FILE"
 }
 
-# ── Fallback (no jq) — uses sed to produce valid JSON ───────────
+# ── Fallback (no jq) — uses sed/grep for JSON manipulation ───────
+# These functions modify .workflow-state.json without jq.
+# Entries are single-line: "TASK-N": {...},
+# We use sed to replace existing entries or awk to insert new ones.
+
 do_task_done_fallback() {
   local tid="$1" tt="$2" built="$3" tf="$4"
   init_checkpoint
   local tmp; tmp=$(mktemp)
 
-  # Use awk to insert the new task entry into the tasks object
-  awk -v tid="$tid" -v tt="$tt" -v built="$built" -v tf="$tf" -v ts="$TS" '
-    /^  "tasks": \{/ { in_tasks=1 }
-    in_tasks && /^  "batch_plan"/ {
-      # Before closing tasks object, add new entry
-      printf "    \"%s\": {\"status\":\"DONE\",\"type\":\"%s\",\"built\":\"%s\",\"test_file\":\"%s\",\"completed_at\":\"%s\"},\n", tid, tt, built, tf, ts
-      in_tasks=0
-    }
-    { print }
-  ' "$CHECKPOINT_FILE" > "$tmp"
+  local entry="    \"${tid}\": {\"status\":\"DONE\",\"type\":\"${tt}\",\"built\":\"${built}\",\"test_file\":\"${tf}\",\"completed_at\":\"${TS}\"}"
+
+  if grep -q "\"${tid}\":" "$CHECKPOINT_FILE" 2>/dev/null; then
+    # Replace existing single-line entry with sed
+    sed "s|    \"${tid}\": {[^}]*}|${entry}|" "$CHECKPOINT_FILE" > "$tmp"
+  else
+    # Insert before "batch_plan"
+    awk -v entry="$entry" '
+      /^  "batch_plan"/ {
+        printf "%s,\n", entry
+      }
+      { print }
+    ' "$CHECKPOINT_FILE" > "$tmp"
+  fi
   mv "$tmp" "$CHECKPOINT_FILE"
 }
 
@@ -95,14 +103,18 @@ do_task_in_progress_fallback() {
   init_checkpoint
   local tmp; tmp=$(mktemp)
 
-  awk -v tid="$tid" -v tt="$tt" -v ts="$TS" '
-    /^  "tasks": \{/ { in_tasks=1 }
-    in_tasks && /^  "batch_plan"/ {
-      printf "    \"%s\": {\"status\":\"IN_PROGRESS\",\"type\":\"%s\",\"started_at\":\"%s\"},\n", tid, tt, ts
-      in_tasks=0
-    }
-    { print }
-  ' "$CHECKPOINT_FILE" > "$tmp"
+  local entry="    \"${tid}\": {\"status\":\"IN_PROGRESS\",\"type\":\"${tt}\",\"started_at\":\"${TS}\"}"
+
+  if grep -q "\"${tid}\":" "$CHECKPOINT_FILE" 2>/dev/null; then
+    sed "s|    \"${tid}\": {[^}]*}|${entry}|" "$CHECKPOINT_FILE" > "$tmp"
+  else
+    awk -v entry="$entry" '
+      /^  "batch_plan"/ {
+        printf "%s,\n", entry
+      }
+      { print }
+    ' "$CHECKPOINT_FILE" > "$tmp"
+  fi
   mv "$tmp" "$CHECKPOINT_FILE"
 }
 
@@ -137,7 +149,20 @@ if [ "$MODE" = "write" ]; then
       if [ "$HAS_JQ" = true ]; then
         do_task_abandoned_jq "$4" "${5:-}"
       else
-        sed -i "/\"${4}\"/,/}/ s/\"status\":[[:space:]]*\"[^\"]*\"/\"status\": \"ABANDONED\"/" "$CHECKPOINT_FILE"
+        local tid="$4" reason="${5:-Manual abandon}"
+        local tmp; tmp=$(mktemp)
+        local entry="    \"${tid}\": {\"status\":\"ABANDONED\",\"abandoned_reason\":\"${reason}\",\"abandoned_at\":\"${TS}\"}"
+        if grep -q "\"${tid}\":" "$CHECKPOINT_FILE" 2>/dev/null; then
+          sed "s|    \"${tid}\": {[^}]*}|${entry}|" "$CHECKPOINT_FILE" > "$tmp"
+        else
+          awk -v entry="$entry" '
+            /^  "batch_plan"/ {
+              printf "%s,\n", entry
+            }
+            { print }
+          ' "$CHECKPOINT_FILE" > "$tmp"
+        fi
+        mv "$tmp" "$CHECKPOINT_FILE"
       fi
       ;;
     *)
