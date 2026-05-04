@@ -70,7 +70,14 @@ steps:
     options: [approve, revise, abort]
     on_revise:
       - goto: clarify
-    on_abort: abort
+    on_abort:
+      - id: cleanup-abort-preflight
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "preflight"
+      - goto: abort
 
   # ── PHASE 1: CLARIFY (bounded) ──────────────────────────────────
   - id: clarify_round
@@ -393,7 +400,14 @@ steps:
     options: [approve, revise, abort]
     on_revise:
       - goto: plan-devex
-    on_abort: abort
+    on_abort:
+      - id: cleanup-abort-spec-devex
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "spec_devex"
+      - goto: abort
 
   # ── BOUNDED PLAN REVIEW ─────────────────────────────────────────
   # Replaces the unbounded review-plan-consolidated-gate.
@@ -499,7 +513,14 @@ steps:
               bash scripts/record-phase-revision.sh plan_review_revision
               "{{ steps.plan_review_revision_iteration.output.count || 1 }}"
           - goto: plan-consolidated-review
-        on_abort: abort
+        on_abort:
+          - id: cleanup-abort-plan-review
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "plan_review"
+          - goto: abort
 
   # ── BOUNDED DESIGN REVIEW ─────────────────────────────────────
   # Replaces the unbounded speckit_review_design flat gate.
@@ -551,7 +572,14 @@ steps:
               bash scripts/record-phase-revision.sh design_review_round
               "{{ steps.design_review_round_iteration.output.count || 1 }}"
           - goto: speckit_review_design
-        on_abort: abort
+        on_abort:
+          - id: cleanup-abort-design
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "design_review"
+          - goto: abort
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -669,7 +697,14 @@ steps:
           **Revision threshold exceeded**. Approving on next iteration.
           {% endif %}
         options: [approve, revise, abort]
-        on_abort: abort
+        on_abort:
+          - id: cleanup-abort-tasks
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "tasks_phase"
+          - goto: abort
         on_revise:
           - id: trim-revision-history
             type: shell
@@ -951,7 +986,16 @@ steps:
               {% endif %}
             options: [approve, revise]
             on_revise:
-              - goto: run_retrospect
+              - id: add-traceability-fix-tasks
+                type: prompt
+                integration: claude
+                input:
+                  args: >
+                    Read the traceability check output above and tasks.md. For each gap
+                    (missing spec reference, missing plan section coverage), add a
+                    specific fix task to tasks.md with clear acceptance criteria.
+                    Print the list of added tasks.
+              - goto: implement_loop
 
           - id: run_retrospect
             type: prompt
@@ -1262,9 +1306,22 @@ steps:
               args: >
                 Read REVIEW_REPORT.md and tasks.md. For every FAIL item, add a
                 specific fix task to tasks.md with clear acceptance criteria.
-                Print the list of added tasks.
+
+                DEDUPLICATION: Before adding each fix task, check if a task with
+                the same acceptance criterion already exists in tasks.md (any status).
+                If the same FAIL item was already addressed in a previous revision round:
+                - Skip it — it was already added.
+                - Do NOT create a duplicate task.
+                Print: "Added [N] new fix tasks, skipped [M] duplicates from previous rounds."
           - goto: code_review
-        on_abort: abort
+        on_abort:
+          - id: cleanup-abort-code-review
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "code_review"
+          - goto: abort
 
   # ── PHASE 7: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify
@@ -1284,14 +1341,50 @@ steps:
         (intentional deviation). Add fix tasks to tasks.md if needed,
         then select "fix-needed" to resume the implement loop.
     options: [approved-clean, fix-needed, abort]
-    on_abort: abort
+    on_abort:
+      - id: cleanup-abort-final-verify
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "final_verify"
+      - goto: abort
     on_fix-needed:
-      - id: add-fix-tasks
-        type: prompt
-        integration: claude
-        input:
-          args: >
-            Read tasks.md and the final verify report.
-            For each drift issue, add a fix task to tasks.md with clear
-            acceptance criteria. Print the list of added tasks.
-      - goto: implement_loop
+      # Transition to bounded fix_needed_round loop
+      - id: record-fix-needed-start
+        type: shell
+        command: >
+          bash scripts/record-phase-revision.sh fix_needed_round 1
+      - goto: fix_needed_round
+
+  - id: fix_needed_round
+    type: while
+    condition: "true"
+    max_iterations: 2
+    steps:
+      - id: fix_needed
+        type: gate
+        message: |
+          Review the final verify report for remaining drift issues.
+          CLEAN → spec and code are fully aligned. Ready to merge.
+          DRIFT DETECTED → fix issues before merging.
+            For each issue, decide: fix in code (align to spec) or fix in spec
+            (intentional deviation). Add fix tasks to tasks.md if needed.
+          Round {{ steps.fix_needed_round_iteration.output.count || 1 }}/2.
+        options: [approved-clean, fix-needed, abort]
+        on_fix-needed:
+          - id: add-fix-tasks
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read tasks.md and the final verify report.
+                For each drift issue, add a fix task to tasks.md with clear
+                acceptance criteria. Print the list of added tasks.
+          - id: record-fix-needed-revision
+            type: shell
+            command: >
+              bash scripts/record-phase-revision.sh fix_needed_round
+              "{{ steps.fix_needed_round_iteration.output.count || 1 }}"
+          - goto: implement_loop
+        on_abort: abort

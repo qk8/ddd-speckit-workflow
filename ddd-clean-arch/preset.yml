@@ -149,8 +149,8 @@ routing:
 # routing_secondary: checks that run only when the LAST task for a module type completes.
 routing_critical:
   backend-domain:   [A, AS, BC, D, I, L, Z]
-  backend-infra:    [A, AS, BC, D, I, L, Z]
-  backend-api:      [A, AS, BC, D, I, L, Z]
+  backend-infra:    [A, AS, BC, D, I, L, O, OW, US, Z]
+  backend-api:      [A, AS, BC, D, I, L, O, OW, US, Z]
   shared:           [AS, BC, D, I, L, Z]
   integration:      [AS, BC, D, I, L, Z]
   frontend-data:    [AS, BC, D, I, L, Z]
@@ -159,8 +159,8 @@ routing_critical:
 
 routing_secondary:
   backend-domain:   [E, M]
-  backend-infra:    [E, F, M, O, Q]
-  backend-api:      [E, G, J, K, M, N, O, R, T]
+  backend-infra:    [E, F, M, Q]
+  backend-api:      [E, G, J, K, M, N, R, T]
   shared:           [E, K, M, N, R, T]
   integration:      [M]
   frontend-data:    [G, M, O]

@@ -44,6 +44,21 @@ fi
 
 COUNT_FILE="$REVISIONS_DIR/${TASK_ID}.count"
 
+# ── Check if task is currently ABANDONED — if so, reset counter ──
+TASKS_FILE="$FEATURE_DIR/tasks.md"
+if [ -f "$TASKS_FILE" ]; then
+  TASK_STATUS=$(awk "/^## TASK-$TASK_ID/{found=1} found && /^Status:/{print; exit}" "$TASKS_FILE" 2>/dev/null || true)
+  if echo "$TASK_STATUS" | grep -qi "ABANDONED"; then
+    rm -f "$COUNT_FILE"
+    echo "REVISION_COUNT=0"
+    echo "REVISION_OK=true"
+    echo "REVISION_EXHAUSTED=false"
+    echo "CURRENT_TASK=$TASK_ID"
+    echo "NOTE: Counter reset — task was ABANDONED and restarted."
+    exit 0
+  fi
+fi
+
 # Read current count (default 0)
 CURRENT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
 case "$CURRENT" in

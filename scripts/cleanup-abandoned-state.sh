@@ -104,18 +104,28 @@ if [ -d "$FEATURE_DIR/.artifacts/check-results" ]; then
   rm -f "$FEATURE_DIR/.artifacts/check-results/"*.result 2>/dev/null || true
 fi
 
-# ── 4. Reset per-task revision counters ────────────────────────
+# ── 4. Reset per-task revision counters for ABANDONED tasks only ──
 REVISIONS_DIR="$FEATURE_DIR/.artifacts/task-revisions"
-if [ -d "$REVISIONS_DIR" ]; then
-  REV_COUNT=$(ls "$REVISIONS_DIR"/*.count 2>/dev/null | wc -l || echo 0)
-  REV_COUNT=$(echo "$REV_COUNT" | xargs)
+if [ -d "$REVISIONS_DIR" ] && [ -f "$TASKS_FILE" ]; then
+  ABANDONED_TASKS=$(awk '/^## TASK/{header=$0} /^Status: ABANDONED$/{gsub(/^## /,"",header); print header}' "$TASKS_FILE" 2>/dev/null || true)
+  RESET_COUNT=0
+  if [ -n "$ABANDONED_TASKS" ]; then
+    while IFS= read -r tid; do
+      [ -z "$tid" ] && continue
+      COUNT_FILE="$REVISIONS_DIR/${tid}.count"
+      if [ -f "$COUNT_FILE" ]; then
+        rm -f "$COUNT_FILE"
+        RESET_COUNT=$((RESET_COUNT + 1))
+        echo "- Reset revision counter for $tid (ABANDONED task)." >> "$ABORT_REPORT"
+      fi
+    done <<< "$ABANDONED_TASKS"
+  fi
   {
     echo "## Per-task revision counters"
     echo ""
-    echo "- $REV_COUNT task revision counters reset."
+    echo "- $RESET_COUNT task revision counters reset (ABANDONED tasks only)."
     echo ""
   } >> "$ABORT_REPORT"
-  rm -f "$REVISIONS_DIR"/*.count 2>/dev/null || true
 fi
 
 echo "- Abort report written to: $ABORT_REPORT"

@@ -190,9 +190,30 @@ INLINE CORRECTION LOOP (if tests fail)
       "[task_type]" \
       "$(cat $TEST_OUTPUT_FILE)" \
       "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
-  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE.
+  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION.
   Pass this evidence to the LLM classification — do NOT self-classify without it.
   Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
+
+  ENFORCED ACTION FROM DIAGNOSTIC:
+  If REQUIRED_ACTION=FIX_TEST:
+    Do NOT attempt implementation fixes. The diagnostic has identified this as a test fault.
+    Fix the test to properly validate the acceptance criterion.
+    Rewrite the failing test assertion, then re-run validate-tests.sh.
+
+  If REQUIRED_ACTION=HUMAN:
+    STOP. Do not attempt further corrections.
+    Print: "ESCALATION: Diagnostic confidence too low for automated resolution."
+    Print: "Evidence: $EVIDENCE"
+    Mark task for human review in tasks.md (add note: requires human review).
+    Proceed to next task.
+
+  If REQUIRED_ACTION=FIX_IMPL:
+    Proceed with implementation fixes only. Do NOT modify test files.
+    The diagnostic has identified this as a genuine implementation error.
+
+  If REQUIRED_ACTION=RETRY:
+    You may attempt either test or implementation fixes, but use the
+    EVIDENCE field to guide your choice. Do not self-classify without evidence.
 
 When STEP 2 completes successfully, print:
 "IMPLEMENT-CODE DONE — proceeding to quality checks."

@@ -30,7 +30,7 @@ Run the deterministic check engine:
 
   bash scripts/check-runner.sh "[feature_dir]" "[task_type]"
 
-This executes all deterministic checks (A, BC, D, E, F, I, K, L, R, Z) in parallel.
+This executes all deterministic checks (A, AS, BC, D, E, F, I, K, L, O, OW, R, US, Z) in parallel.
 Results are written to .artifacts/check-results/<check-id>.result (PASS/FAIL).
 
 If check-runner.sh exits 0: all deterministic checks passed. Proceed to STEP 3B.
@@ -39,13 +39,16 @@ If check-runner.sh exits 1: deterministic checks failed. Proceed to STEP 3C.
 ─────────────────────────────────────────
 STEP 3B — BATCHED CLAUDE CHECKS
 ─────────────────────────────────────────
-For non-deterministic checks that need Claude judgment (G, H, J, M, N, O, P, Q, S, T, U):
+For non-deterministic checks that need Claude judgment (G, H, J, M, N, P, Q, S, T):
 
 If this is the LAST task of the current module type, run these checks:
   - Read the sub-check file from commands/checks/check_[X]_[name].mdc for each
   - Execute each check. Record result: PASS | FAIL — details.
 
 For non-last tasks, skip batched Claude checks (handled at module boundary).
+
+Note: Checks O (Security Hardening) and U (Session & Token Security) are now
+deterministic (OW, US scripts) and run in STEP 3A. They are no longer here.
 
 ─────────────────────────────────────────
 STEP 3C — FIX DETERMINISTIC CHECK FAILURES
@@ -71,10 +74,22 @@ PER-CHECK ITERATION CAP:
   There is NO global cap — each check is independent.
 
   If the SAME check fails 3 consecutive times:
-    Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
-    Do not retry this check; proceed to the next applicable check.
+    1. Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
+    2. Create .artifacts/failure-report.md:
+       ## Failure Report — Check [X] ([check_name])
+       - **Task**: [TASK-N]
+       - **Check**: [X] — [check_name]
+       - **Tier**: [critical/secondary]
+       - **Attempt 1**: [summary of fix attempt + error]
+       - **Attempt 2**: [summary of fix attempt + error]
+       - **Recommendation**: ABANDON or HUMAN REVIEW
+    3. Mark task ABANDONED in tasks.md (Status: ABANDONED, Abandoned at: STEP 3D check [X]).
+    4. Print: "Task ABANDONED due to unresolvable check failure."
+    5. Proceed to next task (do NOT block the workflow).
 
-A task cannot be marked DONE until every applicable check passes.
+A task cannot be marked DONE until every applicable check passes — unless it has been
+ABANDONED per the procedure above, in which case the failure report serves as the
+record and the workflow continues to the next task.
 
 ─────────────────────────────────────────
 STEP 4 — SMOKE TEST (CODE-LEVEL VALIDATION)
@@ -86,6 +101,16 @@ the code does not actually work.
 Read plan.md §13 for the build/compile command:
   [build_command from plan.md §13, or "none" if no build step]
 
+PRE-VALIDATION:
+  Before running the build command, verify the required files exist:
+  - If build_command starts with "npm": verify package.json exists
+  - If build_command starts with "mvn": verify pom.xml exists
+  - If build_command starts with "gradle": verify build.gradle exists
+  - If build_command starts with "go": verify go.mod exists
+  - If build_command starts with "pytest": verify pytest config exists
+  - If the required file does NOT exist: flag as BUILD_COMMAND_ERROR,
+    add a fix task to tasks.md to correct plan.md §13, and skip smoke test.
+
 If build_command is not "none":
   RUN: [build_command]
   Use scripts/validate-tests.sh to capture and validate the result:
@@ -95,8 +120,12 @@ If build_command is not "none":
     2. Revert tasks.md Status from DONE back to IN_PROGRESS.
     3. Print: "SMOKE TEST FAILED — reverted to IN_PROGRESS for review."
     4. Print: "See: $TEST_OUTPUT_FILE"
-    5. Attempt to fix the build (max 2 attempts, same correction loop as STEP 2).
-    6. If still failing after 2 attempts: mark ABANDONED, print FAILURE_REPORT.md.
+    5. After each failure, check if the SAME error message appeared before:
+       - If error is about a missing file/command that plan.md says exists:
+         Flag BUILD_COMMAND_MISMATCH — add fix task to correct plan.md §13.
+       - If error is about missing source files: this is an implementation error.
+    6. Attempt to fix the build (max 2 attempts, same correction loop as STEP 2).
+    7. If still failing after 2 attempts: mark ABANDONED, print FAILURE_REPORT.md.
 
 If no build step (build_command is "none"):
   Run a minimal import/load check instead:

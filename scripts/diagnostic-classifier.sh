@@ -10,6 +10,9 @@
 #   CLASSIFICATION=[TEST_FAULT|IMPL_ERROR|ENV_FAULT|REGRESSION|AMBIGUOUS]
 #   EVIDENCE=... (deterministic findings)
 #   CONFIDENCE=high|medium|low
+#   FAULTS_FOUND=N
+#   TEST_FAULT_COUNT=N
+#   REQUIRED_ACTION=[FIX_TEST|FIX_IMPL|HUMAN|RETRY]
 
 set -euo pipefail
 
@@ -22,7 +25,7 @@ if [ "${FEATURE_DIR}" = "--help" ]; then
   echo "  test_output_file: path to file containing test runner output (or empty string)"
   echo "  impl_output_file: path to file containing implementation output (or empty string)"
   echo ""
-  echo "Outputs: CLASSIFICATION, EVIDENCE, CONFIDENCE"
+  echo "Outputs: CLASSIFICATION, EVIDENCE, CONFIDENCE, FAULTS_FOUND, TEST_FAULT_COUNT, REQUIRED_ACTION"
   exit 0
 fi
 
@@ -30,6 +33,8 @@ EVIDENCE=""
 FAULTS_FOUND=0
 CLASSIFICATION="AMBIGUOUS"
 CONFIDENCE="low"
+TEST_FAULT_COUNT=0
+REQUIRED_ACTION="RETRY"
 
 # ── Check 1: Test runner config exists ──────────────────────────
 check_test_runner() {
@@ -73,7 +78,7 @@ analyze_test_output() {
   if echo "$content" | grep -qiE 'SyntaxError|Cannot find module|ImportError|ModuleNotFoundError|ENOENT|cannot resolve symbol'; then
     EVIDENCE="${EVIDENCE}TEST_FAULT: Test file has import/syntax errors — test runner cannot execute. "
     FAULTS_FOUND=$((FAULTS_FOUND + 1))
-    return
+    TEST_FAULT_COUNT=$((TEST_FAULT_COUNT + 1))
   fi
 
   # Check for empty mock usage (spy/verify with no real call)
@@ -81,6 +86,7 @@ analyze_test_output() {
     if echo "$content" | grep -qiE 'calledTimes\(0\)|notCalled|toHaveBeenCalledTimes\(0\)'; then
       EVIDENCE="${EVIDENCE}TEST_FAULT: Mock was created but never called — test may not exercise real code. "
       FAULTS_FOUND=$((FAULTS_FOUND + 1))
+      TEST_FAULT_COUNT=$((TEST_FAULT_COUNT + 1))
     fi
   fi
 
@@ -88,6 +94,7 @@ analyze_test_output() {
   if echo "$content" | grep -qiE 'timeout|timed out|waitFor.*failed|await.*not.*received|Promise.*rejected'; then
     EVIDENCE="${EVIDENCE}TEST_FAULT: Test appears to have async timing issues (timeout/waitFor failure). "
     FAULTS_FOUND=$((FAULTS_FOUND + 1))
+    TEST_FAULT_COUNT=$((TEST_FAULT_COUNT + 1))
   fi
 
   # Check for assertion errors with specific messages
@@ -164,8 +171,27 @@ else
   CONFIDENCE="low"
 fi
 
+# ── Determine REQUIRED_ACTION based on classification + evidence ─
+if [ "$CLASSIFICATION" = "TEST_FAULT" ] && [ "$CONFIDENCE" = "high" ]; then
+  REQUIRED_ACTION="FIX_TEST"
+elif [ "$CLASSIFICATION" = "IMPL_ERROR" ] && [ "$CONFIDENCE" = "high" ]; then
+  REQUIRED_ACTION="FIX_IMPL"
+elif [ "$CLASSIFICATION" = "ENV_FAULT" ]; then
+  REQUIRED_ACTION="FIX_IMPL"
+elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ] && [ "$FAULTS_FOUND" -ge 3 ]; then
+  REQUIRED_ACTION="HUMAN"
+elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ]; then
+  REQUIRED_ACTION="RETRY"
+elif [ "$TEST_FAULT_COUNT" -ge 2 ]; then
+  REQUIRED_ACTION="FIX_TEST"
+else
+  REQUIRED_ACTION="RETRY"
+fi
+
 # ── Output results ─────────────────────────────────────────────
 echo "CLASSIFICATION=${CLASSIFICATION}"
 echo "EVIDENCE='${EVIDENCE}'"
 echo "CONFIDENCE=${CONFIDENCE}"
 echo "FAULTS_FOUND=${FAULTS_FOUND}"
+echo "TEST_FAULT_COUNT=${TEST_FAULT_COUNT}"
+echo "REQUIRED_ACTION=${REQUIRED_ACTION}"
