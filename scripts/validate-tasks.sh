@@ -468,39 +468,94 @@ while IFS= read -r line; do
   fi
 done < "$TASKS_FILE"
 
-# Compute batch levels and check for file overlaps within each level
-OVERLAP_FILE="$TMP_DIR/overlaps.txt"
-touch "$OVERLAP_FILE"
+# Compute dependency levels (same logic as compute_batch_plan, simplified)
+LEVELS_FILE="$TMP_DIR/levels_check4.txt"
+touch "$LEVELS_FILE"
+DEPS_FILE="$TMP_DIR/deps_check4.txt"
+touch "$DEPS_FILE"
 
-# For each pair of tasks at the same dependency level, check file overlap
-# We use the task file list to detect potential conflicts
-awk -F'|' '{print $1}' "$TASK_FILES_FILE" | sort -u | while read -r tid; do
-  # Get all files for this task
-  grep "^${tid}|" "$TASK_FILES_FILE" | cut -d'|' -f2 | sort -u > "$TMP_DIR/files_${tid}.txt"
-done
-
-# Check all pairs of tasks for file overlap
-task_ids=()
 while IFS= read -r line; do
   if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
     tid=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
-    task_ids+=("$tid")
+    echo "${tid}|0" >> "$LEVELS_FILE"
   fi
 done < "$TASKS_FILE"
 
-for ((i=0; i<${#task_ids[@]}; i++)); do
-  for ((j=i+1; j<${#task_ids[@]}; j++)); do
-    tid_a="${task_ids[$i]}"
-    tid_b="${task_ids[$j]}"
-    # Check if both tasks reference the same file
-    overlap=$(comm -12 \
-      <(grep "^${tid_a}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
-      <(grep "^${tid_b}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
-    if [ -n "$overlap" ]; then
-      echo "  WARNING: TASK-$tid_a and TASK-$tid_b both reference: $overlap"
-      WARNINGS=$((WARNINGS + 1))
-      echo "\"TASK-$tid_a <-> TASK-$tid_b: $overlap\"" >> "$OVERLAP_FILE"
+# Parse deps from tasks.md
+current_id=""
+while IFS= read -r line; do
+  if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
+    current_id=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
+  fi
+  if echo "$line" | grep -qE '^Depends on: ' && [ -n "${current_id:-}" ]; then
+    echo "${current_id}|$(echo "$line" | sed 's/^Depends on: //')" >> "$DEPS_FILE"
+  fi
+done < "$TASKS_FILE"
+
+# BFS to compute levels
+changed=true
+iterations=0
+task_count=$(wc -l < "$TASKS_FILE" | xargs)
+max_iter=$((task_count + 1))
+
+while [ "$changed" = true ] && [ "$iterations" -lt "$max_iter" ]; do
+  changed=false
+  iterations=$((iterations + 1))
+  while IFS='|' read -r task_id deps; do
+    [ "$deps" = "none" ] && continue
+    # Normalize deps
+    clean_deps=$(echo "$deps" | sed 's/^TASK-\[//;s/\]$//;s/^TASK-//;s/, /\n/g')
+    max_dep_level=0
+    while IFS= read -r dep; do
+      dep=$(echo "$dep" | xargs)
+      dep_level=$(awk -F'|' -v id="$dep" '$1 == id {print $2; exit}' "$LEVELS_FILE")
+      dep_level=${dep_level:-0}
+      new_level=$((dep_level + 1))
+      if [ "$new_level" -gt "$max_dep_level" ]; then
+        max_dep_level=$new_level
+      fi
+    done <<< "$clean_deps"
+    current_level=$(awk -F'|' -v id="$task_id" '$1 == id {print $2; exit}' "$LEVELS_FILE")
+    current_level=${current_level:-0}
+    if [ "$max_dep_level" -gt "$current_level" ]; then
+      {
+        awk -F'|' -v id="$task_id" '$1 != id' "$LEVELS_FILE" || true
+        echo "${task_id}|${max_dep_level}"
+      } > "$TMP_DIR/levels_tmp"
+      mv "$TMP_DIR/levels_tmp" "$LEVELS_FILE"
+      changed=true
     fi
+  done < "$DEPS_FILE"
+done
+
+# Check for file overlaps ONLY within the same dependency level
+OVERLAP_FILE="$TMP_DIR/overlaps.txt"
+touch "$OVERLAP_FILE"
+
+# Get unique levels
+LEVELS=$(cut -d'|' -f2 "$LEVELS_FILE" | sort -un)
+
+for level in $LEVELS; do
+  # Get tasks at this level
+  LEVEL_TASKS=$(awk -F'|' -v lv="$level" '$2 == lv {print $1}' "$LEVELS_FILE")
+  LEVEL_TASK_LIST=$(echo "$LEVEL_TASKS" | tr '\n' ' ')
+
+  # Check all pairs within this level
+  for tid_a in $LEVEL_TASKS; do
+    for tid_b in $LEVEL_TASKS; do
+      # Skip self-pairs and duplicates
+      [ "$tid_a" = "$tid_b" ] && continue
+      [ "$tid_a" -gt "$tid_b" ] 2>/dev/null && continue
+
+      overlap=$(comm -12 \
+        <(grep "^${tid_a}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
+        <(grep "^${tid_b}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
+      if [ -n "$overlap" ]; then
+        echo "  WARNING: TASK-$tid_a and TASK-$tid_b (same batch level $level) both reference: $overlap"
+        WARNINGS=$((WARNINGS + 1))
+        echo "\"TASK-$tid_a <-> TASK-$tid_b: $overlap\"" >> "$OVERLAP_FILE"
+      fi
+    done
   done
 done
 

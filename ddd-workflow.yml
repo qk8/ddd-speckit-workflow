@@ -376,7 +376,7 @@ steps:
   # to prevent Claude from paraphrasing or omitting essential content.
   - id: check-claude-md-lines
     type: shell
-    command: "bash scripts/check-claude-md-lines.sh"
+    command: "bash scripts/check-claude-md-lines.sh --hard"
 
   # ── VALIDATE CI-LOCAL.SH COMMANDS POPULATED ──────────────────
   - id: validate-ci-local
@@ -684,12 +684,12 @@ steps:
   # ── TRACEABILITY CHECK (before implement_loop) ────────────────
   # Ensures every task traces back to a spec requirement.
   # If gaps found, revise tasks.md before implementation starts.
+  # Removed ignore_failure: true — traceability is a quality gate, not advisory.
   - id: traceability_check
     type: shell
     command: >
       bash scripts/traceability-check.sh
       "$(bash scripts/find-first-feature.sh)"
-    ignore_failure: true
 
   - id: review_traceability
     type: gate
@@ -705,7 +705,14 @@ steps:
     options: [approve, revise, abort]
     on_revise:
       - goto: tasks
-    on_abort: abort
+    on_abort:
+      - id: cleanup-on-abort-traceability
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "traceability_check"
+      - goto: abort
 
   # ── PHASE 5: IMPLEMENT LOOP (DAG-structured) ──────────────────
   # Linear flow: no goto jumps within the iteration.
@@ -744,7 +751,14 @@ steps:
             on_skip:
               type: shell
               command: echo "TASKS_PARSE_ERROR=0"
-            on_abort: abort
+            on_abort:
+              - id: cleanup-on-abort-parse
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.check_remaining.output.feature_dir }}"
+                  "parse_error"
+              - goto: abort
 
       # ── Step 3: All Done ──
       - id: check_all_done
@@ -781,7 +795,6 @@ steps:
           "{{ steps.check_remaining.output.feature_dir }}"
           "{{ steps.check_remaining.output.done_count }}"
           "{{ steps.check_remaining.output.total_tasks }}"
-        ignore_failure: true
 
       - id: stagnation_gate
         type: if
@@ -825,7 +838,14 @@ steps:
                 command: >
                   bash scripts/reset-stagnation.sh
                   "{{ steps.check_remaining.output.feature_dir }}"
-            on_abort: abort
+            on_abort:
+              - id: cleanup-on-abort-stagnation
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.check_remaining.output.feature_dir }}"
+                  "stagnation"
+              - goto: abort
 
       # ── Step 5: Progress Logging ──
       - id: iteration_progress
@@ -899,8 +919,9 @@ steps:
                     task section or reset its status to TODO. Print a summary.
               # No goto — iteration continues; next while iteration re-checks
 
-      # ── Steps 8–9: Periodic Retrospect & Drift Check ──
+      # ── Steps 8–9: Periodic Retrospect, Drift Check & Traceability Re-Check ──
       # Both run only when retro_trigger is true (every 5 tasks).
+      # Added: periodic traceability re-check to catch spec drift mid-implementation.
       - id: retro_drift_check
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
@@ -910,7 +931,27 @@ steps:
             command: >
               bash scripts/test-trend-analyzer.sh
               "{{ steps.check_remaining.output.feature_dir }}"
-            ignore_failure: true
+
+          - id: run_traceability_recheck
+            type: shell
+            command: >
+              bash scripts/traceability-check.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
+          - id: review_traceability_recheck
+            type: gate
+            message: |
+              Periodic traceability re-check (every 5 tasks):
+              {% if steps.run_traceability_recheck.output.TRACEABLE == 'false' %}
+              **GAPS DETECTED** ({{ steps.run_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
+              {{ steps.run_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
+              Implementation has drifted from spec. Fix tasks.md or spec to close gaps.
+              {% else %}
+              All tasks still traceable to spec. No drift detected.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - goto: run_retrospect
 
           - id: run_retrospect
             type: prompt
@@ -975,20 +1016,55 @@ steps:
           Approve to continue.
         options: [approve, revise, abort]
         on_revise:
-          - id: reset_stagnation_on_drift_fix
+          # Don't reset stagnation counter — stagnation and drift are independent signals.
+          # Stagnation only resets when done_count actually increases (in check-stagnation.sh).
+          # Track drift violations separately for diagnosis.
+          - id: record_drift_violation
             type: shell
             command: >
-              bash scripts/check-stagnation.sh --reset
+              bash scripts/check-stagnation.sh --record-drift
               "{{ steps.check_remaining.output.feature_dir }}"
           - goto: execute_drift_check
-        on_abort: abort
+        on_abort:
+          - id: cleanup-on-abort-drift
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+              "drift_check"
+          - goto: abort
 
       # ── Step 10: Generate Prompt Context ──
+      # Removed ignore_failure: true — if context generation fails,
+      # the LLM will still work with reduced context but should know.
       - id: generate_prompt_context
         type: shell
         command: >
           bash scripts/prompt-context.sh "{{ steps.check_remaining.output.feature_dir }}"
-        ignore_failure: true
+
+      # ── Step 10.5: Per-Task Revision Cap ──
+      # Prevents a single stuck task from consuming all 50 implement_loop iterations.
+      # If a task has been revised 3+ times, mark it ABANDONED and move on.
+      - id: check_task_revisions
+        type: shell
+        command: >
+          bash scripts/check-task-revisions.sh
+          --auto
+          "{{ steps.check_remaining.output.feature_dir }}"
+          "3"
+
+      - id: task_revision_cap_gate
+        type: if
+        condition: "{{ steps.check_task_revisions.output.REVISION_EXHAUSTED == 'true' }}"
+        then:
+          - id: abandon_exhausted_task
+            type: shell
+            command: >
+              bash scripts/set-task-status.sh
+              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+              ABANDONED
+              "Task revision limit exceeded (3 revisions). See .artifacts/task-revisions/ for details."
+          # No goto — iteration continues; next while iteration picks up next task
 
       # ── Step 11: Implement Code ──
       - id: implement_code
@@ -1022,31 +1098,76 @@ steps:
         type: shell
         command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
 
-      # ── Step 14: Review ──
-      - id: review-implement
+      # ── Step 14: Acceptance Gate (focused: 2 items) ──
+      - id: review-acceptance
         type: gate
         message: |
-          Review the completion report for the last task.
+          Review acceptance criteria for the last task.
 
           [ ] All acceptance criteria satisfied (test name + file:line references)?
+          [ ] Test file committed alongside implementation?
+
+          Approve to proceed to quality checks review.
+          Revise to send the task back for fixes.
+          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise]
+        on_revise:
+          - id: revise-mark-in-progress-acceptance
+            type: shell
+            command: >
+              bash scripts/set-task-status.sh
+              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+              IN_PROGRESS
+              "Task sent back for revision — acceptance criteria not met."
+          # No goto — iteration ends naturally; next while iteration re-implements
+
+      # ── Step 15: Quality Checks Gate (focused: 5 items) ──
+      - id: review-checks
+        type: gate
+        message: |
+          Review quality check results for the last task.
+
           [ ] All applicable checks passed (all checks in routing table)?
           [ ] Check [BC] new tests + regression: zero new failures in existing test suite?
           [ ] Check [J] performance budget: within §10 budget?
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
-          [ ] Test file committed alongside implementation?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+
+          Approve to proceed to TDD integrity review.
+          Revise to send the task back for fixes.
+          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise]
+        on_revise:
+          - id: revise-mark-in-progress-checks
+            type: shell
+            command: >
+              bash scripts/set-task-status.sh
+              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+              IN_PROGRESS
+              "Task sent back for revision — quality checks not met."
+          # No goto — iteration ends naturally; next while iteration re-implements
+
+      # ── Step 16: TDD Integrity Gate (focused: 6 items) ──
+      - id: review-tdd
+        type: gate
+        message: |
+          Review TDD integrity for the last task.
+
           [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
           [ ] Test audit: no trivial assertions or over-masking found?
-          [ ] Test correctness: each test name proves its acceptance criterion (not stale or unrelated)?
-          [ ] Test correctness: [BC] new tests PASS (not FLAKY) with correct assertions (HTTP status, response shape, field names)?
-          [ ] Test correctness: factory/fixture used for test data isolation, no hand-constructed domain objects?
+          [ ] Test correctness: each test name proves its acceptance criterion?
+          [ ] Test correctness: [BC] new tests PASS with correct assertions?
+          [ ] Test correctness: factory/fixture used for test data isolation?
           [ ] Red phase: failure evidence captured before implementation?
           [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
 
           Approve to continue to the next task.
-          Revise to send the task back for fixes (will re-implement next iteration).
-          Pause to save state and stop (resume with: specify workflow resume <run-id>
-            or by running: bash scripts/resume-workflow.sh)
+          Revise to send the task back for fixes.
+          Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
           {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
           **Revision threshold exceeded**. Approving on next iteration.
           {% endif %}
@@ -1056,15 +1177,15 @@ steps:
           command: >
             bash scripts/save-pause-state.sh
             "{{ steps.check_remaining.output.feature_dir }}"
-            "review-implement"
+            "review-tdd"
         on_revise:
-          - id: revise-mark-in-progress
+          - id: revise-mark-in-progress-tdd
             type: shell
             command: >
               bash scripts/set-task-status.sh
               "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
               IN_PROGRESS
-              "Task sent back for revision — will be re-implemented next iteration."
+              "Task sent back for revision — TDD integrity issues."
           # No goto — iteration ends naturally; next while iteration re-implements
 
   # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────

@@ -6,9 +6,13 @@
 set -euo pipefail
 
 RESET_MODE=false
+RECORD_DRIFT=false
 if [ "${1:-}" = "--reset" ]; then
   RESET_MODE=true
   FEATURE_DIR="${2:?Usage: check-stagnation.sh --reset <feature_dir>}"
+elif [ "${1:-}" = "--record-drift" ]; then
+  RECORD_DRIFT=true
+  FEATURE_DIR="${2:?Usage: check-stagnation.sh --record-drift <feature_dir>}"
 else
   FEATURE_DIR="${1:?Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks>}"
   CURRENT_DONE="${2:?}"
@@ -26,6 +30,22 @@ if [ "$RESET_MODE" = true ]; then
   echo "0" >> "$TMPFILE"
   mv "$TMPFILE" "$STATE_FILE"
   echo "0" > "$CONSEC_FILE"
+  echo "STAGNANT=false"
+  echo "CONSECUTIVE_NO_PROGRESS=0"
+  exit 0
+fi
+
+if [ "$RECORD_DRIFT" = true ]; then
+  # Record a drift violation for diagnosis.
+  # Stagnation and drift are independent signals — do NOT reset stagnation.
+  DRIFT_FILE="$STATE_FILE.drift_count"
+  DRIFT_COUNT=$(cat "$DRIFT_FILE" 2>/dev/null || echo 0)
+  case "$DRIFT_COUNT" in
+    ''|*[!0-9]*) DRIFT_COUNT=0 ;;
+  esac
+  DRIFT_COUNT=$((DRIFT_COUNT + 1))
+  echo "$DRIFT_COUNT" > "$DRIFT_FILE"
+  echo "DRIFT_VIOLATION_COUNT=$DRIFT_COUNT"
   echo "STAGNANT=false"
   echo "CONSECUTIVE_NO_PROGRESS=0"
   exit 0

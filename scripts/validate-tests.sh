@@ -105,17 +105,54 @@ fi
 # Generic fallback: use exit code as primary signal, then try structured parsing
 if [ "$TEST_TOTAL" -eq 0 ]; then
   # Attempt to extract counts from structured test output lines
-  # Uses Perl regex with word boundaries to avoid false matches on
-  # "PASS" inside variable names, "FAIL" in comments, etc.
-  if grep -qP '\b\d+\s+(passed|passing|failing|failed|skipped|pending)\b' "$OUTPUT_FILE" 2>/dev/null; then
-    TEST_PASSED=$(grep -oP '\b\d+\s+passed\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
-    TEST_FAILED=$(grep -oP '\b\d+\s+failed\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
-    TEST_SKIPPED=$(grep -oP '\b\d+\s+(skipped|pending)\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oP '\d+' || echo "0")
+  # Uses POSIX-compatible regex (no grep -P) for portability across macOS/Linux.
+  # Matches patterns like "5 passed", "3 failed", "2 skipped" at end of lines.
+  if grep -qE '[0-9]+\s+(passed|passing|failing|failed|skipped|pending)' "$OUTPUT_FILE" 2>/dev/null; then
+    TEST_PASSED=$(grep -oE '[0-9]+\s+(passed|passing)\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "0")
+    TEST_FAILED=$(grep -oE '[0-9]+\s+(failed|failing)\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "0")
+    TEST_SKIPPED=$(grep -oE '[0-9]+\s+(skipped|pending)\b' "$OUTPUT_FILE" 2>/dev/null | tail -1 | grep -oE '[0-9]+' || echo "0")
     # Default to 0 if extraction failed
     TEST_PASSED=${TEST_PASSED:-0}
     TEST_FAILED=${TEST_FAILED:-0}
     TEST_SKIPPED=${TEST_SKIPPED:-0}
     TEST_TOTAL=$((TEST_PASSED + TEST_FAILED + TEST_SKIPPED))
+  fi
+fi
+
+# If still no counts extracted, check for common test output patterns
+# that don't match the structured patterns above (e.g., custom test runners)
+if [ "$TEST_TOTAL" -eq 0 ]; then
+  # Look for lines like "✓ test name" or "✗ test name" or "PASS test name"
+  PASSED_MARKS=$(grep -cE '^\s*[✓✔+]\s' "$OUTPUT_FILE" 2>/dev/null || echo 0)
+  FAILED_MARKS=$(grep -cE '^\s*[✗×-]\s' "$OUTPUT_FILE" 2>/dev/null || echo 0)
+  if [ "$PASSED_MARKS" -gt 0 ] || [ "$FAILED_MARKS" -gt 0 ]; then
+    TEST_PASSED=$PASSED_MARKS
+    TEST_FAILED=$FAILED_MARKS
+    TEST_TOTAL=$((TEST_PASSED + TEST_FAILED))
+  fi
+fi
+
+# Final fallback: if no counts could be extracted, warn and use exit code only
+if [ "$TEST_TOTAL" -eq 0 ]; then
+  # Check if output is empty (command produced no output at all)
+  if [ ! -s "$OUTPUT_FILE" ]; then
+    TEST_SUMMARY="Test command produced no output (exit code $TEST_EXIT_CODE)"
+  else
+    TEST_SUMMARY="Test exit code $TEST_EXIT_CODE — could not parse test counts from output"
+  fi
+  # Use exit code as the sole signal — fall through to standard output
+  if [ "$EXPECTED" = "fail" ]; then
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+      TEST_RESULT="expected_fail"
+    else
+      TEST_RESULT="unexpected_pass"
+    fi
+  else
+    if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+      TEST_RESULT="pass"
+    else
+      TEST_RESULT="fail"
+    fi
   fi
 fi
 
