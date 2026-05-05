@@ -17,14 +17,17 @@
 
 set -euo pipefail
 
+DRY_RUN=false
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN=true
+  shift
+fi
+
 FEATURE_DIR="${1:?Usage: check-task-revisions.sh <feature_dir> <task_id> [max_revisions]}"
 MAX_REVISIONS="${4:-3}"
 
-REVISIONS_DIR="$FEATURE_DIR/.artifacts/task-revisions"
-mkdir -p "$REVISIONS_DIR"
-
-# Extract task ID from tasks.md if --auto mode
-if [ "$FEATURE_DIR" = "--auto" ]; then
+# Extract task ID from tasks.md if --auto mode (must happen before mkdir)
+if [ "${FEATURE_DIR:-}" = "--auto" ]; then
   FEATURE_DIR="${2:?Usage: check-task-revisions.sh --auto <feature_dir> <max_revisions>}"
   MAX_REVISIONS="${3:-3}"
   TASKS_FILE="$FEATURE_DIR/tasks.md"
@@ -41,6 +44,9 @@ if [ "$FEATURE_DIR" = "--auto" ]; then
 else
   TASK_ID="${2:?Usage: check-task-revisions.sh <feature_dir> <task_id> [max_revisions]}"
 fi
+
+REVISIONS_DIR="$FEATURE_DIR/.artifacts/task-revisions"
+mkdir -p "$REVISIONS_DIR"
 
 COUNT_FILE="$REVISIONS_DIR/${TASK_ID}.count"
 
@@ -79,10 +85,14 @@ if [ "$CURRENT" -ge "$MAX_REVISIONS" ]; then
   exit 1
 fi
 
-# Increment atomically: write to temp, then mv
-TMPFILE=$(mktemp)
-echo "$((CURRENT + 1))" > "$TMPFILE"
-mv "$TMPFILE" "$COUNT_FILE"
-echo "REVISION_COUNT=$((CURRENT + 1))"
+# Increment atomically: write to temp, then mv (skip in dry-run mode)
+if [ "$DRY_RUN" = false ]; then
+  TMPFILE=$(mktemp)
+  echo "$((CURRENT + 1))" > "$TMPFILE"
+  mv "$TMPFILE" "$COUNT_FILE"
+  echo "REVISION_COUNT=$((CURRENT + 1))"
+else
+  echo "REVISION_COUNT=$CURRENT"
+fi
 
 exit 0

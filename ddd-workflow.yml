@@ -756,16 +756,18 @@ steps:
   # Uses check-tasks-safe.sh which returns safe defaults if tasks.md is malformed.
   - id: implement_loop
     type: while
-    condition: "true"
+    condition: >
+      {{ steps.check_remaining.output.has_todo == 'true' }} and
+      {{ steps.check_revisions_dry.output.REVISION_EXHAUSTED != 'true' }}
     max_iterations: 50
     steps:
 
-      # ── Step 1: Task State ──
+      # ── PHASE 1: TASK STATE ──────────────────────────────────
       - id: check_remaining
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
 
-      # ── Step 2: Parse Error ──
+      # ── Parse Error ──
       - id: check_parse_error
         type: if
         condition: "{{ steps.check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
@@ -795,7 +797,7 @@ steps:
                   "parse_error"
               - goto: abort
 
-      # ── Step 3: All Done ──
+      # ── All Done ──
       - id: check_all_done
         type: if
         condition: "{{ steps.check_remaining.output.has_todo == 'false' }}"
@@ -822,7 +824,7 @@ steps:
                 Write findings to .artifacts/post-implementation-drift.md.
                 This is advisory — the full speckit.verify will run in Phase 8.
 
-      # ── Step 4: Stagnation Detection ──
+      # ── Stagnation Detection ──
       - id: stagnation_check_run
         type: shell
         command: >
@@ -882,7 +884,7 @@ steps:
                   "stagnation"
               - goto: abort
 
-      # ── Step 5: Progress Logging ──
+      # ── Progress Logging ──
       - id: iteration_progress
         type: shell
         command: >
@@ -893,7 +895,7 @@ steps:
           "{{ steps.check_remaining.output.todo_count }}"
           "{{ steps.check_remaining.output.in_progress || 'none' }}"
 
-      # ── Step 6: Interrupted Session Recovery ──
+      # ── Interrupted Session Recovery ──
       # No goto on actions — iteration flows naturally to next step.
       # on_restart: marks task TODO; iteration continues (next while iteration picks up the task)
       # on_continue: falls through to next step
@@ -933,7 +935,7 @@ steps:
                 "Task marked ABANDONED. Review partial files before continuing."
             # on_continue: no action — falls through
 
-      # ── Step 7: Abandoned Task Warning ──
+      # ── Abandoned Task Warning ──
       - id: check_abandoned
         type: if
         condition: "{{ steps.check_remaining.output.abandoned_count | int > 0 }}"
@@ -954,163 +956,29 @@ steps:
                     task section or reset its status to TODO. Print a summary.
               # No goto — iteration continues; next while iteration re-checks
 
-      # ── Steps 8–9: Periodic Retrospect, Drift Check & Traceability Re-Check ──
-      # Both run only when retro_trigger is true (every 5 tasks).
-      # Added: periodic traceability re-check to catch spec drift mid-implementation.
-      - id: retro_drift_check
-        type: if
-        condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
-        then:
-          - id: run_test_trend
-            type: shell
-            command: >
-              bash scripts/test-trend-analyzer.sh
-              "{{ steps.check_remaining.output.feature_dir }}"
-
-          - id: run_traceability_recheck
-            type: shell
-            command: >
-              bash scripts/traceability-check.sh
-              "{{ steps.check_remaining.output.feature_dir }}"
-
-          - id: review_traceability_recheck
-            type: gate
-            message: |
-              Periodic traceability re-check (every 5 tasks):
-              {% if steps.run_traceability_recheck.output.TRACEABLE == 'false' %}
-              **GAPS DETECTED** ({{ steps.run_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
-              {{ steps.run_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
-              Implementation has drifted from spec. Fix tasks.md or spec to close gaps.
-              {% else %}
-              All tasks still traceable to spec. No drift detected.
-              {% endif %}
-            options: [approve, revise]
-            on_revise:
-              - id: add-traceability-fix-tasks
-                type: prompt
-                integration: claude
-                input:
-                  args: >
-                    Read the traceability check output above and tasks.md. For each gap
-                    (missing spec reference, missing plan section coverage), add a
-                    specific fix task to tasks.md with clear acceptance criteria.
-                    Print the list of added tasks.
-              - goto: implement_loop
-
-          - id: run_retrospect
-            type: prompt
-            command: speckit.retrospect
-            integration: claude
-            input:
-              args: >
-                Read .artifacts/test-trend-report.md if available.
-                Use the trend report to assess test suite health.
-                If TREND_HEALTHY=false: flag degradation areas for attention.
-                If no trend report available: proceed with standard retrospective.
-
-          - id: review-retrospect
-            type: gate
-            message: |
-              Review the retrospect report.
-              Approve when all blocking issues are resolved.
-              Revise to send back for more iteration (within implement_loop).
-              Select abort if further iteration is not warranted
-              (will trigger again next implement_loop iteration).
-            options: [approve, revise, abort]
-            on_revise:
-              - id: trim-revision-history-retro
-                type: shell
-                command: "bash scripts/trim-revision.sh"
-              - id: record-retrospect-revision
-                type: shell
-                command: >
-                  bash scripts/record-phase-revision.sh implement_loop
-                  "{{ steps.implement_loop_iteration.output.count || 1 }}"
-              - goto: run_retrospect
-
-          - id: execute_drift_check
-            type: prompt
-            command: speckit.check
-            integration: claude
-            input:
-              args: >
-                Run only check [Z] — Constraint Drift Detection.
-                Compare the implementation just completed against CLAUDE.md §16
-                constraints. Report PASS/FAIL/N/A for each constraint.
-                For any FAIL: fix the violation immediately.
-                Write a detailed report to .artifacts/drift_check_report.md
-                with each constraint, its result, and file:line references for FAILs.
-
-      - id: drift_check_result
+      # ── PHASE 2: PRE-IMPLEMENT VALIDATION ────────────────────
+      - id: check_revisions_dry
         type: shell
         command: >
-          bash scripts/check-drift.sh
+          bash scripts/check-task-revisions.sh
+          --dry-run
+          --auto
+          "{{ steps.check_remaining.output.feature_dir }}"
+          "3"
+
+      - id: pre_task_validation
+        type: shell
+        command: >
+          bash scripts/pre-task-validate.sh
           "{{ steps.check_remaining.output.feature_dir }}"
 
-      - id: drift_check_review
-        type: gate
-        message: |
-          Drift check: {{ steps.drift_check_result.output || "skipped (no retro trigger)" }}
-          Review the report at .artifacts/drift_check_report.md.
-          {% if steps.drift_check_result.output.DRIFT_DETECTED == 'true' %}
-          **DRIFT DETECTED** ({{ steps.drift_check_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
-          {{ steps.drift_check_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
-          Fix the violations above and revise to re-run drift detection.
-          {% endif %}
-          Approve to continue.
-        options: [approve, revise, abort]
-        on_revise:
-          # Don't reset stagnation counter — stagnation and drift are independent signals.
-          # Stagnation only resets when done_count actually increases (in check-stagnation.sh).
-          # Track drift violations separately for diagnosis.
-          - id: record_drift_violation
-            type: shell
-            command: >
-              bash scripts/check-stagnation.sh --record-drift
-              "{{ steps.check_remaining.output.feature_dir }}"
-          - goto: execute_drift_check
-        on_abort:
-          - id: cleanup-on-abort-drift
-            type: shell
-            command: >
-              bash scripts/cleanup-abandoned-state.sh
-              "{{ steps.check_remaining.output.feature_dir }}"
-              "drift_check"
-          - goto: abort
-
-      # ── Step 10: Generate Prompt Context ──
-      # Removed ignore_failure: true — if context generation fails,
-      # the LLM will still work with reduced context but should know.
+      # ── Prompt Context Generation ──
       - id: generate_prompt_context
         type: shell
         command: >
           bash scripts/prompt-context.sh "{{ steps.check_remaining.output.feature_dir }}"
 
-      # ── Step 10.5: Per-Task Revision Cap ──
-      # Prevents a single stuck task from consuming all 50 implement_loop iterations.
-      # If a task has been revised 3+ times, mark it ABANDONED and move on.
-      - id: check_task_revisions
-        type: shell
-        command: >
-          bash scripts/check-task-revisions.sh
-          --auto
-          "{{ steps.check_remaining.output.feature_dir }}"
-          "3"
-
-      - id: task_revision_cap_gate
-        type: if
-        condition: "{{ steps.check_task_revisions.output.REVISION_EXHAUSTED == 'true' }}"
-        then:
-          - id: abandon_exhausted_task
-            type: shell
-            command: >
-              bash scripts/set-task-status.sh
-              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-              ABANDONED
-              "Task revision limit exceeded (3 revisions). See .artifacts/task-revisions/ for details."
-          # No goto — iteration continues; next while iteration picks up next task
-
-      # ── Step 11: Implement Code ──
+      # ── PHASE 3: IMPLEMENT + VERIFY ──────────────────────────
       - id: implement_code
         type: prompt
         command: speckit.implement-code
@@ -1126,7 +994,6 @@ steps:
             Use the prompt context at .artifacts/prompts/[task_id]/context.md
             if available — it contains targeted plan sections for this task.
 
-      # ── Step 12: Verify Implementation ──
       - id: implement_verify
         type: prompt
         command: speckit.implement-verify
@@ -1137,12 +1004,17 @@ steps:
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
 
-      # ── Step 13: Threshold Check ──
+      - id: post_verify_checkpoint
+        type: shell
+        command: >
+          bash scripts/post-verify-checkpoint.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
+
+      # ── PHASE 4: REVIEW GATES ────────────────────────────────
       - id: check_implement_threshold
         type: shell
         command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
 
-      # ── Step 14: Acceptance Gate (focused: 2 items) ──
       - id: review-acceptance
         type: gate
         message: |
@@ -1167,7 +1039,6 @@ steps:
               "Task sent back for revision — acceptance criteria not met."
           # No goto — iteration ends naturally; next while iteration re-implements
 
-      # ── Step 15: Quality Checks Gate (focused: 5 items) ──
       - id: review-checks
         type: gate
         message: |
@@ -1195,7 +1066,6 @@ steps:
               "Task sent back for revision — quality checks not met."
           # No goto — iteration ends naturally; next while iteration re-implements
 
-      # ── Step 16: TDD Integrity Gate (focused: 6 items) ──
       - id: review-tdd
         type: gate
         message: |
@@ -1231,6 +1101,135 @@ steps:
               IN_PROGRESS
               "Task sent back for revision — TDD integrity issues."
           # No goto — iteration ends naturally; next while iteration re-implements
+
+      # ── PHASE 5: PERIODIC CHECKS (retro + drift + traceability) ─
+      # Runs every 5 tasks (when retro_trigger is true).
+      # Flattened structure: traceability moved to END so the loop
+      # naturally restarts when user selects "revise" (no goto needed).
+      - id: retro_drift_check
+        type: if
+        condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
+        then:
+
+          # ── Test trend analysis ──
+          - id: run_test_trend
+            type: shell
+            command: >
+              bash scripts/test-trend-analyzer.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
+          # ── Retrospective ──
+          - id: run_retrospect
+            type: prompt
+            command: speckit.retrospect
+            integration: claude
+            input:
+              args: >
+                Read .artifacts/test-trend-report.md if available.
+                Use the trend report to assess test suite health.
+                If TREND_HEALTHY=false: flag degradation areas for attention.
+                If no trend report available: proceed with standard retrospective.
+
+          - id: review_retrospect
+            type: gate
+            message: |
+              Review the retrospect report.
+              Approve when all blocking issues are resolved.
+              Revise to send back for more iteration (within implement_loop).
+              Select abort if further iteration is not warranted
+              (will trigger again next implement_loop iteration).
+            options: [approve, revise, abort]
+            on_revise:
+              - id: trim-revision-history-retro
+                type: shell
+                command: "bash scripts/trim-revision.sh"
+              - id: record-retrospect-revision
+                type: shell
+                command: >
+                  bash scripts/record-phase-revision.sh implement_loop
+                  "{{ steps.implement_loop_iteration.output.count || 1 }}"
+              - goto: run_retrospect
+
+          # ── Drift check ──
+          - id: execute_drift_check
+            type: prompt
+            command: speckit.check
+            integration: claude
+            input:
+              args: >
+                Run only check [Z] — Constraint Drift Detection.
+                Compare the implementation just completed against CLAUDE.md §16
+                constraints. Report PASS/FAIL/N/A for each constraint.
+                For any FAIL: fix the violation immediately.
+                Write a detailed report to .artifacts/drift_check_report.md
+                with each constraint, its result, and file:line references for FAILs.
+
+          - id: drift_check_result
+            type: shell
+            command: >
+              bash scripts/check-drift.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
+          - id: drift_check_gate
+            type: gate
+            message: |
+              Drift check: {{ steps.drift_check_result.output || "skipped (no retro trigger)" }}
+              {% if steps.drift_check_result.output.DRIFT_DETECTED == 'true' %}
+              **DRIFT DETECTED** ({{ steps.drift_check_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
+              {{ steps.drift_check_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
+              Fix the violations above and revise to re-run drift detection.
+              {% endif %}
+            options: [approve, revise, abort]
+            on_revise:
+              - id: record_drift_violation
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --record-drift
+                  "{{ steps.check_remaining.output.feature_dir }}"
+              - goto: execute_drift_check
+            on_abort:
+              - id: cleanup-on-abort-drift
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.check_remaining.output.feature_dir }}"
+                  "drift_check"
+              - goto: abort
+
+          # ── Traceability re-check (LAST in if-block) ───────────
+          # Moved to the end so that when the user selects "revise",
+          # the if-block ends naturally and the while loop restarts.
+          # No goto needed — the loop naturally restarts on the next iteration.
+          - id: run_traceability_recheck
+            type: shell
+            command: >
+              bash scripts/traceability-check.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
+          - id: traceability_gate
+            type: gate
+            message: |
+              Periodic traceability re-check (every 5 tasks):
+              {% if steps.run_traceability_recheck.output.TRACEABLE == 'false' %}
+              **GAPS DETECTED** ({{ steps.run_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
+              {{ steps.run_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
+              Implementation has drifted from spec. Fix tasks.md or spec to close gaps.
+              {% else %}
+              All tasks still traceable to spec. No drift detected.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: add-traceability-fix-tasks
+                type: prompt
+                integration: claude
+                input:
+                  args: >
+                    Read tasks.md and the traceability check output above.
+                    For each gap (missing spec reference, missing plan section
+                    coverage), add a specific fix task to tasks.md with clear
+                    acceptance criteria. Print the list of added tasks.
+            # No goto — if-block ends, while loop naturally restarts
+            # The next iteration picks up the new fix tasks
 
   # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────
   # Adversarial hardening runs once before the code review loop.
