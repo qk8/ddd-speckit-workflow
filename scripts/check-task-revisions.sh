@@ -49,6 +49,7 @@ REVISIONS_DIR="$FEATURE_DIR/.artifacts/task-revisions"
 mkdir -p "$REVISIONS_DIR"
 
 COUNT_FILE="$REVISIONS_DIR/${TASK_ID}.count"
+LOCK_FILE="$COUNT_FILE.lock"
 
 # ── Check if task is currently ABANDONED — if so, reset counter ──
 TASKS_FILE="$FEATURE_DIR/tasks.md"
@@ -64,6 +65,10 @@ if [ -f "$TASKS_FILE" ]; then
     exit 0
   fi
 fi
+
+# Use flock for mutual exclusion around the counter cycle
+exec 200>"$LOCK_FILE"
+flock -x 200
 
 # Read current count (default 0)
 CURRENT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
@@ -82,17 +87,18 @@ if [ "$CURRENT" -ge "$MAX_REVISIONS" ]; then
   echo "REVISION_OK=false"
   echo "REVISION_EXHAUSTED=true"
   echo "TASK $TASK_ID has exceeded $MAX_REVISIONS revisions ($CURRENT attempts)." >&2
+  flock -u 200
   exit 1
 fi
 
-# Increment atomically: write to temp, then mv (skip in dry-run mode)
+# Increment atomically: write to count file (skip in dry-run mode)
 if [ "$DRY_RUN" = false ]; then
-  TMPFILE=$(mktemp)
-  echo "$((CURRENT + 1))" > "$TMPFILE"
-  mv "$TMPFILE" "$COUNT_FILE"
+  echo "$((CURRENT + 1))" > "$COUNT_FILE"
   echo "REVISION_COUNT=$((CURRENT + 1))"
 else
   echo "REVISION_COUNT=$CURRENT"
 fi
+
+flock -u 200
 
 exit 0

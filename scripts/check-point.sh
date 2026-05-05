@@ -49,7 +49,7 @@ do_task_done_jq() {
   init_checkpoint
   local tmp; tmp=$(mktemp)
   jq --arg tid "$tid" --arg tt "$tt" --arg b "$built" --arg tf "$tf" --arg ts "$TS" \
-    '.tasks[$tid]={"status":"DONE","type":$tt,"depends_on":[],"built":$b,"test_file":$tf,"checks":{},"revision_history":[],"completed_at":$ts} | .metadata.updated_at=$ts' \
+    '.tasks[$tid]={"status":"DONE","type":$tt,"built":$b,"test_file":$tf,"checks":{},"revision_history":[],"completed_at":$ts} | .metadata.updated_at=$ts' \
     "$CHECKPOINT_FILE" > "$tmp" && mv "$tmp" "$CHECKPOINT_FILE"
 }
 
@@ -149,9 +149,10 @@ if [ "$MODE" = "write" ]; then
       if [ "$HAS_JQ" = true ]; then
         do_task_abandoned_jq "$4" "${5:-}"
       else
-        local tid="$4" reason="${5:-Manual abandon}"
-        local tmp; tmp=$(mktemp)
-        local entry="    \"${tid}\": {\"status\":\"ABANDONED\",\"abandoned_reason\":\"${reason}\",\"abandoned_at\":\"${TS}\"}"
+        tid="$4"
+        reason="${5:-Manual abandon}"
+        tmp=$(mktemp)
+        entry="    \"${tid}\": {\"status\":\"ABANDONED\",\"abandoned_reason\":\"${reason}\",\"abandoned_at\":\"${TS}\"}"
         if grep -q "\"${tid}\":" "$CHECKPOINT_FILE" 2>/dev/null; then
           sed "s|    \"${tid}\": {[^}]*}|${entry}|" "$CHECKPOINT_FILE" > "$tmp"
         else

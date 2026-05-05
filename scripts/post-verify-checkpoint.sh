@@ -27,6 +27,19 @@ if [ -f "$TASKS_FILE" ]; then
 
   # Count DONE tasks
   DONE_COUNT=$(grep -c "^Status: DONE" "$TASKS_FILE" 2>/dev/null || echo 0)
+
+  # Dump full task state for recovery
+  TASK_STATE=$(awk '
+    /^## TASK-/ { gsub(/^## /, ""); tid = $0 }
+    /^Status: / {
+      gsub(/^Status: /, "")
+      if (s != "") s = s ","
+      s = s tid ":" $0
+    }
+    END { print s }
+  ' "$TASKS_FILE" 2>/dev/null || echo "")
+else
+  TASK_STATE=""
 fi
 
 # Write checkpoint
@@ -39,7 +52,8 @@ cat > "$ARTIFACTS_DIR/checkpoint.json" <<EOF
   "timestamp": "$TIMESTAMP",
   "task_id": "${IN_PROGRESS:-unknown}",
   "done_count": $DONE_COUNT,
-  "in_progress_count": $([ -n "$IN_PROGRESS" ] && echo 1 || echo 0)
+  "in_progress_count": $([ -n "$IN_PROGRESS" ] && echo 1 || echo 0),
+  "task_state": "$TASK_STATE"
 }
 EOF
 

@@ -147,9 +147,13 @@ for check_id in "${CHECK_IDS[@]}"; do
 done
 
 # Wait for all checks to complete and collect results
+CRASHED=0
 for pid in "${PIDS[@]}"; do
-  wait "$pid" || true
+  if ! wait "$pid"; then
+    CRASHED=$((CRASHED + 1))
+  fi
 done
+[ "$CRASHED" -gt 0 ] && echo "CHECK RUNNER: $CRASHED check process(es) crashed unexpectedly" >&2
 
 # ── Aggregate results ──────────────────────────────────────────
 PASS_COUNT=0
@@ -159,6 +163,8 @@ SKIP_COUNT=0
 for check_id in "${CHECK_IDS[@]}"; do
   result_file="$RESULTS_DIR/${check_id}.result"
   if [ ! -f "$result_file" ]; then
+    echo "CHECK $check_id: CRASH (no result file)" >&2
+    FAIL_COUNT=$((FAIL_COUNT + 1))
     continue
   fi
 

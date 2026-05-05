@@ -782,12 +782,8 @@ steps:
 
               Options:
                 fix — Edit tasks.md to fix formatting, then restart the workflow.
-                skip — Proceed anyway (not recommended — task tracking will be unreliable).
                 abort — Cancel the workflow.
-            options: [fix, skip, abort]
-            on_skip:
-              type: shell
-              command: echo "TASKS_PARSE_ERROR=0"
+            options: [fix, abort]
             on_abort:
               - id: cleanup-on-abort-parse
                 type: shell
@@ -844,6 +840,10 @@ steps:
 
               No new tasks completed for {{ steps.stagnation_check_run.output.CONSECUTIVE_NO_PROGRESS }} consecutive iterations.
               Tasks may be blocked, flaky, or the spec may be unrealistic.
+              {% if steps.stagnation_check_run.output.CONSECUTIVE_CONTINUES | int >= 2 %}
+              **Continue option exhausted** ({{ steps.stagnation_check_run.output.CONSECUTIVE_CONTINUES }} consecutive continues).
+              You must troubleshoot or abort.
+              {% endif %}
 
               Options:
                 continue — Force-continue (risk wasting iterations).
@@ -851,6 +851,11 @@ steps:
                 abort — Cancel the workflow for manual review.
             options: [continue, troubleshoot, abort]
             on_continue:
+              - id: increment_stagnation_continue
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --increment-continue
+                  "{{ steps.check_remaining.output.feature_dir }}"
               - id: reset_stagnation_on_continue
                 type: shell
                 command: >
@@ -924,7 +929,10 @@ steps:
             on_restart:
               type: shell
               command: >
-                bash scripts/set-task-status.sh "{{ steps.check_remaining.output.feature_dir }}/tasks.md" TODO
+                bash scripts/set-task-status.sh
+                "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                TODO
+                "{{ steps.check_remaining.output.in_progress }}"
               # No goto — iteration continues; next while iteration picks up the task
             on_abandon:
               type: shell
@@ -932,7 +940,9 @@ steps:
                 bash scripts/set-task-status.sh
                 "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
                 ABANDONED
-                "Task marked ABANDONED. Review partial files before continuing."
+                --cascade
+                "{{ steps.check_remaining.output.in_progress }}"
+                "Task marked ABANDONED with cascade. Review partial files before continuing."
             # on_continue: no action — falls through
 
       # ── Abandoned Task Warning ──
@@ -1010,10 +1020,24 @@ steps:
           bash scripts/post-verify-checkpoint.sh
           "{{ steps.check_remaining.output.feature_dir }}"
 
+      - id: increment_revision
+        type: shell
+        command: >
+          bash scripts/check-task-revisions.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
+          "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
+          "3"
+
       # ── PHASE 4: REVIEW GATES ────────────────────────────────
       - id: check_implement_threshold
         type: shell
         command: "bash scripts/gate-threshold.sh implement {{ steps.implement_loop_iteration.output.count || 1 }}"
+
+      - id: pre_gate_acceptance
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.check_remaining.output.feature_dir }}" "acceptance"
 
       - id: review-acceptance
         type: gate
@@ -1023,10 +1047,12 @@ steps:
           [ ] All acceptance criteria satisfied (test name + file:line references)?
           [ ] Test file committed alongside implementation?
 
-          Approve to proceed to quality checks review.
-          Revise to send the task back for fixes.
+          {% if steps.pre_gate_acceptance.output.GATE_BLOCKED == 'true' %}
+          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_acceptance.output.FAILING_CHECKS }}
+          You MUST revise. Approval is disabled until checks pass.
+          {% endif %}
           {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          **Revision threshold exceeded**. You MUST revise.
           {% endif %}
         options: [approve, revise]
         on_revise:
@@ -1036,8 +1062,15 @@ steps:
               bash scripts/set-task-status.sh
               "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
               IN_PROGRESS
+              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
               "Task sent back for revision — acceptance criteria not met."
           # No goto — iteration ends naturally; next while iteration re-implements
+
+      - id: pre_gate_checks
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.check_remaining.output.feature_dir }}" "quality"
 
       - id: review-checks
         type: gate
@@ -1050,10 +1083,12 @@ steps:
           [ ] Check [K] contract enforcement: API matches api-contract.yaml?
           [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
 
-          Approve to proceed to TDD integrity review.
-          Revise to send the task back for fixes.
+          {% if steps.pre_gate_checks.output.GATE_BLOCKED == 'true' %}
+          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_checks.output.FAILING_CHECKS }}
+          You MUST revise. Approval is disabled until checks pass.
+          {% endif %}
           {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          **Revision threshold exceeded**. You MUST revise.
           {% endif %}
         options: [approve, revise]
         on_revise:
@@ -1063,8 +1098,15 @@ steps:
               bash scripts/set-task-status.sh
               "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
               IN_PROGRESS
+              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
               "Task sent back for revision — quality checks not met."
           # No goto — iteration ends naturally; next while iteration re-implements
+
+      - id: pre_gate_tdd
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.check_remaining.output.feature_dir }}" "tdd"
 
       - id: review-tdd
         type: gate
@@ -1079,12 +1121,17 @@ steps:
           [ ] Red phase: failure evidence captured before implementation?
           [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
 
+          {% if steps.pre_gate_tdd.output.GATE_BLOCKED == 'true' %}
+          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_tdd.output.FAILING_CHECKS }}
+          You MUST revise. Approval is disabled until checks pass.
+          {% endif %}
+          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. You MUST revise.
+          {% endif %}
+
           Approve to continue to the next task.
           Revise to send the task back for fixes.
           Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
-          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
-          {% endif %}
         options: [approve, revise, stop]
         on_stop:
           type: shell
@@ -1099,6 +1146,7 @@ steps:
               bash scripts/set-task-status.sh
               "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
               IN_PROGRESS
+              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
               "Task sent back for revision — TDD integrity issues."
           # No goto — iteration ends naturally; next while iteration re-implements
 
@@ -1110,6 +1158,11 @@ steps:
         type: if
         condition: "{{ steps.check_remaining.output.retro_trigger == 'true' }}"
         then:
+
+          # ── Reset drift revision counter for new cycle ─────────
+          - id: reset_drift_revisions
+            type: shell
+            command: "echo '0' > '{{ steps.check_remaining.output.feature_dir }}/.drift_revisions'"
 
           # ── Test trend analysis ──
           - id: run_test_trend
@@ -1170,6 +1223,12 @@ steps:
               bash scripts/check-drift.sh
               "{{ steps.check_remaining.output.feature_dir }}"
 
+          - id: check_drift_revision
+            type: shell
+            command: >
+              bash scripts/check-drift-revisions.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
           - id: drift_check_gate
             type: gate
             message: |
@@ -1178,6 +1237,9 @@ steps:
               **DRIFT DETECTED** ({{ steps.drift_check_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
               {{ steps.drift_check_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
               Fix the violations above and revise to re-run drift detection.
+              {% if steps.check_drift_revision.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' %}
+              **Drift revision limit reached**. You must abort for manual review.
+              {% endif %}
               {% endif %}
             options: [approve, revise, abort]
             on_revise:
@@ -1186,7 +1248,26 @@ steps:
                 command: >
                   bash scripts/check-stagnation.sh --record-drift
                   "{{ steps.check_remaining.output.feature_dir }}"
-              - goto: execute_drift_check
+              - id: check_drift_revision
+                type: shell
+                command: >
+                  bash scripts/check-drift-revisions.sh
+                  "{{ steps.check_remaining.output.feature_dir }}"
+              - id: drift_revision_limit_check
+                type: if
+                condition: "{{ steps.check_drift_revision.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' }}"
+                then:
+                  - id: drift_revision_exhausted
+                    type: gate
+                    message: |
+                      Drift fix exhausted 2 revision attempts.
+                      The violations cannot be fixed automatically.
+                      Must abort for manual review.
+                    options: [abort]
+                    on_abort:
+                      - goto: abort
+                else:
+                  - goto: execute_drift_check
             on_abort:
               - id: cleanup-on-abort-drift
                 type: shell
@@ -1230,6 +1311,15 @@ steps:
                     acceptance criteria. Print the list of added tasks.
             # No goto — if-block ends, while loop naturally restarts
             # The next iteration picks up the new fix tasks
+
+          # ── Post-gate checkpoint (end of retro_drift_check) ──────
+          # Records that gates passed. Enables recovery if session
+          # crashes during speckit.retrospect or speckit.check above.
+          - id: post_gate_checkpoint
+            type: shell
+            command: >
+              bash scripts/post-gate-checkpoint.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
 
   # ── PHASE 6: CODE REVIEW CHECKLIST (bounded) ────────────────────
   # Adversarial hardening runs once before the code review loop.
@@ -1283,7 +1373,7 @@ steps:
           [ ] All accessibility items: PASS, N/A
           [ ] REVIEW_REPORT.md produced
           {% if steps.check_code_review_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          **Revision threshold exceeded**. You MUST revise.
           {% endif %}
 
           Approve to continue to final verify.

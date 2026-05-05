@@ -2,17 +2,23 @@
 # Detects implementation stagnation: no tasks completed for N consecutive iterations.
 # Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks>
 #        check-stagnation.sh --reset <feature_dir>
-# Outputs: STAGNANT=true|false, CONSECUTIVE_NO_PROGRESS=N
+#        check-stagnation.sh --record-drift <feature_dir>
+# Outputs: STAGNANT=true|false, CONSECUTIVE_NO_PROGRESS=N, CONSECUTIVE_CONTINUES=N
+
 set -euo pipefail
 
 RESET_MODE=false
 RECORD_DRIFT=false
+INCREMENT_CONTINUE=false
 if [ "${1:-}" = "--reset" ]; then
   RESET_MODE=true
   FEATURE_DIR="${2:?Usage: check-stagnation.sh --reset <feature_dir>}"
 elif [ "${1:-}" = "--record-drift" ]; then
   RECORD_DRIFT=true
   FEATURE_DIR="${2:?Usage: check-stagnation.sh --record-drift <feature_dir>}"
+elif [ "${1:-}" = "--increment-continue" ]; then
+  INCREMENT_CONTINUE=true
+  FEATURE_DIR="${2:?Usage: check-stagnation.sh --increment-continue <feature_dir>}"
 else
   FEATURE_DIR="${1:?Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks>}"
   CURRENT_DONE="${2:?}"
@@ -21,6 +27,7 @@ fi
 
 STATE_FILE="$FEATURE_DIR/.stagnation_state"
 CONSEC_FILE="$STATE_FILE.consec"
+CONTINUE_FILE="$STATE_FILE.continue_count"
 mkdir -p "$FEATURE_DIR"
 
 if [ "$RESET_MODE" = true ]; then
@@ -30,6 +37,7 @@ if [ "$RESET_MODE" = true ]; then
   echo "0" >> "$TMPFILE"
   mv "$TMPFILE" "$STATE_FILE"
   echo "0" > "$CONSEC_FILE"
+  echo "0" > "$CONTINUE_FILE"
   echo "STAGNANT=false"
   echo "CONSECUTIVE_NO_PROGRESS=0"
   exit 0
@@ -46,6 +54,19 @@ if [ "$RECORD_DRIFT" = true ]; then
   DRIFT_COUNT=$((DRIFT_COUNT + 1))
   echo "$DRIFT_COUNT" > "$DRIFT_FILE"
   echo "DRIFT_VIOLATION_COUNT=$DRIFT_COUNT"
+  echo "STAGNANT=false"
+  echo "CONSECUTIVE_NO_PROGRESS=0"
+  exit 0
+fi
+
+if [ "$INCREMENT_CONTINUE" = true ]; then
+  # Increment the consecutive continue counter (called when user selects "continue" on stagnation gate)
+  CURRENT_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
+  case "$CURRENT_CONTINUES" in
+    ''|*[!0-9]*) CURRENT_CONTINUES=0 ;;
+  esac
+  echo "$((CURRENT_CONTINUES + 1))" > "$CONTINUE_FILE"
+  echo "CONSECUTIVE_CONTINUES=$((CURRENT_CONTINUES + 1))"
   echo "STAGNANT=false"
   echo "CONSECUTIVE_NO_PROGRESS=0"
   exit 0
@@ -88,3 +109,10 @@ else
     echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
   fi
 fi
+
+# Output consecutive continue count
+CONSECUTIVE_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
+case "$CONSECUTIVE_CONTINUES" in
+  ''|*[!0-9]*) CONSECUTIVE_CONTINUES=0 ;;
+esac
+echo "CONSECUTIVE_CONTINUES=$CONSECUTIVE_CONTINUES"

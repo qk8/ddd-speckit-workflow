@@ -97,6 +97,34 @@ for task_id in $ABANDONED_TASKS; do
   fi
 done
 
+# ── Clean up uncommitted files from abandoned tasks (artifact manifests) ──
+# git log only sees committed files. The AI creates files during implementation
+# and commits them later. Track via .artifacts/created-files/ manifests.
+CREATED_FILES_DIR="${FEATURE_DIR}/.artifacts/created-files"
+if [ -d "$CREATED_FILES_DIR" ]; then
+  for manifest in "$CREATED_FILES_DIR"/*.files; do
+    [ -f "$manifest" ] || continue
+    manifest_task=$(basename "$manifest" .files)
+    # Check if this task is abandoned
+    if echo "$ABANDONED_TASKS" | grep -q "$manifest_task" 2>/dev/null; then
+      while IFS= read -r fpath; do
+        [ -z "$fpath" ] && continue
+        # Only flag files that exist on disk (uncommitted)
+        if [ -f "$fpath" ]; then
+          # Check if any DONE task also uses this file
+          if grep -q "|${fpath}$" "$DONE_FILES" 2>/dev/null; then
+            FLAGGED=$((FLAGGED + 1))
+            echo "  FLAGGED (uncommitted, shared): ${fpath} (abandoned task ${manifest_task})" >> "$REPORT_FILE"
+          else
+            REMOVED=$((REMOVED + 1))
+            echo "  ABANDONED_UNCOMMITTED: ${fpath} (from ${manifest_task})" >> "$REPORT_FILE"
+          fi
+        fi
+      done < "$manifest"
+    fi
+  done
+fi
+
 # ── Flag shared files ──────────────────────────────────────────
 # Files that appear in both ABANDONED task scope and DONE task scope
 # This is a heuristic — we check if any DONE task references files
