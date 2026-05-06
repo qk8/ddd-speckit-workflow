@@ -194,11 +194,12 @@ INLINE CORRECTION LOOP (if tests fail)
   Pass this evidence to the LLM classification — do NOT self-classify without it.
   Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
 
-  ENFORCED ACTION FROM DIAGNOSTIC:
+  ENFORCED ACTION FROM DIAGNOSTIC (NON-NEGOTIABLE):
   If REQUIRED_ACTION=FIX_TEST:
-    Do NOT attempt implementation fixes. The diagnostic has identified this as a test fault.
-    Fix the test to properly validate the acceptance criterion.
+    You MUST NOT modify implementation files. Violation creates a compliance record
+    that will be flagged in the periodic retro check. Fix ONLY the test file.
     Rewrite the failing test assertion, then re-run validate-tests.sh.
+    If tests still fail with REQUIRED_ACTION=FIX_TEST on re-diagnosis: escalate to human review.
 
   If REQUIRED_ACTION=HUMAN:
     STOP. Do not attempt further corrections.

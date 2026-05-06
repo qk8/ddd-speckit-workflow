@@ -124,13 +124,10 @@ steps:
           {% endif %}
         options: [approve, re-clarify]
         on_re-clarify:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-clarify-revision
+          - id: record-and-trim-clarify
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh clarify_round
+              bash scripts/record-and-trim.sh clarify_round
               "{{ steps.clarify_round_iteration.output.count || 1 }}"
           - goto: clarify
 
@@ -209,13 +206,10 @@ steps:
           {% endif %}
         options: [approve, revise]
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-audit-revision
+          - id: record-and-trim-audit
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh audit_round
+              bash scripts/record-and-trim.sh audit_round
               "{{ steps.audit_round_iteration.output.count || 1 }}"
           - goto: audit-spec
 
@@ -389,8 +383,7 @@ steps:
   - id: validate-ci-local
     type: shell
     command: "bash scripts/validate-ci-local-cmds.sh"
-    ignore_failure: true
-
+ 
   - id: review-ci-local
     type: gate
     message: |
@@ -504,13 +497,10 @@ steps:
           {% endif %}
         options: [approve, revise, abort]
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-plan-revision
+          - id: record-and-trim-plan
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh plan_review_revision
+              bash scripts/record-and-trim.sh plan_review_revision
               "{{ steps.plan_review_revision_iteration.output.count || 1 }}"
           - goto: plan-consolidated-review
         on_abort:
@@ -563,13 +553,10 @@ steps:
           {% endif %}
         options: [approve, revise, abort]
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-design-revision
+          - id: record-and-trim-design
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh design_review_round
+              bash scripts/record-and-trim.sh design_review_round
               "{{ steps.design_review_round_iteration.output.count || 1 }}"
           - goto: speckit_review_design
         on_abort:
@@ -660,13 +647,10 @@ steps:
           {% endif %}
         options: [approve, revise]
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-tasks-revision
+          - id: record-and-trim-tasks
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh tasks_phase
+              bash scripts/record-and-trim.sh tasks_phase
               "{{ steps.tasks_phase_iteration.output.count || 1 }}"
           - goto: tasks
 
@@ -706,13 +690,10 @@ steps:
               "tasks_phase"
           - goto: abort
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-validation-revision
+          - id: record-and-trim-validation
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh validation_revision
+              bash scripts/record-and-trim.sh validation_revision
               "{{ steps.tasks_phase_iteration.output.count || 1 }}"
           - goto: tasks
 
@@ -766,6 +747,17 @@ steps:
       - id: check_remaining
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
+
+      - id: check_iteration_cleanup
+        type: if
+        condition: "{{ steps.implement_loop_iteration.output.count || 1 }} == 25 or {{ steps.implement_loop_iteration.output.count || 1 }} == 40"
+        then:
+          - id: cleanup_artifacts
+            type: shell
+            command: >
+              bash scripts/cleanup-artifacts.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+              "{{ steps.implement_loop_iteration.output.count || 1 }}"
 
       # ── Parse Error ──
       - id: check_parse_error
@@ -849,6 +841,11 @@ steps:
                 continue — Force-continue (risk wasting iterations).
                 troubleshoot — Run /speckit.status to diagnose, then decide.
                 abort — Cancel the workflow for manual review.
+              {% if steps.stagnation_check_run.output.REVISION_ONLY == 'true' %}
+              **Revision loop detected** — revising without completing tasks.
+              **Recommended: Select "troubleshoot" or "abort".**
+              Continuing a revision loop wastes iterations.
+              {% endif %}
             options: [continue, troubleshoot, abort]
             on_continue:
               - id: increment_stagnation_continue
@@ -927,22 +924,25 @@ steps:
                 abandon  — Mark it ABANDONED and skip to the next TODO task.
             options: [restart, continue, abandon]
             on_restart:
-              type: shell
-              command: >
-                bash scripts/set-task-status.sh
-                "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-                TODO
-                "{{ steps.check_remaining.output.in_progress }}"
+              - id: validate-deps
+                type: shell
+                command: >
+                  bash scripts/validate-task-deps.sh
+                  "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                  "{{ steps.check_remaining.output.in_progress }}"
+              - id: restart-all
+                type: shell
+                command: >
+                  bash scripts/resolve-all-in-progress.sh
+                  "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                  TODO "Crash recovery — restarted all IN_PROGRESS tasks"
               # No goto — iteration continues; next while iteration picks up the task
             on_abandon:
               type: shell
               command: >
-                bash scripts/set-task-status.sh
+                bash scripts/resolve-all-in-progress.sh
                 "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-                ABANDONED
-                --cascade
-                "{{ steps.check_remaining.output.in_progress }}"
-                "Task marked ABANDONED with cascade. Review partial files before continuing."
+                ABANDONED "Crash recovery — abandoning all IN_PROGRESS tasks with cascade"
             # on_continue: no action — falls through
 
       # ── Abandoned Task Warning ──
@@ -1193,13 +1193,10 @@ steps:
               (will trigger again next implement_loop iteration).
             options: [approve, revise, abort]
             on_revise:
-              - id: trim-revision-history-retro
-                type: shell
-                command: "bash scripts/trim-revision.sh"
-              - id: record-retrospect-revision
+              - id: record-and-trim-implement
                 type: shell
                 command: >
-                  bash scripts/record-phase-revision.sh implement_loop
+                  bash scripts/record-and-trim.sh implement_loop
                   "{{ steps.implement_loop_iteration.output.count || 1 }}"
               - goto: run_retrospect
 
@@ -1337,6 +1334,12 @@ steps:
         graceful degradation.
         Write findings to .artifacts/hardening-report.md.
 
+  - id: backup-before-code-review
+    type: shell
+    command: >
+      bash scripts/backup-tasks.sh
+      "{{ steps.check_remaining.output.feature_dir }}" "pre-code-review"
+
   - id: code_review_round
     type: while
     condition: "true"
@@ -1380,14 +1383,21 @@ steps:
           Revise to send the checklist back for fixes.
         options: [approve, revise, abort]
         on_revise:
-          - id: trim-revision-history
-            type: shell
-            command: "bash scripts/trim-revision.sh"
-          - id: record-code-review-revision
+          - id: record-and-trim-code-review
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh code_review_round
+              bash scripts/record-and-trim.sh code_review_round
               "{{ steps.code_review_round_iteration.output.count || 1 }}"
+          - id: validate-code-review-fixes
+            type: shell
+            command: >
+              bash scripts/validate-fix-tasks.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+          - id: backup-code-review-fixes
+            type: shell
+            command: >
+              bash scripts/backup-tasks.sh
+              "{{ steps.check_remaining.output.feature_dir }}" "code-review"
           - id: plan-code-review-fixes
             type: prompt
             integration: claude
@@ -1446,6 +1456,12 @@ steps:
           bash scripts/record-phase-revision.sh fix_needed_round 1
       - goto: fix_needed_round
 
+  - id: backup-before-fix-needed
+    type: shell
+    command: >
+      bash scripts/backup-tasks.sh
+      "{{ steps.check_remaining.output.feature_dir }}" "pre-fix-needed"
+
   - id: fix_needed_round
     type: while
     condition: "true"
@@ -1468,12 +1484,23 @@ steps:
             input:
               args: >
                 Read tasks.md and the final verify report.
+                Use ddd-clean-arch/templates/fix-task-template.md to format each fix task.
                 For each drift issue, add a fix task to tasks.md with clear
                 acceptance criteria. Print the list of added tasks.
+          - id: validate-fix-tasks
+            type: shell
+            command: >
+              bash scripts/validate-fix-tasks.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+          - id: backup-fix-tasks
+            type: shell
+            command: >
+              bash scripts/backup-tasks.sh
+              "{{ steps.check_remaining.output.feature_dir }}" "fix-needed"
           - id: record-fix-needed-revision
             type: shell
             command: >
-              bash scripts/record-phase-revision.sh fix_needed_round
+              bash scripts/record-and-trim.sh fix_needed_round
               "{{ steps.fix_needed_round_iteration.output.count || 1 }}"
           - goto: implement_loop
         on_abort: abort

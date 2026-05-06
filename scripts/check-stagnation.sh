@@ -102,9 +102,16 @@ else
   echo "$CURRENT_DONE" > "$TMPFILE"
   mv "$TMPFILE" "$STATE_FILE"
   if [ "$NEW_CONSEC" -ge 3 ]; then
+    # Detect revision-only loop: stagnation detected but done_count hasn't changed
+    if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
+      echo "REVISION_ONLY=true"
+    else
+      echo "REVISION_ONLY=false"
+    fi
     echo "STAGNANT=true"
     echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
   else
+    echo "REVISION_ONLY=false"
     echo "STAGNANT=false"
     echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
   fi

@@ -18,9 +18,9 @@ FAILING=""
 if [ -d "$RESULTS_DIR" ]; then
   for result_file in "$RESULTS_DIR"/*.result; do
     [ -f "$result_file" ] || continue
-    result=$(head -1 "$result_file" 2>/dev/null || true)
     check_id=$(basename "$result_file" .result)
-    if [ "$result" = "FAIL" ]; then
+    # Check if ANY line says FAIL (handles multi-line .result files)
+    if grep -q '^FAIL$' "$result_file" 2>/dev/null; then
       if [ -n "$FAILING" ]; then
         FAILING="$FAILING,$check_id"
       else
