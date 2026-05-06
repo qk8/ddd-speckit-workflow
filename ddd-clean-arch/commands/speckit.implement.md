@@ -1,10 +1,79 @@
-# DEPRECATED — use speckit.implement-code.md + speckit.implement-verify.md
+Read tasks.md to determine the current task (first TODO or first IN_PROGRESS).
+Read plan.md §13 and CLAUDE.md for layer rules and constraints.
 
-This file is deprecated. The implementation workflow has been split into
-two prompts for better LLM reliability:
+━━ TASK PLAN (condensed) ━━━━━━━━━━━━━━━━━━━━
+Task: TASK-[N] — [title]
+Type: [type]
+Test file (written by previous step): [discover from feature directory — look for newly created test files]
+Impl files to create: [from Scope.Creates]
+Files to modify: [from Scope.Modifies]
+Acceptance criteria: [numbered, verbatim from tasks.md]
+Do NOT: [verbatim from task]
+Layer rules for this type: [from CLAUDE.md]
+§16 constraints that apply: [relevant ones]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. speckit.implement-code.md — Steps 1-2: TDD red phase + implementation
-2. speckit.implement-verify.md — Steps 3-4: quality checks + completion report
+Rules (non-negotiable):
+- Exact names from plan.md — any deviation is a bug, not a style choice.
+- Never violate a layer rule or §16 constraint. Redesign instead.
+- Never ask permission to violate a rule.
+- Only touch: Scope.Creates, Scope.Modifies, and the test file from the previous step.
+- Never implement any part of another task speculatively.
+- Spec conflict found → stop and report. Never resolve unilaterally.
 
-The workflow YAML (ddd-workflow.yml) calls these in sequence.
-Do NOT use this file directly.
+─────────────────────────────────────────
+STEP 2 — IMPLEMENT
+─────────────────────────────────────────
+Write the implementation until the tests from the previous step pass.
+
+After writing implementation, RUN THE TESTS and verify they pass:
+  Use scripts/validate-tests.sh to capture and validate the result:
+    bash scripts/validate-tests.sh "[test_runner_command_from_plan_md_§13]" "pass"
+  Read the output variables: TEST_RESULT, TEST_PASSED, TEST_FAILED, TEST_OUTPUT_FILE.
+
+If TEST_RESULT is "fail":
+  - TEST_FAILED test(s) failed (exit code $TEST_EXIT_CODE)
+  - Do NOT proceed. Enter the INLINE CORRECTION LOOP.
+  - The full raw output is in: $TEST_OUTPUT_FILE
+
+Then RUN THE FULL REGRESSION SUITE:
+  bash scripts/validate-tests.sh "[regression_command.all from plan.md §13]" "pass"
+  Read the output. If TEST_RESULT is "fail":
+    - Zero new failures allowed
+    - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
+
+INLINE CORRECTION LOOP (if tests fail)
+  BEFORE classifying the failure, run the independent diagnostic:
+    bash scripts/diagnostic-classifier.sh \
+      "$(bash scripts/find-first-feature.sh)" \
+      "[task_type]" \
+      "$(cat $TEST_OUTPUT_FILE)" \
+      "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
+  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION.
+  Pass this evidence to the LLM classification — do NOT self-classify without it.
+  Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
+
+  ENFORCED ACTION FROM DIAGNOSTIC (NON-NEGOTIABLE):
+  If REQUIRED_ACTION=FIX_TEST:
+    You MUST NOT modify implementation files. Violation creates a compliance record
+    that will be flagged in the periodic retro check. Fix ONLY the test file.
+    Rewrite the failing test assertion, then re-run validate-tests.sh.
+    If tests still fail with REQUIRED_ACTION=FIX_TEST on re-diagnosis: escalate to human review.
+
+  If REQUIRED_ACTION=HUMAN:
+    STOP. Do not attempt further corrections.
+    Print: "ESCALATION: Diagnostic confidence too low for automated resolution."
+    Print: "Evidence: $EVIDENCE"
+    Mark task for human review in tasks.md (add note: requires human review).
+    Proceed to next task.
+
+  If REQUIRED_ACTION=FIX_IMPL:
+    Proceed with implementation fixes only. Do NOT modify test files.
+    The diagnostic has identified this as a genuine implementation error.
+
+  If REQUIRED_ACTION=RETRY:
+    You may attempt either test or implementation fixes, but use the
+    EVIDENCE field to guide your choice. Do not self-classify without evidence.
+
+When STEP 2 completes successfully, print:
+"IMPLEMENT-CODE DONE — proceeding to quality checks."

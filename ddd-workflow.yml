@@ -24,6 +24,13 @@ inputs: {}
 
 steps:
 
+  # ── SETUP VALIDATION ──────────────────────────────────────────
+  # Run deterministic prerequisite checks before invoking Claude.
+  # Stops early if any FAIL — saves tokens and provides immediate feedback.
+  - id: validate-setup
+    type: shell
+    command: "bash scripts/validate-setup.sh"
+
   # ── PREFLIGHT: VALIDATE project-brief.md ──────────────────────
   - id: preflight
     type: prompt
@@ -216,6 +223,10 @@ steps:
   # ── PHASE 3: PLAN — CONSOLIDATED IN 3 BATCHES ──────────────────
   # Batch 1: Core plan (§1–§16) — domain decisions, architecture,
   # reliability, data, testing, devex, failure modes, constraints.
+  # Section production is conditional on project-brief.md Complexity field:
+  #   SIMPLE: §1-§8, §11-§14 only. §16 with 5 constraints. Skip §9, §10, §15.
+  #   MEDIUM: §1-§16 full. Skip §19 (ADR log) in plan-devex.
+  #   COMPLEX: All sections §1-§20.
   - id: plan-full
     command: speckit.plan
     integration: claude
@@ -224,7 +235,30 @@ steps:
         Read project-brief.md and .specify/specs/[feature]/spec.md.
         Use ddd-clean-arch/templates/plan-template.md.
 
-        Produce sections §1 through §16 of plan.md:
+        Read project-brief.md's Complexity field (simple | medium | complex).
+        Produce sections based on complexity:
+
+        SIMPLE:
+          Produce only: §1 Requirements, §2 Ubiquitous language, §3 Bounded contexts,
+          §4 Aggregates (full detail), §5 Domain services, §6 Architecture,
+          §7 Cross-cutting concerns, §8 API design, §11 Reliability & observability,
+          §12 Data design, §13 Testing strategy, §14 Monorepo & developer experience.
+          Skip §9 Security (threat model), §10 Performance & scalability,
+          §15 Edge cases & failure modes.
+          For §16 Architectural constraints: produce exactly 5 instead of 10.
+          End with: "Plan full (§1–§8, §11–§14, §16 reduced) complete. Continuing…"
+
+        MEDIUM:
+          Produce: §1–§12, §13 Testing strategy, §14 Monorepo & devex,
+          §15 Edge cases & failure modes (minimum 10 domain-specific scenarios),
+          §16 Architectural constraints (exactly 10).
+          End with: "Plan full (§1–§16) complete. Continuing to companion files…"
+
+        COMPLEX:
+          Produce all sections §1–§16 with full detail as specified below.
+          End with: "Plan full (§1–§16) complete. Continuing to companion files…"
+
+        For MEDIUM and COMPLEX, produce sections §1 through §16:
           §1  Requirements
           §2  Ubiquitous language
           §3  Bounded contexts
@@ -254,7 +288,6 @@ steps:
 
         Do NOT produce §17 onwards yet.
         Do NOT produce companion files yet.
-        End with: "Plan full (§1–§16) complete. Continuing to companion files…"
 
   # Batch 2: Companion files — api-contract.yaml, data-model.sql, interfaces
   # These are lightweight, self-contained, and only depend on approved plan.md.
@@ -988,21 +1021,36 @@ steps:
         command: >
           bash scripts/prompt-context.sh "{{ steps.check_remaining.output.feature_dir }}"
 
-      # ── PHASE 3: IMPLEMENT + VERIFY ──────────────────────────
-      - id: implement_code
+      # ── PHASE 3A: WRITE FAILING TESTS (TDD red phase) ──────────
+      - id: write_test
         type: prompt
-        command: speckit.implement-code
+        command: speckit.write-test
         integration: claude
         input:
           args: >
             Run with --parallel flag to batch independent tasks.
             In parallel mode: find all TODO tasks whose dependencies are DONE,
-            group them by dependency level, and implement each task in the
-            same batch sequentially. After the batch, report completion.
-            In single-task mode (no --parallel): implement only the first TODO task.
+            group them by dependency level, and write tests for each task in the
+            same batch sequentially. After the batch, write the batch task list
+            to .artifacts/batch_tasks.txt and report completion.
+            In single-task mode (no --parallel): write tests for only the first TODO task.
             Always check Depends-on before starting.
             Use the prompt context at .artifacts/prompts/[task_id]/context.md
             if available — it contains targeted plan sections for this task.
+
+      # ── PHASE 3B: IMPLEMENT TO MAKE TESTS PASS ─────────────────
+      - id: implement
+        type: prompt
+        command: speckit.implement
+        integration: claude
+        input:
+          args: >
+            Implement the code to make the tests written by the previous step pass.
+            In parallel mode (if .artifacts/batch_tasks.txt exists):
+              implement each task in the batch sequentially.
+              After the batch, remove .artifacts/batch_tasks.txt.
+            In single-task mode: implement only the first TODO task.
+            Always check Depends-on before starting.
 
       - id: implement_verify
         type: prompt

@@ -2,15 +2,27 @@
 # Regression Tests (Check BC)
 # Executes the regression test command defined in plan.md §13 (Testing Strategy)
 # and reports PASS/FAIL — verifying no existing tests broke.
+#
+# Usage:
+#   run-regression.sh <feature_dir>          # Full regression suite
+#   run-regression.sh --changed-only <dir>   # Run only tests affected by recent changes
 set -euo pipefail
 
+CHANGED_ONLY=false
 FEATURE_DIR="${1:-}"
-if [ -z "$FEATURE_DIR" ]; then
-  FEATURE_DIR=$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")
-fi
 if [ -z "$FEATURE_DIR" ]; then
   echo "REGRESSION: SKIP (no feature directory)"
   exit 0
+fi
+
+# Handle --changed-only flag
+if [ "$FEATURE_DIR" = "--changed-only" ]; then
+  CHANGED_ONLY=true
+  FEATURE_DIR="${2:-}"
+  if [ -z "$FEATURE_DIR" ]; then
+    echo "REGRESSION: SKIP (no feature directory)"
+    exit 0
+  fi
 fi
 
 PLAN_FILE="${FEATURE_DIR}/plan.md"
@@ -129,7 +141,115 @@ extract_regression_command() {
   return 1
 }
 
-REGRESSION_COMMAND=$(extract_regression_command 2>/dev/null || true)
+# ── Changed-only mode: scope regression to affected tests ──────
+extract_changed_tests() {
+  local feature_dir="$1"
+  local tasks_file="${feature_dir}/tasks.md"
+
+  # Find last DONE task ID to determine diff baseline
+  local last_done_task=""
+  if [ -f "$tasks_file" ]; then
+    # Get the task ID of the last DONE task
+    last_done_task=$(awk '
+      /^## TASK-[0-9]+/ { task = $2 }
+      /^Status: DONE$/ { last_done = task }
+      END { print last_done }
+    ' "$tasks_file" 2>/dev/null || true)
+  fi
+
+  # If no DONE task exists, fallback to full regression
+  if [ -z "$last_done_task" ]; then
+    return 1
+  fi
+
+  # Use git diff from last done task to HEAD
+  local changed_files=""
+  changed_files=$(git diff --name-only "$(git rev-list -1 --ancestry-path "${last_done_task}..HEAD" 2>/dev/null || echo HEAD~1)" 2>/dev/null || true)
+
+  # If git diff fails (no commits, not a repo, etc.), fallback
+  if [ -z "$changed_files" ]; then
+    return 1
+  fi
+
+  # Map changed source files to affected test files
+  # Uses common naming conventions: src/foo.ts → tests/unit/foo.test.ts
+  # or src/foo.ts → tests/foo.test.ts
+  local test_files=""
+  while IFS= read -r src_file; do
+    [ -z "$src_file" ] && continue
+    # Skip test files themselves
+    echo "$src_file" | grep -qE '/(test|spec|__tests__)/' && continue
+    # Skip node_modules, build outputs
+    echo "$src_file" | grep -qE '(node_modules|dist|build|vendor)' && continue
+
+    local base ext
+    base=$(basename "$src_file" | sed 's/\.[^.]*$//')
+    ext="${src_file##*.}"
+
+    # Only process source files (not config, docs, etc.)
+    case "$ext" in
+      ts|js|py|java|kt|go|rb) ;;
+      *) continue ;;
+    esac
+
+    # Find matching test files using naming conventions
+    # Convention 1: tests/unit/<base>.test.<ext>
+    # Convention 2: tests/<base>.test.<ext>
+    # Convention 3: <base>.test.<ext>
+    # Convention 4: <base>.spec.<ext>
+    for pattern in \
+      "${feature_dir}/tests/unit/${base}.test.${ext}" \
+      "${feature_dir}/tests/unit/${base}.spec.${ext}" \
+      "${feature_dir}/tests/${base}.test.${ext}" \
+      "${feature_dir}/tests/${base}.spec.${ext}" \
+      "${base}.test.${ext}" \
+      "${base}.spec.${ext}" \
+      "${feature_dir}/tests/unit/${base}_test.${ext}" \
+      "${feature_dir}/tests/${base}_test.${ext}" \
+      "${feature_dir}/tests/unit/test_${base}.${ext}" \
+      "${feature_dir}/tests/test_${base}.${ext}" \
+      "${feature_dir}/test_${base}.${ext}" \
+      "${feature_dir}/tests/${base}Test.${ext}" \
+      "${feature_dir}/tests/unit/${base}Test.${ext}" \
+      "${feature_dir}/__tests__/${base}.test.${ext}" \
+    ; do
+      if [ -f "$pattern" ]; then
+        test_files="${test_files}${pattern} "
+      fi
+    done
+
+    # Also check: if the source file itself IS a test file, run it directly
+    if echo "$src_file" | grep -qiE '(test|spec)'; then
+      test_files="${test_files}${src_file} "
+    fi
+  done <<< "$changed_files"
+
+  if [ -n "$test_files" ]; then
+    echo "$test_files" | tr ' ' '\n' | sort -u | tr '\n' ' '
+    return 0
+  fi
+  return 1
+}
+
+if [ "$CHANGED_ONLY" = true ]; then
+  CHANGED_TEST_FILES=$(extract_changed_tests "$FEATURE_DIR" 2>/dev/null || true)
+  if [ -n "$CHANGED_TEST_FILES" ]; then
+    echo "REGRESSION (changed-only): ${CHANGED_TEST_FILES}" >&2
+    # Run only the affected test files via the test runner
+    # Detect test runner and pass file list
+    REGRESSION_COMMAND=$(extract_regression_command 2>/dev/null || true)
+    if [ -n "$REGRESSION_COMMAND" ]; then
+      # Append changed test files to the command
+      # Most test runners accept file arguments: npm test file1 file2, pytest file1 file2
+      REGRESSION_COMMAND="${REGRESSION_COMMAND} ${CHANGED_TEST_FILES}"
+    fi
+  else
+    echo "REGRESSION (changed-only): no affected tests found, falling back to full suite" >&2
+    REGRESSION_COMMAND=$(extract_regression_command 2>/dev/null || true)
+  fi
+else
+  REGRESSION_COMMAND=$(extract_regression_command 2>/dev/null || true)
+fi
 
 if [ -z "$REGRESSION_COMMAND" ]; then
   echo "REGRESSION: SKIP (no regression_command configured in plan.md)"

@@ -33,10 +33,25 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: check-runner.sh <feature_dir> <task_type> [--batch]}"
-TASK_TYPE="${2:?Usage: check-runner.sh <feature_dir> <task_type> [--batch]}"
+FEATURE_DIR="${1:?Usage: check-runner.sh <feature_dir> <task_type> [--batch] [--changed-only]}"
+TASK_TYPE="${2:?Usage: check-runner.sh <feature_dir> <task_type> [--batch] [--changed-only]}"
 BATCH_MODE=false
 if [ "${3:-}" = "--batch" ]; then
+  BATCH_MODE=true
+fi
+
+CHANGED_ONLY=false
+if [ "${3:-}" = "--changed-only" ] || [ "${4:-}" = "--changed-only" ]; then
+  CHANGED_ONLY=true
+fi
+if [ "${4:-}" = "--changed-only" ] && [ "${3:-}" != "--batch" ]; then
+  CHANGED_ONLY=true
+fi
+# Handle --batch --changed-only or --changed-only --batch order
+if [ "${3:-}" = "--changed-only" ]; then
+  CHANGED_ONLY=true
+fi
+if [ "${4:-}" = "--batch" ]; then
   BATCH_MODE=true
 fi
 
@@ -126,7 +141,11 @@ run_check() {
   # Execute the check script, capture output and exit code
   local output
   local exit_code=0
-  output=$(bash "$script_path" "$FEATURE_DIR" 2>&1) || exit_code=$?
+  if [ "$check_id" = "BC" ] && [ "$CHANGED_ONLY" = true ]; then
+    output=$(bash "$script_path" --changed-only "$FEATURE_DIR" 2>&1) || exit_code=$?
+  else
+    output=$(bash "$script_path" "$FEATURE_DIR" 2>&1) || exit_code=$?
+  fi
 
   if [ "$exit_code" -eq 0 ]; then
     echo "PASS" > "$result_file"
