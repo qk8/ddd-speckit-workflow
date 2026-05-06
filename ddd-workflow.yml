@@ -174,23 +174,32 @@ steps:
             audit with exactly these sections:
 
             ### Hidden Requirements
-            [Requirements implied by the spec but not stated — e.g., auth
-            is implied if there are user roles; pagination is implied if
-            there are list endpoints]
+            [Requirements implied by the spec but not stated. For each finding:
+            CITE: spec.md line [N]: '[exact spec sentence]' supports this finding.]
 
             ### Contradictions
-            [Any two requirements that cannot both be true simultaneously]
+            [Any two requirements that cannot both be true simultaneously. For each:
+            CITE: spec.md line [N]: '[exact spec sentence A]' and
+            CITE: spec.md line [M]: '[exact spec sentence B]' are contradictory.]
 
             ### Ambiguities
-            [Any phrase a developer could interpret two different ways]
+            [Any phrase a developer could interpret two different ways. For each:
+            CITE: spec.md line [N]: '[ambiguous phrase]'.
+            Possible interpretations: [list].]
 
             ### Missing Edge Cases
-            [Empty states, error states, concurrent access, scale limits,
-            clock skew, malformed input]
+            [Empty states, error states, etc. For each:
+            CITE: spec.md line [N]: '[related spec sentence]'.]
 
             ### Security Surfaces
-            [Any feature that introduces a security surface not addressed
-            in the spec]
+            [Any feature that introduces a security surface not addressed in the spec.
+            For each: CITE: spec.md line [N]: '[feature spec]'.]
+
+            MANDATORY CITATION RULE: Every audit item MUST include a CITE line
+            referencing the exact spec sentence (with line number) that supports
+            the finding. Format: CITE: spec.md line [N]: '[exact spec sentence]'
+            Findings without a CITE line are considered noise and should be
+            excluded from the final report. Do not produce items without citations.
 
             Print the audit. Do NOT modify spec.md yet. The human will
             review and decide what to add.
@@ -1062,6 +1071,27 @@ steps:
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
 
+      # ── Post-batch consistency (after parallel batches) ─────────
+      # Lightweight check for constraint drift + API surface consistency
+      # after a parallel batch completes. Only runs when there are still
+      # TODO tasks remaining (batch was processed, not final batch).
+      - id: post_batch_consistency
+        type: if
+        condition: >
+          {{ steps.check_remaining.output.todo_count | int }} > 0 and
+          {{ steps.check_remaining.output.abandoned_count | int }} == 0
+        then:
+          - id: run_batch_consistency
+            type: prompt
+            command: speckit.batch-consistency
+            integration: claude
+            input:
+              args: >
+                Run post-batch consistency check.
+                Read the batch task list from .artifacts/batch_tasks.txt.
+                This is lightweight — check only constraint drift and API surface.
+                If .artifacts/batch_tasks.txt does not exist, skip silently.
+
       - id: post_verify_checkpoint
         type: shell
         command: >
@@ -1088,31 +1118,41 @@ steps:
           "{{ steps.check_remaining.output.feature_dir }}" "acceptance"
 
       - id: review-acceptance
-        type: gate
-        message: |
-          Review acceptance criteria for the last task.
-
-          [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] Test file committed alongside implementation?
-
-          {% if steps.pre_gate_acceptance.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_acceptance.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
-          {% endif %}
-          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. You MUST revise.
-          {% endif %}
-        options: [approve, revise]
-        on_revise:
-          - id: revise-mark-in-progress-acceptance
+        type: if
+        condition: >
+          {{ steps.pre_gate_acceptance.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.pre_gate_acceptance.output.GATE_BLOCKED == 'false' }}
+        then:
+          - id: accept-acceptance-auto
             type: shell
-            command: >
-              bash scripts/set-task-status.sh
-              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-              IN_PROGRESS
-              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — acceptance criteria not met."
-          # No goto — iteration ends naturally; next while iteration re-implements
+            command: "echo 'Acceptance gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: review-acceptance-gate
+            type: gate
+            message: |
+              Review acceptance criteria for the last task.
+
+              [ ] All acceptance criteria satisfied (test name + file:line references)?
+              [ ] Test file committed alongside implementation?
+
+              {% if steps.pre_gate_acceptance.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_acceptance.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: revise-mark-in-progress-acceptance
+                type: shell
+                command: >
+                  bash scripts/set-task-status.sh
+                  "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — acceptance criteria not met."
+              # No goto — iteration ends naturally; next while iteration re-implements
 
       - id: pre_gate_checks
         type: shell
@@ -1121,34 +1161,44 @@ steps:
           "{{ steps.check_remaining.output.feature_dir }}" "quality"
 
       - id: review-checks
-        type: gate
-        message: |
-          Review quality check results for the last task.
-
-          [ ] All applicable checks passed (all checks in routing table)?
-          [ ] Check [BC] new tests + regression: zero new failures in existing test suite?
-          [ ] Check [J] performance budget: within §10 budget?
-          [ ] Check [K] contract enforcement: API matches api-contract.yaml?
-          [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
-
-          {% if steps.pre_gate_checks.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_checks.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
-          {% endif %}
-          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. You MUST revise.
-          {% endif %}
-        options: [approve, revise]
-        on_revise:
-          - id: revise-mark-in-progress-checks
+        type: if
+        condition: >
+          {{ steps.pre_gate_checks.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.pre_gate_checks.output.GATE_BLOCKED == 'false' }}
+        then:
+          - id: accept-checks-auto
             type: shell
-            command: >
-              bash scripts/set-task-status.sh
-              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-              IN_PROGRESS
-              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — quality checks not met."
-          # No goto — iteration ends naturally; next while iteration re-implements
+            command: "echo 'Quality checks gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: review-checks-gate
+            type: gate
+            message: |
+              Review quality check results for the last task.
+
+              [ ] All applicable checks passed (all checks in routing table)?
+              [ ] Check [BC] new tests + regression: zero new failures in existing test suite?
+              [ ] Check [J] performance budget: within §10 budget?
+              [ ] Check [K] contract enforcement: API matches api-contract.yaml?
+              [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+
+              {% if steps.pre_gate_checks.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_checks.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: revise-mark-in-progress-checks
+                type: shell
+                command: >
+                  bash scripts/set-task-status.sh
+                  "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — quality checks not met."
+              # No goto — iteration ends naturally; next while iteration re-implements
 
       - id: pre_gate_tdd
         type: shell
@@ -1157,46 +1207,56 @@ steps:
           "{{ steps.check_remaining.output.feature_dir }}" "tdd"
 
       - id: review-tdd
-        type: gate
-        message: |
-          Review TDD integrity for the last task.
-
-          [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
-          [ ] Test audit: no trivial assertions or over-masking found?
-          [ ] Test correctness: each test name proves its acceptance criterion?
-          [ ] Test correctness: [BC] new tests PASS with correct assertions?
-          [ ] Test correctness: factory/fixture used for test data isolation?
-          [ ] Red phase: failure evidence captured before implementation?
-          [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
-
-          {% if steps.pre_gate_tdd.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_tdd.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
-          {% endif %}
-          {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. You MUST revise.
-          {% endif %}
-
-          Approve to continue to the next task.
-          Revise to send the task back for fixes.
-          Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
-        options: [approve, revise, stop]
-        on_stop:
-          type: shell
-          command: >
-            bash scripts/save-pause-state.sh
-            "{{ steps.check_remaining.output.feature_dir }}"
-            "review-tdd"
-        on_revise:
-          - id: revise-mark-in-progress-tdd
+        type: if
+        condition: >
+          {{ steps.pre_gate_tdd.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.pre_gate_tdd.output.GATE_BLOCKED == 'false' }}
+        then:
+          - id: accept-tdd-auto
             type: shell
-            command: >
-              bash scripts/set-task-status.sh
-              "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
-              IN_PROGRESS
-              "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — TDD integrity issues."
-          # No goto — iteration ends naturally; next while iteration re-implements
+            command: "echo 'TDD gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: review-tdd-gate
+            type: gate
+            message: |
+              Review TDD integrity for the last task.
+
+              [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
+              [ ] Test audit: no trivial assertions or over-masking found?
+              [ ] Test correctness: each test name proves its acceptance criterion?
+              [ ] Test correctness: [BC] new tests PASS with correct assertions?
+              [ ] Test correctness: factory/fixture used for test data isolation?
+              [ ] Red phase: failure evidence captured before implementation?
+              [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
+
+              {% if steps.pre_gate_tdd.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.pre_gate_tdd.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.check_implement_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+
+              Approve to continue to the next task.
+              Revise to send the task back for fixes.
+              Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
+            options: [approve, revise, stop]
+            on_stop:
+              type: shell
+              command: >
+                bash scripts/save-pause-state.sh
+                "{{ steps.check_remaining.output.feature_dir }}"
+                "review-tdd"
+            on_revise:
+              - id: revise-mark-in-progress-tdd
+                type: shell
+                command: >
+                  bash scripts/set-task-status.sh
+                  "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — TDD integrity issues."
+              # No goto — iteration ends naturally; next while iteration re-implements
 
       # ── PHASE 5: PERIODIC CHECKS (retro + drift + traceability) ─
       # Runs every 5 tasks (when retro_trigger is true).
@@ -1256,8 +1316,11 @@ steps:
             input:
               args: >
                 Run only check [Z] — Constraint Drift Detection.
-                Compare the implementation just completed against CLAUDE.md §16
-                constraints. Report PASS/FAIL/N/A for each constraint.
+                Compare the implementation just completed against plan.md §16
+                (Architectural constraints). plan.md §16 is the source of truth.
+                CLAUDE.md is advisory and may paraphrase constraints — DO NOT
+                rely on CLAUDE.md for constraint checking. Read plan.md directly.
+                Report PASS/FAIL/N/A for each constraint.
                 For any FAIL: fix the violation immediately.
                 Write a detailed report to .artifacts/drift_check_report.md
                 with each constraint, its result, and file:line references for FAILs.

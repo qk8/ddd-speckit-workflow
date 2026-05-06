@@ -30,6 +30,7 @@ PARALLEL MODE (batch independent tasks):
   7. In batch mode, the completion report covers the entire batch.
   8. Write the batch task list to .artifacts/batch_tasks.txt:
      echo "TASK-N, TASK-M, ..." > .artifacts/batch_tasks.txt
+  9. After writing batch_tasks.txt, continue to the next batch level.
 
 Use targeted spec loading — read only the plan.md sections relevant to
 the next task's Type. Do not read plan.md end to end.

@@ -5,14 +5,26 @@
 # Outputs:
 #   GATE_BLOCKED=true|false
 #   FAILING_CHECKS=<comma-separated check IDs>
+#   AUTO_APPROVE=true|false
 #
 # If GATE_BLOCKED=true, the review gate should NOT offer approve.
+# If AUTO_APPROVE=true and GATE_BLOCKED=false, the gate auto-approves.
 
 set -euo pipefail
 
 FEATURE_DIR="${1:?Usage: check-gate-preconditions.sh <feature_dir> <gate_name>}"
 GATE_NAME="${2:-}"
 RESULTS_DIR="$FEATURE_DIR/.artifacts/check-results"
+
+# ── Read auto_approve.enabled from preset.yml ──────────────────
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+PRESET_FILE="$(cd "$SCRIPTS_DIR/../ddd-clean-arch" && pwd)/preset.yml"
+
+AUTO_APPROVE="false"
+if [ -f "$PRESET_FILE" ]; then
+  _AA=$(awk '/^auto_approve:/{found=1; next} found && /^[a-z]/{exit} found && /enabled:/{print $2; exit}' "$PRESET_FILE" 2>/dev/null || true)
+  [ "$_AA" = "true" ] && AUTO_APPROVE="true"
+fi
 
 FAILING=""
 if [ -d "$RESULTS_DIR" ]; then
@@ -37,3 +49,5 @@ else
   echo "GATE_BLOCKED=false"
   echo "FAILING_CHECKS="
 fi
+
+echo "AUTO_APPROVE=$AUTO_APPROVE"

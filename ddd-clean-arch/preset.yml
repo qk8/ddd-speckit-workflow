@@ -175,3 +175,9 @@ cadence:
     medium: 10
     complex: 5
   first_retro_threshold: 5
+
+# Auto-approve human gates when deterministic checks pass.
+# When enabled, acceptance/quality/TDD gates skip to approve
+# if all critical checks passed (check-gate-preconditions.sh returns GATE_BLOCKED=false).
+auto_approve:
+  enabled: false

@@ -13,7 +13,9 @@ Read from plan.md: §2, §4, §6.
 
 Compare all names in reviewed files against §2 and §4.
   NAMING: [found] in [file:line] | Spec: [exact name] | Severity: breaking | cosmetic
+    CITE: plan.md §2 line [N]: '[exact ubiquitous language term]'
   NEW TERM: "[name]" in [file:line] — add to §2? [yes — definition | no — rename to existing]
+    CITE: plan.md §2 line [N] for existing term comparison
 
 ━━ DIMENSION 2: INVARIANT ENFORCEMENT ━━
 
@@ -21,9 +23,11 @@ Compare all names in reviewed files against §2 and §4.
 For each aggregate invariant from §4:
   INVARIANT: [text] | Enforcement: present | missing | relies on caller (violation)
   File: [file:line] | Risk: [production consequence]
+    CITE: plan.md §4 line [N]: '[invariant definition]'
 
 Can any value object be constructed with an invalid value?
   VALUE OBJECT: [name] | Invalid construction: yes | no
+    CITE: plan.md §4 line [N]: '[value object definition]'
 
 ━━ DIMENSION 3: HIDDEN COUPLING ━━━━━━━
 
@@ -38,12 +42,15 @@ Check for coupling not caught by static analysis:
   - Two modules sharing a concrete class instead of an interface
 
   COUPLING: [description] | File: [file:line] | Rule: [from §6] | Fix: [one sentence]
+    CITE: plan.md §6 line [N]: '[layer rule or module boundary]'
 
 ━━ DIMENSION 4: CONVENTIONS CONSISTENCY ━
 
 Compare code against .specify/memory/conventions.md.
   CONVENTION DRIFT: [name] | Says: [rule] | Code: [file:line]
+    CITE: .specify/memory/conventions.md line [N]: '[convention rule]'
   NEW PATTERN: [description] | In: [file:line] | Add to conventions.md? yes | no
+    CITE: conventions.md line [N] for comparison with existing conventions
 
 ━━ DIMENSION 5: READABILITY ━━━━━━━━━━━
 
@@ -53,6 +60,7 @@ Answer with specific file:line references:
   3. Public function with ambiguous success/failure contract? [file:line — what unclear]
   4. Error handling silently swallowing exception? [file:line — what lost]
   5. Magic number/string/unexplained constant? [file:line — where it should be]
+    Note: Readability findings do not cite spec documents — they are code quality observations.
 
 ━━ SUMMARY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
