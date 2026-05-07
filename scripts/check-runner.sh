@@ -134,7 +134,23 @@ run_check() {
   script_path="$(cd "$(dirname "$0")" && pwd)/$script_name"
 
   if [ ! -f "$script_path" ]; then
-    echo "CHECK $check_id: SKIP ($script_name not found)" > "$result_file"
+    # Determine if this is a critical-tier check by checking if it's in
+    # the applicable (critical) checks list. Critical checks that are missing
+    # their scripts FAIL — they cannot be silently skipped.
+    local is_critical=false
+    for cid in "${CHECK_IDS[@]}"; do
+      if [ "$cid" = "$check_id" ]; then
+        is_critical=true
+        break
+      fi
+    done
+    if [ "$is_critical" = true ]; then
+      echo "FAIL" > "$result_file"
+      echo "CHECK $check_id: FAIL (critical-tier script $script_name not found)" >&2
+    else
+      echo "SKIP" > "$result_file"
+      echo "CHECK $check_id: SKIP ($script_name not found)"
+    fi
     return
   fi
 

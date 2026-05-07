@@ -1092,6 +1092,20 @@ steps:
                 This is lightweight — check only constraint drift and API surface.
                 If .artifacts/batch_tasks.txt does not exist, skip silently.
 
+      # ── Post-batch merge/conflict detection ────────────────
+      # Verifies no merge conflicts or unexpected overlaps after parallel batches.
+      - id: post_batch_merge_check
+        type: if
+        condition: >
+          {{ steps.check_remaining.output.todo_count | int }} > 0 and
+          {{ steps.check_remaining.output.abandoned_count | int }} == 0
+        then:
+          - id: run_merge_check
+            type: shell
+            command: >
+              bash scripts/verify-batch-consistency.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
+
       - id: post_verify_checkpoint
         type: shell
         command: >
@@ -1121,7 +1135,8 @@ steps:
         type: if
         condition: >
           {{ steps.pre_gate_acceptance.output.AUTO_APPROVE == 'true' }} and
-          {{ steps.pre_gate_acceptance.output.GATE_BLOCKED == 'false' }}
+          {{ steps.pre_gate_acceptance.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.pre_gate_acceptance.output.GATE_FORCE_HUMAN == 'false' }}
         then:
           - id: accept-acceptance-auto
             type: shell
@@ -1164,7 +1179,8 @@ steps:
         type: if
         condition: >
           {{ steps.pre_gate_checks.output.AUTO_APPROVE == 'true' }} and
-          {{ steps.pre_gate_checks.output.GATE_BLOCKED == 'false' }}
+          {{ steps.pre_gate_checks.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.pre_gate_checks.output.GATE_FORCE_HUMAN == 'false' }}
         then:
           - id: accept-checks-auto
             type: shell
@@ -1210,7 +1226,8 @@ steps:
         type: if
         condition: >
           {{ steps.pre_gate_tdd.output.AUTO_APPROVE == 'true' }} and
-          {{ steps.pre_gate_tdd.output.GATE_BLOCKED == 'false' }}
+          {{ steps.pre_gate_tdd.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.pre_gate_tdd.output.GATE_FORCE_HUMAN == 'false' }}
         then:
           - id: accept-tdd-auto
             type: shell
@@ -1532,6 +1549,43 @@ steps:
               "$(bash scripts/find-first-feature.sh)"
               "code_review"
           - goto: abort
+
+  # ── POST-LOOP COMPLETENESS CHECK ────────────────────────────
+  # Verifies that implement_loop completed all tasks before proceeding.
+  # If max_iterations was reached with TODO tasks remaining, fail loudly.
+  - id: post_loop_final_check
+    type: shell
+    command: "bash scripts/check-tasks-safe.sh"
+
+  - id: verify_all_tasks_done
+    type: if
+    condition: >
+      {{ steps.post_loop_final_check.output.has_todo == 'true' }} or
+      {{ steps.post_loop_final_check.output.abandoned_count | int }} > 0
+    then:
+      - id: incomplete_tasks_warning
+        type: shell
+        command: >
+          bash scripts/log-incomplete-implementation.sh
+          "{{ steps.post_loop_final_check.output.todo_count }}"
+          "{{ steps.post_loop_final_check.output.abandoned_count }}"
+          "{{ steps.post_loop_final_check.output.in_progress }}"
+
+  - id: abandoned_task_summary
+    type: if
+    condition: >
+      {{ steps.post_loop_final_check.output.abandoned_count | int }} > 0
+    then:
+      - id: run_abandoned_summary
+        command: speckit.abandoned-summary
+        integration: claude
+        input:
+          args: >
+            List all ABANDONED tasks from tasks.md.
+            For each, summarize: task title, reason for abandonment (from tasks.md notes),
+            and what functionality is missing as a result.
+            Write the summary to .artifacts/abandoned-tasks-summary.md.
+            Print: "ABANDONED TASKS SUMMARY: [N] tasks abandoned"
 
   # ── PHASE 7: FINAL VERIFY ───────────────────────────────────────
   - id: final_verify

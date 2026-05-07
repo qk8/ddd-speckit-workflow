@@ -19,17 +19,60 @@ FEATURE_DIR="${FEATURE_DIR:-}"
 TASKS_PARSE_ERROR=0
 OUTPUT=""
 
-# ── Helper: parse JSON field with grep/sed (bash 3.2 compatible) ─
+# ── Helper: parse JSON field robustly ──────────────────────────
+# Tries python3 first (most reliable), then jq, then falls back to grep/sed.
 parse_json_field() {
   local key="$1"
   local file="$2"
-  grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | sed 's/[",]//g' | tr -d '[:space:]' || true
+  local result=""
+
+  if command -v python3 &>/dev/null; then
+    result=$(python3 -c "
+import json, sys
+try:
+    with open('$file') as f:
+        data = json.load(f)
+    keys = '$key'.split('.')
+    val = data
+    for k in keys:
+        val = val[k] if isinstance(val, dict) else val
+    v = val if isinstance(val, (str, int, float, bool)) else str(val)
+    print(v)
+except Exception:
+    pass
+" 2>/dev/null) || true
+  elif command -v jq &>/dev/null; then
+    result=$(jq -r ".$key // empty" "$file" 2>/dev/null) || true
+  fi
+
+  if [ -z "$result" ]; then
+    # Fallback: grep/sed (may match keys inside string values)
+    result=$(grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | sed 's/[",]//g' | tr -d '[:space:]' || true)
+  fi
+
+  echo "$result" || true
 }
 
 parse_json_bool() {
   local key="$1"
   local file="$2"
-  grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | sed 's/[,}[:space:]]*//' || true
+  local result
+  result=$(parse_json_field "$key" "$file")
+  case "$result" in
+    true|True|TRUE|1) echo "true" ;;
+    false|False|FALSE|0) echo "false" ;;
+    *) echo "$result" ;;
+  esac
+}
+
+# ── Helper: validate numeric value ──────────────────────────────
+ensure_numeric() {
+  local val="$1" default="$2"
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    echo "$val"
+  else
+    echo "$default"
+  fi
 }
 
 # ── Attempt 1: Read .workflow-state.json (structured checkpoint) ──
@@ -41,6 +84,9 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
     _done=$(grep -c '"status"[[:space:]]*:[[:space:]]*"DONE"' "$JSON_FILE" 2>/dev/null || true)
     _in_prog=$(grep -c '"status"[[:space:]]*:[[:space:]]*"IN_PROGRESS"' "$JSON_FILE" 2>/dev/null || true)
     _abandoned=$(grep -c '"status"[[:space:]]*:[[:space:]]*"ABANDONED"' "$JSON_FILE" 2>/dev/null || true)
+    _done=$(ensure_numeric "$_done" 0)
+    _in_prog=$(ensure_numeric "$_in_prog" 0)
+    _abandoned=$(ensure_numeric "$_abandoned" 0)
     _done=${_done:-0}
     _in_prog=${_in_prog:-0}
     _abandoned=${_abandoned:-0}
@@ -70,9 +116,9 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
     _complexity=$(parse_json_field "complexity" "$JSON_FILE")
     _complexity=${_complexity:-medium}
     _retro_interval=$(parse_json_field "interval" "$JSON_FILE")
-    _retro_interval=${_retro_interval:-10}
+    _retro_interval=$(ensure_numeric "${_retro_interval:-10}" 10)
     _next_due=$(parse_json_field "next_due" "$JSON_FILE")
-    _next_due=${_next_due:-5}
+    _next_due=$(ensure_numeric "${_next_due:-5}" 5)
     _done_count_check=${_done}
 
     # ── Stale state validation: cross-check against tasks.md ──
@@ -141,6 +187,11 @@ if [ -z "$OUTPUT" ] && [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.tasks-state.
     _total=$(parse_json_field "total" "$JSON_FILE")
     _complexity=$(parse_json_field "complexity" "$JSON_FILE")
     _retro_interval=$(parse_json_field "retro_interval" "$JSON_FILE")
+    _done=$(ensure_numeric "${_done:-0}" 0)
+    _todo=$(ensure_numeric "${_todo:-0}" 0)
+    _abandoned=$(ensure_numeric "${_abandoned:-0}" 0)
+    _total=$(ensure_numeric "${_total:-0}" 0)
+    _retro_interval=$(ensure_numeric "${_retro_interval:-10}" 10)
     _retro_trigger=$(parse_json_bool "retro_trigger" "$JSON_FILE")
     _in_progress_raw=$(parse_json_array "in_progress" "$JSON_FILE")
 

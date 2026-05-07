@@ -146,25 +146,31 @@ extract_changed_tests() {
   local feature_dir="$1"
   local tasks_file="${feature_dir}/tasks.md"
 
-  # Find last DONE task ID to determine diff baseline
-  local last_done_task=""
-  if [ -f "$tasks_file" ]; then
-    # Get the task ID of the last DONE task
-    last_done_task=$(awk '
-      /^## TASK-[0-9]+/ { task = $2 }
-      /^Status: DONE$/ { last_done = task }
-      END { print last_done }
-    ' "$tasks_file" 2>/dev/null || true)
-  fi
-
-  # If no DONE task exists, fallback to full regression
-  if [ -z "$last_done_task" ]; then
+  # Count DONE tasks to determine diff baseline.
+  # NOTE: Task IDs (TASK-3, etc.) are NOT git commit hashes and cannot be
+  # used as git revisions. We count actual DONE entries in tasks.md and
+  # use HEAD~N to diff against the last N completed tasks.
+  if [ ! -f "$tasks_file" ]; then
     return 1
   fi
 
-  # Use git diff from last done task to HEAD
-  local changed_files=""
-  changed_files=$(git diff --name-only "$(git rev-list -1 --ancestry-path "${last_done_task}..HEAD" 2>/dev/null || echo HEAD~1)" 2>/dev/null || true)
+  local done_count
+  done_count=$(grep -c "^Status: DONE$" "$tasks_file" 2>/dev/null || echo 0)
+  if [ "$done_count" -eq 0 ]; then
+    return 1
+  fi
+
+  # Count DONE tasks to determine diff baseline.
+  # NOTE: Task IDs (TASK-3, etc.) are NOT git commit hashes and cannot be
+  # used as git revisions. We count actual DONE entries in tasks.md and
+  # use HEAD~N to diff against the last N completed tasks.
+  local done_count
+  done_count=$(grep -c "^Status: DONE$" "$tasks_file" 2>/dev/null || echo 0)
+  if [ "$done_count" -gt 0 ]; then
+    changed_files=$(git diff --name-only "HEAD~${done_count}..HEAD" 2>/dev/null || true)
+  else
+    changed_files=$(git diff --name-only HEAD~1..HEAD 2>/dev/null || true)
+  fi
 
   # If git diff fails (no commits, not a repo, etc.), fallback
   if [ -z "$changed_files" ]; then

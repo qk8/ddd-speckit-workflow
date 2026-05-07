@@ -132,6 +132,38 @@ if [ "$TEST_TOTAL" -eq 0 ]; then
   fi
 fi
 
+# Go: "PASS\nok  mypackage 0.013s" or "FAIL" or "--- FAIL: TestX"
+if [ "$TEST_TOTAL" -eq 0 ] && grep -qE '^(PASS|FAIL)$' "$OUTPUT_FILE" 2>/dev/null; then
+  if grep -q '^FAIL$' "$OUTPUT_FILE"; then
+    TEST_FAILED=$(grep -c '^--- FAIL:' "$OUTPUT_FILE" 2>/dev/null || echo 1)
+    TEST_TOTAL=$TEST_FAILED
+  else
+    TEST_PASSED=1
+    TEST_TOTAL=1
+  fi
+fi
+
+# Rust/cargo: "test result: ok. X passed; Y failed; Z ignored"
+if [ "$TEST_TOTAL" -eq 0 ] && grep -q 'test result:' "$OUTPUT_FILE" 2>/dev/null; then
+  PASSED=$(grep 'test result:' "$OUTPUT_FILE" | grep -o '[0-9]* passed' | grep -o '[0-9]*' || echo 0)
+  FAILED=$(grep 'test result:' "$OUTPUT_FILE" | grep -o '[0-9]* failed' | grep -o '[0-9]*' || echo 0)
+  IGNORED=$(grep 'test result:' "$OUTPUT_FILE" | grep -o '[0-9]* ignored' | grep -o '[0-9]*' || echo 0)
+  [ -n "$PASSED" ] && TEST_PASSED="$PASSED"
+  [ -n "$FAILED" ] && TEST_FAILED="$FAILED"
+  TEST_TOTAL=$((TEST_PASSED + TEST_FAILED))
+fi
+
+# dotnet/xUnit: "Passed!" or "Failed!" with counts
+if [ "$TEST_TOTAL" -eq 0 ] && grep -qE '^(Passed!|Failed!)' "$OUTPUT_FILE" 2>/dev/null; then
+  if grep -q '^Failed!' "$OUTPUT_FILE"; then
+    TEST_FAILED=$(grep -o '[0-9]* failure' "$OUTPUT_FILE" | grep -o '[0-9]*' || echo 1)
+    TEST_TOTAL=$TEST_FAILED
+  else
+    TEST_PASSED=$(grep -o '[0-9]* passed' "$OUTPUT_FILE" | grep -o '[0-9]*' || echo 1)
+    TEST_TOTAL=$TEST_PASSED
+  fi
+fi
+
 # Final fallback: if no counts could be extracted, warn and use exit code only
 if [ "$TEST_TOTAL" -eq 0 ]; then
   # Check if output is empty (command produced no output at all)

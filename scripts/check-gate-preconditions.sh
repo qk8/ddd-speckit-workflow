@@ -51,3 +51,13 @@ else
 fi
 
 echo "AUTO_APPROVE=$AUTO_APPROVE"
+
+# ── Check if this gate is non-auto-approvable ──────────────────
+# Some quality gates (TDD integrity, spec compliance) should never
+# be auto-approved even when deterministic checks pass.
+GATE_FORCE_HUMAN="false"
+if [ -f "$PRESET_FILE" ]; then
+  _NAA=$(awk '/^non_auto_approvable:/{found=1; next} found && /^[a-z]/{exit} found && /'"$GATE_NAME"'/{print "true"; exit}' "$PRESET_FILE" 2>/dev/null || true)
+  [ "$_NAA" = "true" ] && GATE_FORCE_HUMAN="true"
+fi
+echo "GATE_FORCE_HUMAN=$GATE_FORCE_HUMAN"

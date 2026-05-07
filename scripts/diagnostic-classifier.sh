@@ -102,6 +102,38 @@ analyze_test_output() {
     # This is a normal test failure — not a test fault
     :
   fi
+
+  # Check for type mismatch in assertions (string where number expected, etc.)
+  if echo "$content" | grep -qiE 'expected.*string.*received.*number|expected.*number.*received.*string|expected.*type.*string.*but received.*number' 2>/dev/null; then
+    EVIDENCE="${EVIDENCE}IMPL_ERROR: Type mismatch in assertion — implementation likely returns wrong type. "
+    FAULTS_FOUND=$((FAULTS_FOUND + 1))
+  fi
+
+  # Check for HTTP status code mismatch
+  if echo "$content" | grep -qiE 'expected.*201.*received.*200|expected.*200.*received.*201|expected.*404.*received.*200|expected.*500.*received.*200|expected.*200.*received.*500' 2>/dev/null; then
+    EVIDENCE="${EVIDENCE}IMPL_ERROR: HTTP status mismatch — implementation returns wrong status code. "
+    FAULTS_FOUND=$((FAULTS_FOUND + 1))
+  fi
+
+  # Check for assertion on request object instead of response (test bug)
+  if echo "$content" | grep -qiE 'request.*expect|expect.*request.*body|expect.*req\b' 2>/dev/null; then
+    if ! echo "$content" | grep -qiE 'response.*expect|expect.*response|expect.*res\b' 2>/dev/null; then
+      EVIDENCE="${EVIDENCE}TEST_FAULT: Test asserts on request object instead of response — may pass without exercising implementation. "
+      FAULTS_FOUND=$((FAULTS_FOUND + 1))
+      TEST_FAULT_COUNT=$((TEST_FAULT_COUNT + 1))
+    fi
+  fi
+
+  # Check for async test without proper error handling (silent rejections)
+  if echo "$content" | grep -qiE 'it\s*\(\s*[\"'\'']|test\s*\(\s*[\"'\'']' "$content" 2>/dev/null; then
+    if echo "$content" | grep -qiE 'async|await|Promise' 2>/dev/null; then
+      if ! echo "$content" | grep -qiE 'try|catch|reject|unhandledRejection|\.catch\(' 2>/dev/null; then
+        EVIDENCE="${EVIDENCE}TEST_FAULT: Async test without try/catch — rejection silently swallowed. "
+        FAULTS_FOUND=$((FAULTS_FOUND + 1))
+        TEST_FAULT_COUNT=$((TEST_FAULT_COUNT + 1))
+      fi
+    fi
+  fi
 }
 
 # ── Check 3: Implementation file structure ─────────────────────
@@ -178,7 +210,7 @@ elif [ "$CLASSIFICATION" = "IMPL_ERROR" ] && [ "$CONFIDENCE" = "high" ]; then
   REQUIRED_ACTION="FIX_IMPL"
 elif [ "$CLASSIFICATION" = "ENV_FAULT" ]; then
   REQUIRED_ACTION="FIX_IMPL"
-elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ] && [ "$FAULTS_FOUND" -ge 3 ]; then
+elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ] && [ "$FAULTS_FOUND" -ge 2 ]; then
   REQUIRED_ACTION="HUMAN"
 elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ]; then
   REQUIRED_ACTION="RETRY"

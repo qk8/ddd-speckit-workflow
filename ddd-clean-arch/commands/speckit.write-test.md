@@ -156,3 +156,18 @@ For each test, verify:
 
 Print: "TEST AUDIT: [N] tests audited, [N] issues fixed, [N] issues flagged for human review."
 Print the full audit report above.
+
+─────────────────────────────────────────
+STEP 1.6 — DETERMINISTIC TEST QUALITY CHECK
+─────────────────────────────────────────
+The self-audit above is advisory. Run the deterministic quality checker to catch
+anti-patterns the LLM may overlook or self-censor:
+
+  bash scripts/verify-test-quality.sh "[test_file_path]"
+
+If it reports ERRORS: fix each one before proceeding.
+If it reports WARNINGS: note them for human review but do not block.
+If the test file path is not known, pass the test directory:
+  bash scripts/verify-test-quality.sh "[test_directory]"
+
+Print: "DETERMINISTIC CHECK: [N] errors, [M] warnings"

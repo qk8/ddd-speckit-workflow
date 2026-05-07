@@ -181,3 +181,8 @@ cadence:
 # if all critical checks passed (check-gate-preconditions.sh returns GATE_BLOCKED=false).
 auto_approve:
   enabled: false
+  # These checks always require human approval even when auto_approve is enabled
+  non_auto_approvable:
+    - review-tdd
+    - review-plan-revision-gate
+    - review-speckit-review
