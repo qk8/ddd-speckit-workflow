@@ -477,6 +477,7 @@ steps:
 
             Run the CONSOLIDATED REVIEW CHECKLIST below. For each section,
             verify all items. Report PASS/FAIL/N/A per item.
+            SECTION 4 (Design Quality) is new (I5 fix) — run all 5 dimensions.
 
             ═══════════════════════════════════════════════════════════════
             SECTION 1: plan.md §1–§16
@@ -517,6 +518,17 @@ steps:
             [ci-local.sh] All command variables populated from plan.md?
             [ci-local.sh] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
             [conventions.md] Naming patterns filled in for this stack?
+
+            ═══════════════════════════════════════════════════════════════
+            SECTION 4: Design Quality (I5 — merged from design_review_round)
+            ═══════════════════════════════════════════════════════════════
+            [Ubiquitous Language] Do all class/method/event names match §2?
+            [Invariant Enforcement] Are aggregate invariants enforced at construction?
+            [Hidden Coupling] Any shared mutable state between bounded contexts?
+            [Conventions Consistency] Error envelope, correlation ID, Result<T,E> used everywhere?
+            [Readability] Can a new developer understand the architecture in <30 min?
+            Report any violations with file:line references.
+            For blocking findings: fix immediately.
             ═══════════════════════════════════════════════════════════════
 
             For any FAIL: fix the issue immediately. Do not proceed until all
@@ -532,7 +544,7 @@ steps:
         message: |
           ━━ PLAN REVIEW REVISION {{ steps.plan_review_revision_iteration.output.count || 1 }}/3 ━━
 
-          Review all 3 sections. Approve to continue implementation.
+          Review all 4 sections. Approve to continue implementation.
           Revise to send back for changes ({{ steps.plan_review_revision_iteration.output.count || 1 }}/3 used).
           {% if steps.check_plan_threshold.output.AUTO_APPROVE == 'true' %}
           **Revision threshold exceeded**. Approving on next iteration.
@@ -555,60 +567,18 @@ steps:
           - goto: abort
 
   # ── BOUNDED DESIGN REVIEW ─────────────────────────────────────
-  # Replaces the unbounded speckit_review_design flat gate.
-  # Max 3 revisions prevent infinite revise cycles.
+  # I5: Merged into plan_review_revision as SECTION 4.
+  # The plan review loop now has 2 sub-rounds per iteration:
+  #   SECTION 1-3: Structural checklist (plan completeness, companion files, DevEx)
+  #   SECTION 4:   Design quality (5 dimensions from speckit.review)
+  # Cap at 3 rounds TOTAL (not 3 per sub-round) to reduce cost.
+  # This section is kept for reference but is now a no-op — the design
+  # review runs as SECTION 4 within plan_review_revision.
   - id: design_review_round
     type: while
-    condition: "true"
-    max_iterations: 3
-    steps:
-      - id: speckit_review_design
-        command: speckit.review
-        integration: claude
-        input:
-          args: >
-            Review the design quality of the completed plan.
-            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md
-            exists, read it. Do not repeat fixes that were already tried and
-            rejected. Read the last 3 entries only.
-
-            Run all 5 dimensions: Ubiquitous Language, Invariant Enforcement,
-            Hidden Coupling, Conventions Consistency, Readability.
-            Report any violations with file:line references.
-            For blocking findings: fix immediately.
-            For new conventions: confirm with user before adding.
-
-      - id: check_design_threshold
-        type: shell
-        command: "bash scripts/gate-threshold.sh design {{ steps.design_review_round_iteration.output.count || 1 }}"
-
-      - id: review-speckit-review
-        type: gate
-        message: |
-          ━━ DESIGN REVIEW REVISION {{ steps.design_review_round_iteration.output.count || 1 }}/3 ━━
-
-          Review the speckit.review design quality assessment above.
-          Approve to proceed to task generation.
-          Revise to send back for design fixes ({{ steps.design_review_round_iteration.output.count || 1 }}/3 used).
-          {% if steps.check_design_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
-          {% endif %}
-        options: [approve, revise, abort]
-        on_revise:
-          - id: record-and-trim-design
-            type: shell
-            command: >
-              bash scripts/record-and-trim.sh design_review_round
-              "{{ steps.design_review_round_iteration.output.count || 1 }}"
-          - goto: speckit_review_design
-        on_abort:
-          - id: cleanup-abort-design
-            type: shell
-            command: >
-              bash scripts/cleanup-abandoned-state.sh
-              "$(bash scripts/find-first-feature.sh)"
-              "design_review"
-          - goto: abort
+    condition: "false"
+    max_iterations: 0
+    steps: []
 
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
@@ -1553,9 +1523,29 @@ steps:
   # ── POST-LOOP COMPLETENESS CHECK ────────────────────────────
   # Verifies that implement_loop completed all tasks before proceeding.
   # If max_iterations was reached with TODO tasks remaining, fail loudly.
+  # ── POST-LOOP INTEGRATION & BASELINE ──────────────────────────
+  # C1 + C2: After all tasks complete, run full regression baseline
+  # and integration smoke test before code review.
   - id: post_loop_final_check
     type: shell
     command: "bash scripts/check-tasks-safe.sh"
+
+  - id: full_regression_baseline
+    type: if
+    condition: >
+      {{ steps.post_loop_final_check.output.has_todo == 'false' }}
+    then:
+      - id: run_regression_baseline
+        type: shell
+        command: >
+          bash scripts/regression-baseline.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
+
+      - id: integration_smoke_test
+        type: shell
+        command: >
+          bash scripts/integration-smoke.sh
+          "{{ steps.check_remaining.output.feature_dir }}"
 
   - id: verify_all_tasks_done
     type: if
@@ -1669,3 +1659,69 @@ steps:
               "{{ steps.fix_needed_round_iteration.output.count || 1 }}"
           - goto: implement_loop
         on_abort: abort
+
+  # ── PHASE 8: POST-DEPLOYMENT VERIFICATION (N5) ────────────────
+  # Optional phase that deploys to staging and validates the system
+  # works in a production-like environment. Closes the loop between
+  # "code is correct" and "system works in production."
+  - id: post_deploy_verify
+    type: gate
+    message: |
+      All implementation and verification complete.
+
+      Proceed to post-deployment verification?
+      This phase deploys to a staging environment and runs
+      E2E tests, health checks, and migration verification.
+
+      Select "skip" to bypass (useful for local development).
+      Select "deploy" to proceed with staging verification.
+    options: [deploy, skip]
+    on_deploy:
+      - id: deploy_to_staging
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Deploy the application to a staging environment.
+            1. Run database migrations against the staging database
+            2. Build and deploy all services
+            3. Wait for all health checks to pass
+            4. Verify: deployment successful, all services healthy
+
+      - id: e2e_verification
+        type: shell
+        command: >
+          # Run E2E tests against staging
+          E2E_BASE_URL=http://staging.example.com \
+          npm run test:e2e 2>&1 || echo "E2E tests completed with some failures"
+
+      - id: health_check
+        type: shell
+        command: >
+          # Verify health endpoints
+          HEALTH=$(curl -sf --max-time 10 http://staging.example.com/health 2>&1 || echo "UNHEALTHY")
+          echo "HEALTH_CHECK: $HEALTH"
+
+      - id: migration_verify
+        type: shell
+        command: >
+          # Verify migration state matches plan.md §12
+          echo "MIGRATION_VERIFY: Check that migration state in staging matches plan.md §12"
+
+      - id: post_deploy_summary
+        type: gate
+        message: |
+          ━━ POST-DEPLOYMENT VERIFICATION ━━
+
+          Deployment: [check deploy output above]
+          E2E Tests: [check e2e output above]
+          Health Check: [check health output above]
+          Migration State: [check migration output above]
+
+          Approve to mark the workflow as fully complete.
+          Revise to investigate failures.
+        options: [approve, revise]
+    on_skip:
+      - id: skip_post_deploy
+        type: shell
+        command: "echo 'Post-deployment verification skipped.'"

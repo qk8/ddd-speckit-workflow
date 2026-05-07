@@ -450,21 +450,66 @@ echo ""
 
 # ── Check 4: Parallel batch conflict detection ──────────────────
 echo "Check 4: Parallel batch conflicts"
+echo "  (I3: Enhanced — checks Scope.Creates, Scope.Modifies, and acceptance criteria)"
 
-# Extract file paths from acceptance criteria for each task
+# Extract file paths from Scope.Creates, Scope.Modifies, and acceptance criteria for each task
 TASK_FILES_FILE="$TMP_DIR/task_files.txt"
 touch "$TASK_FILES_FILE"
 
 current_id=""
+IN_SCOPE=false
+IN_ACCEPTANCE=false
 while IFS= read -r line; do
   if echo "$line" | grep -qE '^## TASK-\[?[0-9]+\]?' ; then
+    # Reset scope/acceptance tracking on new task
     current_id=$(echo "$line" | sed 's/^## TASK-\[//;s/\]//g')
+    IN_SCOPE=false
+    IN_ACCEPTANCE=false
   fi
-  if [ -n "$current_id" ] && echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[.*\]'; then
-    # Extract file paths from acceptance criterion
-    echo "$line" | grep -oE '[a-zA-Z0-9_/.-]+\.(java|ts|js|py|kt|scala|go|rb|php|sql|yaml|yml|json|toml|xml|md|html|css|scss)' 2>/dev/null | while read -r fpath; do
-      echo "${current_id}|${fpath}"
-    done >> "$TASK_FILES_FILE" || true
+
+  # Track scope sections
+  if echo "$line" | grep -qE '^Scope:'; then
+    IN_SCOPE=true
+    IN_ACCEPTANCE=false
+    continue
+  fi
+  if [ "$IN_SCOPE" = true ]; then
+    if echo "$line" | grep -qE '^  Creates:'; then
+      continue
+    fi
+    if echo "$line" | grep -qE '^  Modifies:'; then
+      continue
+    fi
+    if echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*'; then
+      # Extract file path from "- src/path/to/file.ts"
+      fpath=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | xargs)
+      if echo "$fpath" | grep -qE '\.(java|ts|js|py|kt|scala|go|rb|php|sql|yaml|yml|json|toml|xml|md|html|css|scss)$'; then
+        echo "${current_id}|${fpath}" >> "$TASK_FILES_FILE"
+      fi
+    fi
+    # End of scope section (next top-level field)
+    if echo "$line" | grep -qE '^(Acceptance|Do NOT):'; then
+      IN_SCOPE=false
+    fi
+    continue
+  fi
+
+  # Track acceptance criteria
+  if echo "$line" | grep -qE '^Acceptance criteria:'; then
+    IN_ACCEPTANCE=true
+    continue
+  fi
+  if [ "$IN_ACCEPTANCE" = true ]; then
+    if echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[.*\]'; then
+      # Extract file paths from acceptance criterion
+      echo "$line" | grep -oE '[a-zA-Z0-9_/.-]+\.(java|ts|js|py|kt|scala|go|rb|php|sql|yaml|yml|json|toml|xml|md|html|css|scss)' 2>/dev/null | while read -r fpath; do
+        echo "${current_id}|${fpath}"
+      done >> "$TASK_FILES_FILE" || true
+    fi
+    # End of acceptance section
+    if echo "$line" | grep -qE '^(Do NOT):'; then
+      IN_ACCEPTANCE=false
+    fi
   fi
 done < "$TASKS_FILE"
 
@@ -529,8 +574,13 @@ while [ "$changed" = true ] && [ "$iterations" -lt "$max_iter" ]; do
 done
 
 # Check for file overlaps ONLY within the same dependency level
+# I3: Separate Scope overlaps (ERROR) from acceptance criteria overlaps (WARNING)
 OVERLAP_FILE="$TMP_DIR/overlaps.txt"
 touch "$OVERLAP_FILE"
+
+# Files extracted from Scope.Creates/Modifies (definite conflict if overlapping)
+SCOPE_FILES_FILE="$TMP_DIR/scope_files.txt"
+grep -E '\|src/|\|lib/|\|app/|\|packages/|\|tests/' "$TASK_FILES_FILE" > "$SCOPE_FILES_FILE" 2>/dev/null || true
 
 # Get unique levels
 LEVELS=$(cut -d'|' -f2 "$LEVELS_FILE" | sort -un)
@@ -538,7 +588,6 @@ LEVELS=$(cut -d'|' -f2 "$LEVELS_FILE" | sort -un)
 for level in $LEVELS; do
   # Get tasks at this level
   LEVEL_TASKS=$(awk -F'|' -v lv="$level" '$2 == lv {print $1}' "$LEVELS_FILE")
-  LEVEL_TASK_LIST=$(echo "$LEVEL_TASKS" | tr '\n' ' ')
 
   # Check all pairs within this level
   for tid_a in $LEVEL_TASKS; do
@@ -547,13 +596,28 @@ for level in $LEVELS; do
       [ "$tid_a" = "$tid_b" ] && continue
       [ "$tid_a" -gt "$tid_b" ] 2>/dev/null && continue
 
-      overlap=$(comm -12 \
+      # Check Scope file overlap (ERROR — definite conflict)
+      scope_overlap=$(comm -12 \
+        <(grep "^${tid_a}|" "$SCOPE_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
+        <(grep "^${tid_b}|" "$SCOPE_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
+      if [ -n "$scope_overlap" ]; then
+        echo "  ERROR: TASK-$tid_a and TASK-$tid_b (same batch level $level) both Scope-modify: $scope_overlap"
+        echo "         Tasks in the same batch MUST NOT modify the same files."
+        echo "         Serialize these tasks or split into separate batches."
+        ERRORS=$((ERRORS + 1))
+        echo "\"TASK-$tid_a <-> TASK-$tid_b (ERROR): $scope_overlap\"" >> "$OVERLAP_FILE"
+        continue  # Don't double-count as warning
+      fi
+
+      # Check acceptance criteria overlap (WARNING — potential conflict)
+      all_overlap=$(comm -12 \
         <(grep "^${tid_a}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
         <(grep "^${tid_b}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
-      if [ -n "$overlap" ]; then
-        echo "  WARNING: TASK-$tid_a and TASK-$tid_b (same batch level $level) both reference: $overlap"
+      if [ -n "$all_overlap" ]; then
+        echo "  WARNING: TASK-$tid_a and TASK-$tid_b (same batch level $level) both reference: $all_overlap"
+        echo "         Consider serializing these tasks to avoid merge conflicts."
         WARNINGS=$((WARNINGS + 1))
-        echo "\"TASK-$tid_a <-> TASK-$tid_b: $overlap\"" >> "$OVERLAP_FILE"
+        echo "\"TASK-$tid_a <-> TASK-$tid_b (WARNING): $all_overlap\"" >> "$OVERLAP_FILE"
       fi
     done
   done

@@ -61,3 +61,35 @@ if [ -f "$PRESET_FILE" ]; then
   [ "$_NAA" = "true" ] && GATE_FORCE_HUMAN="true"
 fi
 echo "GATE_FORCE_HUMAN=$GATE_FORCE_HUMAN"
+
+# ── Auto-approve transparency (C4) ─────────────────────────────
+# Even when auto-approving, output a summary of which checks passed
+# and their results. This prevents the "invisible approval" problem
+# where the human reviewer can't tell if the gate was truly clean.
+if [ "$AUTO_APPROVE" = "true" ] && [ "$GATE_BLOCKED" = "false" ] && [ "$GATE_FORCE_HUMAN" = "false" ]; then
+  echo ""
+  echo "AUTO_APPROVE_SUMMARY:"
+  _TOTAL=0
+  _PASS=0
+  _FAIL=0
+  _SKIP=0
+  if [ -d "$RESULTS_DIR" ]; then
+    for result_file in "$RESULTS_DIR"/*.result; do
+      [ -f "$result_file" ] || continue
+      _check_id=$(basename "$result_file" .result)
+      _result_line=$(head -1 "$result_file" 2>/dev/null || echo "UNKNOWN")
+      _TOTAL=$((_TOTAL + 1))
+      case "$_result_line" in
+        PASS) _PASS=$((_PASS + 1)) ;;
+        FAIL) _FAIL=$((_FAIL + 1)) ;;
+        *) _SKIP=$((_SKIP + 1)) ;;
+      esac
+    done
+  fi
+  echo "  checks_total=$_TOTAL"
+  echo "  checks_pass=$_PASS"
+  echo "  checks_fail=$_FAIL"
+  echo "  checks_skip=$_SKIP"
+  echo "  gate=$GATE_NAME"
+  echo "  status=APPROVED"
+fi

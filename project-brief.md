@@ -38,6 +38,14 @@ medium — moderate project (30-80 tasks), single team
 complex — large project (80+ tasks), multiple teams, high availability required
 (defaults to medium if not specified)
 
+## Project Profile
+[full | standard | minimal]
+I1: Check profile for filtering quality checks.
+full — all 21 checks (A through AS), maximum quality coverage
+standard — core 8 checks (A, BC, D, I, L, Z, K, M), balanced
+minimal — core 6 checks (A, BC, D, I, L, Z), fastest execution
+(defaults to standard if not specified)
+
 ## Security posture
 [How sensitive is the data? Which compliance requirements?
 Rate limiting, audit log, etc. needed?]

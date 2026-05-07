@@ -19,17 +19,25 @@ source scripts/cadence-defaults.sh
 PRESET_FILE="ddd-clean-arch/preset.yml"
 DEFAULT_RETRO_INTERVAL="$CADENCE_RETRO_INTERVAL_MEDIUM"
 DEFAULT_FIRST_RETRO_THRESHOLD="$CADENCE_FIRST_RETRO_THRESHOLD"
+DEFAULT_DRIFT_CHECK_INTERVAL=15
+DEFAULT_TRACEABILITY_CHECK_INTERVAL=20
 if [ -f "$PRESET_FILE" ]; then
   DEFAULT_RETRO_INTERVAL=$(bash scripts/read-preset-cadence.sh medium "$PRESET_FILE" 2>/dev/null) || true
   [ -z "$DEFAULT_RETRO_INTERVAL" ] && DEFAULT_RETRO_INTERVAL="$CADENCE_RETRO_INTERVAL_MEDIUM"
   DEFAULT_FIRST_RETRO_THRESHOLD=$(bash scripts/read-preset-cadence.sh first_retro_threshold "$PRESET_FILE" 2>/dev/null) || true
   [ -z "$DEFAULT_FIRST_RETRO_THRESHOLD" ] && DEFAULT_FIRST_RETRO_THRESHOLD="$CADENCE_FIRST_RETRO_THRESHOLD"
+  DEFAULT_DRIFT_CHECK_INTERVAL=$(bash scripts/read-preset-cadence.sh drift_check_interval "$PRESET_FILE" 2>/dev/null) || true
+  [ -z "$DEFAULT_DRIFT_CHECK_INTERVAL" ] && DEFAULT_DRIFT_CHECK_INTERVAL="$CADENCE_RETRO_INTERVAL_MEDIUM"
+  DEFAULT_TRACEABILITY_CHECK_INTERVAL=$(bash scripts/read-preset-cadence.sh traceability_check_interval "$PRESET_FILE" 2>/dev/null) || true
+  [ -z "$DEFAULT_TRACEABILITY_CHECK_INTERVAL" ] && DEFAULT_TRACEABILITY_CHECK_INTERVAL=20
 fi
 
 if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "has_todo=false"; echo "done_count=0"; echo "todo_count=0"
   echo "in_progress="; echo "abandoned_count=0"; echo "total_tasks=0"
   echo "complexity=medium"; echo "retro_interval=$DEFAULT_RETRO_INTERVAL"; echo "first_retro_threshold=$DEFAULT_FIRST_RETRO_THRESHOLD"
+  echo "drift_check_interval=$DEFAULT_DRIFT_CHECK_INTERVAL"
+  echo "traceability_check_interval=$DEFAULT_TRACEABILITY_CHECK_INTERVAL"
   echo "retro_trigger=false"
   echo "feature_dir=${FEATURE_DIR:-}"
   if [ "$JSON_MODE" = true ] && [ -n "${FEATURE_DIR:-}" ]; then
@@ -43,6 +51,8 @@ if [ -z "$FEATURE_DIR" ] || [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   "total": 0,
   "complexity": "medium",
   "retro_interval": ${DEFAULT_RETRO_INTERVAL},
+  "drift_check_interval": ${DEFAULT_DRIFT_CHECK_INTERVAL},
+  "traceability_check_interval": ${DEFAULT_TRACEABILITY_CHECK_INTERVAL},
   "retro_trigger": false,
   "parsed_at": "${PARSED_AT}"
 }
@@ -142,6 +152,8 @@ echo "complexity=$COMPLEXITY"
 echo "retro_interval=$RETRO_INTERVAL"
 echo "first_retro_threshold=$FIRST_RETRO_THRESHOLD"
 echo "retro_trigger=$RETRO_TRIGGER"
+echo "drift_check_interval=$DEFAULT_DRIFT_CHECK_INTERVAL"
+echo "traceability_check_interval=$DEFAULT_TRACEABILITY_CHECK_INTERVAL"
 echo "feature_dir=$FEATURE_DIR"
 
 # ── JSON output (when --json flag is used) ──────────────────────
@@ -177,6 +189,8 @@ if [ "$JSON_MODE" = true ]; then
   "total": ${TOTAL_TASKS},
   "complexity": "${COMPLEXITY}",
   "retro_interval": ${RETRO_INTERVAL},
+  "drift_check_interval": ${DEFAULT_DRIFT_CHECK_INTERVAL},
+  "traceability_check_interval": ${DEFAULT_TRACEABILITY_CHECK_INTERVAL},
   "retro_trigger": ${RETRO_TRIGGER},
   "parsed_at": "${PARSED_AT}"
 }

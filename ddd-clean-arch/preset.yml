@@ -169,12 +169,33 @@ routing_secondary:
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.
+# I2: Periodic checks have separate intervals to reduce cost.
 cadence:
   retro_interval:
     simple: 15
     medium: 10
     complex: 5
   first_retro_threshold: 5
+  drift_check_interval:
+    # How often to run constraint drift check [Z] (separate from retro)
+    simple: 20
+    medium: 15
+    complex: 10
+  traceability_check_interval:
+    # How often to run traceability re-check (expensive, less frequent)
+    simple: 25
+    medium: 20
+    complex: 15
+
+# I1: Check profiles — filter checks by project complexity
+# minimal: core 6 checks (A, BC, D, I, L, Z)
+# standard: core 8 (+ K, M)
+# full: all 21 checks
+# Use project-brief.md's project_profile field to select.
+check_profiles:
+  minimal: [A, BC, D, I, L, Z]
+  standard: [A, BC, D, I, L, Z, K, M]
+  full: [A, BC, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z, AS]
 
 # Auto-approve human gates when deterministic checks pass.
 # When enabled, acceptance/quality/TDD gates skip to approve
