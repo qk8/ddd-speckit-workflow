@@ -362,7 +362,7 @@ steps:
           Populate §20 with the actual test file paths and tool names.
 
         .gitignore
-          The boilerplate .gitignore covers common patterns.
+          The workflow .gitignore covers common patterns.
           After copying, verify that any project-specific build output
           directories, generated files, or secret file patterns are added.
           The .env file must be listed. Only .env.example is committed.

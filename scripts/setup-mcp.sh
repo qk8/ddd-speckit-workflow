@@ -12,7 +12,7 @@
 set -euo pipefail
 
 echo ""
-echo "=== DDD Boilerplate — MCP Setup ==="
+echo "=== DDD Workflow — MCP Setup ==="
 echo ""
 
 # Check claude CLI

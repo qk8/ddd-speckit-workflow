@@ -1,4 +1,4 @@
-# DDD + Clean Architecture — Spec Kit Boilerplate
+# DDD + Clean Architecture — Spec Kit Workflow
 
 Production-grade software development workflow built on Spec Kit.
 Adds Domain-Driven Design depth, Clean Architecture enforcement,
@@ -96,13 +96,13 @@ specify preset add --dev /path/to/ddd-clean-arch --priority 5
 specify extension add --dev /path/to/ddd-quality-gates --priority 5
 specify workflow add /path/to/ddd-workflow.yml
 
-cp /path/to/boilerplate/project-brief.md .
-cp /path/to/boilerplate/.gitignore .
+cp /path/to/workflow/project-brief.md .
+cp /path/to/workflow/.gitignore .
 mkdir -p scripts .claude
 for f in check-tasks.sh check-tasks-safe.sh validate-tasks.sh check-naming.sh validate-api-contract.sh setup-mcp.sh setup-hooks.sh ci-local.sh check-labels.yml find-first-feature.sh cadence-defaults.sh read-preset-cadence.sh print-result.sh set-task-status.sh repo-root.sh ensure-gitleaks-toml.sh find-file.sh search-dirs.sh filetypes.sh; do
-  cp "/path/to/boilerplate/scripts/$f" scripts/
+  cp "/path/to/workflow/scripts/$f" scripts/
 done
-cp /path/to/boilerplate/.claude/settings.json .claude/
+cp /path/to/workflow/.claude/settings.json .claude/
 chmod +x scripts/*.sh
 ```
 
