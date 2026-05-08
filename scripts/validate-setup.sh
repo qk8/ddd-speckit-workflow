@@ -74,7 +74,17 @@ for dir in .artifacts .specify/specs .specify/memory; do
   fi
 done
 
-# ── 6. Bash version ─────────────────────────────────────────────
+# ── 6. ShellCheck (Issue A: shell script fragility gate) ─────────
+SHELLCHECK_AVAILABLE=false
+if command -v shellcheck &>/dev/null; then
+  SHELLCHECK_AVAILABLE=true
+  report PASS "ShellCheck installed (shell script linting available)"
+else
+  report WARN "ShellCheck not installed (run: brew install shellcheck / apt install shellcheck / scoop install shellcheck)"
+  report WARN "  Without ShellCheck, script syntax errors won't be caught before runtime"
+fi
+
+# ── 7. Bash version ─────────────────────────────────────────────
 BASH_MAJOR="${BASH_VERSION%%.*}"
 if [ "${BASH_MAJOR:-0}" -ge 4 ]; then
   report PASS "Bash $BASH_VERSION (bash 4+ detected)"
@@ -87,6 +97,25 @@ elif [ "${BASH_MAJOR:-0}" -ge 3 ]; then
   fi
 else
   report FAIL "Bash $BASH_VERSION — scripts require bash 3.2+"
+fi
+
+# ── 8. Validate scripts with ShellCheck (Issue A) ───────────────
+if [ "$SHELLCHECK_AVAILABLE" = true ]; then
+  SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+  SCRIPT_COUNT=$(find "$SCRIPTS_DIR" -name '*.sh' -not -name '*.sh.bak' | wc -l | tr -d ' ')
+  FAIL_COUNT_SC=0
+  while IFS= read -r script; do
+    if ! shellcheck --shell=bash "$script" &>/dev/null; then
+      FAIL_COUNT_SC=$((FAIL_COUNT_SC + 1))
+    fi
+  done < <(find "$SCRIPTS_DIR" -name '*.sh' -not -name '*.sh.bak')
+  if [ "$FAIL_COUNT_SC" -gt 0 ]; then
+    report FAIL "ShellCheck found issues in $FAIL_COUNT_SC of $SCRIPT_COUNT scripts"
+  else
+    report PASS "ShellCheck passed on all $SCRIPT_COUNT scripts"
+  fi
+else
+  report WARN "Skipping ShellCheck validation (not installed)"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────

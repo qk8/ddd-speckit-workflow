@@ -134,9 +134,15 @@ while IFS= read -r file; do
 done <<< "$MODIFIED_FILES"
 
 echo "QUICK DRIFT CHECK: $SCANNED files scanned, $VIOLATIONS violations"
+
 if [ "$VIOLATIONS" -gt 0 ]; then
+  echo "DRIFT_DETECTED=true"
+  echo "DRIFT_FAIL_COUNT=$VIOLATIONS"
+  echo "QUICK_DRIFT=true"
   echo "  WARNING: Review violations above. The full check Z will run at the next retro."
   exit 1
 fi
+echo "DRIFT_CLEAN=true"
+echo "QUICK_DRIFT=true"
 echo "  All quick checks passed."
 exit 0

@@ -162,7 +162,9 @@ complexity=${_complexity}
 retro_interval=${_retro_interval}
 first_retro_threshold=${_next_due}
 retro_trigger=${_retro_trigger}
-feature_dir=${FEATURE_DIR}"
+feature_dir=${FEATURE_DIR}
+todo_task_id=
+todo_task_type=
     fi
     # If _layer1_valid is false, fall through to layer 2/3
   fi
@@ -227,7 +229,9 @@ complexity=${_complexity}
 retro_interval=${_retro_interval}
 first_retro_threshold=5
 retro_trigger=${_retro_trigger}
-feature_dir=${FEATURE_DIR}"
+feature_dir=${FEATURE_DIR}
+todo_task_id=
+todo_task_type=
   fi
 fi
 
@@ -258,6 +262,8 @@ retro_interval=${CADENCE_RETRO_INTERVAL_MEDIUM}
 first_retro_threshold=${CADENCE_FIRST_RETRO_THRESHOLD}
 retro_trigger=false
 feature_dir=
+todo_task_id=
+todo_task_type=
 DEFAULTS
   exit 0
 fi

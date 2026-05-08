@@ -33,6 +33,12 @@ Delivery layer:
 ## Naming
 [Filled in during the plan phase from §2 ubiquitous language and §4 aggregate definitions.]
 
+## Task statuses
+TODO | IN_PROGRESS | DONE | ABANDONED | BLOCKED | SPEC_REVISION
+  SPEC_REVISION: spec was discovered to be wrong during implementation.
+    The task is a spec correction, not a code implementation.
+    After spec revision, affected code tasks are reset to TODO.
+
 ## Architectural constraints
 [Filled in during the plan phase from §16.
 These 10 rules become the "What NOT to do" section and are enforced by architectural tests.]

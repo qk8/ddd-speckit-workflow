@@ -20,17 +20,19 @@ Task order:
 ## TASK-[N]: [title]
 Status: TODO
 # Valid statuses:
-#   TODO         — not started
-#   IN_PROGRESS  — currently being worked on (set at task plan confirmation)
-#   DONE         — all applicable checks passed, test file committed
-#   ABANDONED    — interrupted; partial files listed below for recovery
+#   TODO            — not started
+#   IN_PROGRESS     — currently being worked on (set at task plan confirmation)
+#   DONE            — all applicable checks passed, test file committed
+#   ABANDONED       — interrupted; partial files listed below for recovery
+#   BLOCKED         — waiting on external dependency
+#   SPEC_REVISION   — spec correction task (not code implementation)
 #
 # Fields added by /speckit.implement when task is completed:
 # Built: [one sentence describing what was built]
 # Test file: [path to the test file committed for this task]
 # Spec changes applied: [list of plan.md changes confirmed during implementation | none]
 # (For ABANDONED: Abandoned at: [step], Partial files: [list])
-Type: backend-domain | backend-infra | backend-api | shared | integration | frontend-data | frontend-feature | e2e
+Type: backend-domain | backend-infra | backend-api | shared | integration | frontend-data | frontend-feature | e2e | spec_revision
 Depends on: TASK-[X], TASK-[Y] | none
 Scope:
   Creates:

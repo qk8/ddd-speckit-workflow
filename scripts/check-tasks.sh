@@ -102,6 +102,29 @@ else
   HAS_TODO="false"
 fi
 
+# Issue J: Extract the type of the first TODO task (for spec_revision routing)
+# Read the Type field from the first TODO task block
+TODO_TASK_ID=""
+TODO_TASK_TYPE=""
+if [ "$TODO_COUNT" -gt 0 ]; then
+  # Find the first ## TASK- line followed by a TODO status
+  _current_task=""
+  _current_type=""
+  while IFS= read -r line; do
+    if echo "$line" | grep -qE "^## TASK-"; then
+      _current_task=$(echo "$line" | sed 's/^## //')
+    fi
+    if echo "$line" | grep -qE "^Type:" && [ -n "$_current_task" ]; then
+      _current_type=$(echo "$line" | sed 's/^Type:[[:space:]]*//')
+    fi
+    if echo "$line" | grep -qE "^Status: TODO$" && [ -n "$_current_task" ]; then
+      TODO_TASK_ID="$_current_task"
+      TODO_TASK_TYPE="${_current_type:-backend-domain}"
+      break
+    fi
+  done < "$TASKS_FILE"
+fi
+
 # Adaptive retrospective cadence based on total task count and complexity
 # Complexity is read from project-brief.md; defaults to "medium"
 # project-brief.md format: "## Complexity" header followed by value on next line
@@ -155,6 +178,8 @@ echo "retro_trigger=$RETRO_TRIGGER"
 echo "drift_check_interval=$DEFAULT_DRIFT_CHECK_INTERVAL"
 echo "traceability_check_interval=$DEFAULT_TRACEABILITY_CHECK_INTERVAL"
 echo "feature_dir=$FEATURE_DIR"
+echo "todo_task_id=$TODO_TASK_ID"
+echo "todo_task_type=$TODO_TASK_TYPE"
 
 # ── JSON output (when --json flag is used) ──────────────────────
 if [ "$JSON_MODE" = true ]; then

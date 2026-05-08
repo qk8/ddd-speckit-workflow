@@ -1,0 +1,83 @@
+# ── Issue J: Spec Revision Task State ────────────────────────────
+# When the implement loop discovers that the spec itself is wrong
+# (not just code drift), this command handles spec corrections.
+#
+# The workflow assumes plan.md is the source of truth. But sometimes
+# the spec is wrong — the adversarial audit catches this, but the
+# recovery path was unclear. This command provides the path.
+#
+# Usage: speckit.spec-revise
+#
+# Process:
+#   1. Read spec learnings from pending-learnings.md
+#   2. Identify which plan.md sections need correction
+#   3. Create a spec_revision task in tasks.md
+#   4. Update spec.md and plan.md
+#   5. Re-enter the implement loop with fresh context
+
+Read CLAUDE.md fully.
+Read the feature preamble from templates/preamble.md.
+
+─────────────────────────────────────────
+STEP 1 — READ PENDING LEARNINGS
+─────────────────────────────────────────
+Read .artifacts/pending-learnings.md (if it exists).
+Read tasks.md to find any tasks with "Spec changes applied" that were not applied.
+Read plan.md sections referenced by pending learnings.
+
+─────────────────────────────────────────
+STEP 2 — IDENTIFY SPEC CORRECTIONS
+─────────────────────────────────────────
+For each pending learning that proposes a change to plan.md:
+  1. Determine if the change is:
+     - A: Spec is wrong (impossible to implement as specified)
+     - B: Spec is incomplete (missing requirements discovered during implementation)
+     - C: Spec is overly complex (simplification that preserves requirements)
+     - D: Stack assumption is wrong (library/framework behaves differently than expected)
+
+  2. For each correction, assess impact:
+     - Which tasks are affected?
+     - Does it require re-implementation of completed tasks?
+     - Does it change the architecture or just the details?
+
+─────────────────────────────────────────
+STEP 3 — CREATE SPEC_REVISION TASK
+─────────────────────────────────────────
+For each significant spec correction (type A or B):
+  1. Add a new task to tasks.md with Status: TODO
+     Type: spec_revision
+     Depends on: [tasks that discovered the issue]
+     Scope:
+       Creates:
+         - Updated plan.md sections (list which sections)
+         - Updated spec.md (list which sections)
+       Modifies:
+         - tasks.md (reset affected tasks to TODO if re-implementation needed)
+     Acceptance criteria:
+       - [Specific, verifiable criteria for the spec correction]
+     Do NOT:
+       - [Scope-creep guard for the spec revision]
+
+  2. If affected tasks need re-implementation:
+     - Reset their status from DONE back to TODO
+     - Add "Re-implemented due to spec revision: [reason]" note
+
+─────────────────────────────────────────
+STEP 4 — UPDATE PLAN.MD AND SPEC.MD
+─────────────────────────────────────────
+Apply the approved spec corrections to plan.md and spec.md.
+For each change:
+  - Note the exact section.field being changed
+  - Record the old value and new value
+  - Add a comment: "# Spec revision [date]: [reason]"
+
+─────────────────────────────────────────
+STEP 5 — RE-ENTER IMPLEMENT LOOP
+─────────────────────────────────────────
+Print:
+  "SPEC REVISION: [N] correction(s) applied to plan.md"
+  "Affected tasks reset to TODO: [list]"
+  "The implement loop will re-process these tasks with the corrected spec."
+
+Wait for user confirmation before proceeding.
+Do NOT re-enter the implement loop until confirmed.

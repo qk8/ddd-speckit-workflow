@@ -27,6 +27,25 @@ applies_to: all
      - Confirm table/column names match §12 TABLE definitions
      - Confirm parameterized queries are used (no string concatenation)
 
+  # ── Issue F: Method signature verification ────────────────────
+  5. For every method call on a project-defined class (NOT third-party):
+     - Confirm the method name exists on that class (check plan.md §4, §5, §6)
+     - Confirm the method signature (parameter count and types) matches
+       the interface definition in backend-interfaces.[ext] or the
+       implementation in a previously completed task
+     - For repository methods: verify the return type matches the
+       repository_interface definition in plan.md §4
+     - For use case methods: verify the input/output types match
+       the use case class definition in plan.md §6
+
+  6. For API endpoint tasks (backend-api type):
+     - Verify every method call in the controller/handler matches
+       an endpoint defined in api-contract.yaml for that specific path+method
+     - Verify the use case class called by the controller exists
+       and has the exact method name referenced
+     - Verify the response mapping uses the exact field names from
+       the api-contract.yaml response schema
+
   If ANY verification fails: fix the code. Do NOT use @ts-ignore,
   eslint-disable, or equivalent to suppress errors.
 

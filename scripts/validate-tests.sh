@@ -32,12 +32,61 @@ set -euo pipefail
 
 if [ $# -lt 1 ]; then
   echo "ERROR: test_command is required" >&2
-  echo "Usage: $0 <test_command> [expected_result]" >&2
+  echo "Usage: $0 <test_command> [expected_result] [--incremental]" >&2
   exit 2
 fi
 
 TEST_COMMAND="$1"
 EXPECTED="${2:-pass}"
+INCREMENTAL=false
+if [ "${3:-}" = "--incremental" ]; then
+  INCREMENTAL=true
+fi
+
+# Issue H: Incremental mode — only run tests affected by changed files.
+# This is much faster than full regression for large codebases.
+if [ "$INCREMENTAL" = true ]; then
+  # Try to determine changed test files using git.
+  # Common patterns:
+  #   Jest/Vitest: --changedSince=main or --changed
+  #   pytest: -k with git diff
+  #   JUnit: gradle test --tests with changed classes
+  # If git is not available or no changes detected, fall through to full run.
+  if command -v git &>/dev/null; then
+    CHANGED_TESTS=$(git diff --name-only HEAD 2>/dev/null | grep -E '\.(test|spec)\.(js|ts|jsx|tsx|py|java|kt|go|rb)$' || true)
+    if [ -n "$CHANGED_TESTS" ]; then
+      echo "TEST_INCREMENTAL: running tests for changed files only"
+      # Build a modified command based on common patterns
+      # This is best-effort — the exact flag depends on the test framework
+      TEST_FILES_STR=$(echo "$CHANGED_TESTS" | tr '\n' ' ')
+      # Try common incremental flags
+      case "$TEST_COMMAND" in
+        *jest*|*vitest*|*vitest*)
+          TEST_COMMAND="$TEST_COMMAND --changed"
+          ;;
+        *pytest*)
+          TEST_COMMAND="$TEST_COMMAND $CHANGED_TESTS"
+          ;;
+        *mocha*)
+          TEST_COMMAND="$TEST_COMMAND $CHANGED_TESTS"
+          ;;
+        *playwright*)
+          TEST_COMMAND="$TEST_COMMAND --grep $(echo "$CHANGED_TESTS" | head -1 | sed 's/[^/]*$//' | tr '/' '.')"
+          ;;
+        *)
+          # Unknown framework — fall through to full run
+          INCREMENTAL=false
+          ;;
+      esac
+    else
+      echo "TEST_INCREMENTAL: no changed test files detected, running full suite"
+      INCREMENTAL=false
+    fi
+  else
+    echo "TEST_INCREMENTAL: git not available, running full suite"
+    INCREMENTAL=false
+  fi
+fi
 
 # Create temp files for output
 OUTPUT_FILE=$(mktemp /tmp/test-output-XXXXXX.txt)

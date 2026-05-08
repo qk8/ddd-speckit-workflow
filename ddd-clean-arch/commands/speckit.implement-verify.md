@@ -1,8 +1,30 @@
+# ── FILE SNAPSHOT / ROLLBACK (Issue D) ──────────────────────────
+# Before verification, check if a pre-task snapshot exists.
+# If verification fails, restore files from snapshot rather than
+# leaving partial changes on disk.
+
 You are continuing implementation of a task. The code was just written
 and tests pass. Now run quality checks and produce the completion report.
 
 Read tasks.md to determine the current task (first IN_PROGRESS or first TODO).
 Read plan.md §13 and CLAUDE.md for layer rules and constraints.
+
+─────────────────────────────────────────
+STEP 2.5 — RESTORE FROM SNAPSHOT ON FAILURE
+─────────────────────────────────────────
+If any quality check (STEP 3) or smoke test (STEP 4) fails:
+
+  1. Check for pre-task snapshot:
+     FEATURE_DIR="[feature_dir from tasks.md]"
+     TASK_ID="[current task ID]"
+     if [ -f "$FEATURE_DIR/.artifacts/snapshots/${TASK_ID}.snapshot.json" ]; then
+       bash scripts/check-point.sh rollback "$FEATURE_DIR" "$TASK_ID"
+     fi
+
+  2. If rollback succeeds: print "FILES RESTORED from pre-task snapshot."
+     and mark task IN_PROGRESS (not DONE).
+  3. If no snapshot exists: print "NO SNAPSHOT AVAILABLE — partial files remain."
+     and mark task IN_PROGRESS with note: "partial_files_remain".
 
 ─────────────────────────────────────────
 STEP 3 — RUN QUALITY CHECKS
