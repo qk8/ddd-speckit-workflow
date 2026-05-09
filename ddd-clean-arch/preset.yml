@@ -34,6 +34,14 @@ templates:
 commands:
   - speckit.implement
   - speckit.check
+  - speckit.verify
+  - speckit.review
+  - speckit.code-review
+  - speckit.retrospect
+  - speckit.status
+  - speckit.context
+  - speckit.test
+  - speckit.spec-revise
 
 # Quality checks: each check declares which task types it applies to.
 # The routing table is a convenience lookup derived from applies_to.

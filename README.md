@@ -45,20 +45,10 @@ ddd-clean-arch/                            ← Preset
     test-data-strategy.md                  ← Test data isolation approaches
     api-testing-tool-guide.md              ← API testing tool comparison
     task-selection.md                      ← IN_PROGRESS / TODO task selection protocol
-ddd-quality-gates/                         ← Extension
-  extension.yml
-  templates/
+ templates/
     command-header.md                      ← Shared opening for quality-gate commands
     preamble.md                            ← Feature preamble template
     test-modes/                            ← Lazy-loaded per-test-mode branches
-  commands/
-    speckit.verify.md
-    speckit.review.md
-    speckit.retrospect.md
-    speckit.status.md
-    speckit.context.md
-    speckit.test.md                        ← Standalone live test + debug command
-    speckit.code-review.md                 ← 5-dimension code review checklist
 ```
 
 ## Prerequisites
@@ -93,7 +83,6 @@ specify init <your-project-name> --integration claude
 cd <your-project-name>
 
 specify preset add --dev /path/to/ddd-clean-arch --priority 5
-specify extension add --dev /path/to/ddd-quality-gates --priority 5
 specify workflow add /path/to/ddd-workflow.yml
 
 cp /path/to/workflow/project-brief.md .
