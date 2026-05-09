@@ -17,57 +17,71 @@
 # The manual routing_critical and routing_secondary tables in preset.yml
 # are now ONLY for override purposes. If they exist and differ from the
 # derived values, a warning is printed.
+#
+# Bash 3.2 compatible (no declare -A associative arrays).
 
 set -euo pipefail
 
 WRITE_MODE=false
-if [ "${1:-}" = "--write" ]; then
-  WRITE_MODE=true
-fi
+PRESET_FILE=""
 
-PRESET_FILE="${2:?Usage: derive-routing-tables.sh [--write] <preset_file>}"
+# Parse arguments: --write is optional, preset_file is required
+for arg in "$@"; do
+  case "$arg" in
+    --write) WRITE_MODE=true ;;
+    *) PRESET_FILE="$arg" ;;
+  esac
+done
+
+if [ -z "$PRESET_FILE" ]; then
+  echo "Usage: derive-routing-tables.sh [--write] <preset_file>" >&2
+  exit 1
+fi
 
 if [ ! -f "$PRESET_FILE" ]; then
   echo "ERROR: preset file not found: $PRESET_FILE" >&2
   exit 1
 fi
 
-# ── Parse checks from preset.yml ─────────────────────────────────
-# Extract check_id, tier, and applies_to for each check.
-# Format: CHECK_ID|TIER|APPLIES_TO (pipe-separated, applies_to is comma-separated)
+TMPDIR_DERIVE=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_DERIVE"' EXIT
 
-declare -A CHECK_TIER
-declare -A CHECK_APPLIES
+# ── Parse checks from preset.yml ─────────────────────────────────
+# Store parsed data in temp files: one file per check.
+# Format per check file: "TIER\nAPPLIES_TO"
+
+CHECKS_DIR="$TMPDIR_DERIVE/checks"
+mkdir -p "$CHECKS_DIR"
 
 current_check=""
-current_tier=""
-current_applies=""
 
 while IFS= read -r line; do
   # Match check ID line (e.g., "  A:" or "  BC:")
   if echo "$line" | grep -qE '^\s{2}[A-Z][A-Z0-9]*:'; then
     current_check=$(echo "$line" | sed 's/^\s*\([A-Z][A-Z0-9]*\):.*/\1/')
-    CHECK_TIER["$current_check"]=""
-    CHECK_APPLIES["$current_check"]=""
+    echo "" > "$CHECKS_DIR/$current_check.tier"
+    echo "" > "$CHECKS_DIR/$current_check.applies"
     continue
   fi
 
   # Match tier line
   if [ -n "$current_check" ] && echo "$line" | grep -qE '^\s+tier:'; then
-    current_tier=$(echo "$line" | sed 's/.*tier:\s*//' | tr -d ' ')
-    CHECK_TIER["$current_check"]="$current_tier"
+    echo "$line" | sed 's/.*tier:\s*//' | tr -d ' ' > "$CHECKS_DIR/$current_check.tier"
     continue
   fi
 
   # Match applies_to line
   if [ -n "$current_check" ] && echo "$line" | grep -qE '^\s+applies_to:'; then
-    current_applies=$(echo "$line" | sed 's/.*applies_to:\s*\[\s*//' | sed 's/\s*\].*//' | tr -d ' ')
-    CHECK_APPLIES["$current_check"]="$current_applies"
+    # Handle both: applies_to: all  and  applies_to: [mod1, mod2]
+    echo "$line" | sed 's/.*applies_to:[ ]*//' | sed 's/^\[[ ]*//' | sed 's/[ ]*\]$//' | tr -d ' ' > "$CHECKS_DIR/$current_check.applies"
     continue
   fi
 
-  # Reset current_check on new top-level key
-  if echo "$line" | grep -qE '^\s{0,1}[a-z]' && [ -n "$current_check" ]; then
+  # Reset current_check on new top-level key (no leading whitespace, or minimal indent
+  # that is NOT a check sub-field like tier/applies_to/name).
+  # Check sub-fields (tier, applies_to, name, comments) are indented with 2+ spaces.
+  # Top-level keys (commands, checks, routing, cadence, etc.) start at column 0.
+  if [ -n "$current_check" ] && echo "$line" | grep -qE '^[a-z]'; then
     current_check=""
   fi
 done < "$PRESET_FILE"
@@ -76,17 +90,19 @@ done < "$PRESET_FILE"
 MODULE_TYPES="backend-domain backend-infra backend-api shared integration frontend-data frontend-feature e2e"
 
 # ── Derive routing tables ────────────────────────────────────────
-declare -A DERIVED_CRITICAL
-declare -A DERIVED_SECONDARY
+# Store derived results in temp files.
+ROUTING_DIR="$TMPDIR_DERIVE/routing"
+mkdir -p "$ROUTING_DIR"
 
 for module in $MODULE_TYPES; do
-  DERIVED_CRITICAL["$module"]=""
-  DERIVED_SECONDARY["$module"]=""
+  echo "" > "$ROUTING_DIR/critical_$module"
+  echo "" > "$ROUTING_DIR/secondary_$module"
 done
 
-for check_id in "${!CHECK_TIER[@]}"; do
-  tier="${CHECK_TIER[$check_id]}"
-  applies="${CHECK_APPLIES[$check_id]}"
+for check_file in "$CHECKS_DIR"/*.tier; do
+  check_id=$(basename "$check_file" .tier)
+  tier=$(cat "$CHECKS_DIR/$check_id.tier")
+  applies=$(cat "$CHECKS_DIR/$check_id.applies")
 
   [ -z "$tier" ] && continue
   [ -z "$applies" ] && continue
@@ -97,30 +113,34 @@ for check_id in "${!CHECK_TIER[@]}"; do
     if [ "$applies" = "all" ]; then
       is_applied=true
     else
-      IFS=',' read -ra modules <<< "$applies"
-      for m in "${modules[@]}"; do
+      OLD_IFS="$IFS"
+      IFS=','
+      for m in $applies; do
         m=$(echo "$m" | tr -d ' ')
         if [ "$m" = "$module" ]; then
           is_applied=true
           break
         fi
       done
+      IFS="$OLD_IFS"
     fi
 
     if [ "$is_applied" = true ]; then
       case "$tier" in
         critical)
-          if [ -n "${DERIVED_CRITICAL[$module]}" ]; then
-            DERIVED_CRITICAL["$module"]="${DERIVED_CRITICAL[$module]}, $check_id"
+          existing=$(cat "$ROUTING_DIR/critical_$module")
+          if [ -n "$existing" ]; then
+            echo "$existing, $check_id" > "$ROUTING_DIR/critical_$module"
           else
-            DERIVED_CRITICAL["$module"]="$check_id"
+            echo "$check_id" > "$ROUTING_DIR/critical_$module"
           fi
           ;;
         secondary)
-          if [ -n "${DERIVED_SECONDARY[$module]}" ]; then
-            DERIVED_SECONDARY["$module"]="${DERIVED_SECONDARY[$module]}, $check_id"
+          existing=$(cat "$ROUTING_DIR/secondary_$module")
+          if [ -n "$existing" ]; then
+            echo "$existing, $check_id" > "$ROUTING_DIR/secondary_$module"
           else
-            DERIVED_SECONDARY["$module"]="$check_id"
+            echo "$check_id" > "$ROUTING_DIR/secondary_$module"
           fi
           ;;
         # tertiary checks are NOT included in either table (deferred to code review)
@@ -134,13 +154,13 @@ echo "━━━ Derived Routing Tables ━━━"
 echo ""
 echo "routing_critical:"
 for module in $MODULE_TYPES; do
-  echo "  $module: [${DERIVED_CRITICAL[$module]}]"
+  echo "  $module: [$(cat "$ROUTING_DIR/critical_$module")]"
 done
 
 echo ""
 echo "routing_secondary:"
 for module in $MODULE_TYPES; do
-  echo "  $module: [${DERIVED_SECONDARY[$module]}]"
+  echo "  $module: [$(cat "$ROUTING_DIR/secondary_$module")]"
 done
 
 # ── Compare with existing (if --write not used) ─────────────────
@@ -172,11 +192,12 @@ echo "━━━ Writing to $PRESET_FILE ━━━"
 # Build the new routing tables as YAML strings
 new_critical=""
 for module in $MODULE_TYPES; do
-  checks="${DERIVED_CRITICAL[$module]}"
+  checks=$(cat "$ROUTING_DIR/critical_$module")
   # Format as YAML list
-  IFS=',' read -ra check_list <<< "$checks"
   formatted=""
-  for c in "${check_list[@]}"; do
+  OLD_IFS="$IFS"
+  IFS=','
+  for c in $checks; do
     c=$(echo "$c" | tr -d ' ')
     [ -z "$c" ] && continue
     if [ -n "$formatted" ]; then
@@ -185,16 +206,18 @@ for module in $MODULE_TYPES; do
       formatted="$c"
     fi
   done
+  IFS="$OLD_IFS"
   new_critical="$new_critical  $module:   [$formatted]
 "
 done
 
 new_secondary=""
 for module in $MODULE_TYPES; do
-  checks="${DERIVED_SECONDARY[$module]}"
-  IFS=',' read -ra check_list <<< "$checks"
+  checks=$(cat "$ROUTING_DIR/secondary_$module")
   formatted=""
-  for c in "${check_list[@]}"; do
+  OLD_IFS="$IFS"
+  IFS=','
+  for c in $checks; do
     c=$(echo "$c" | tr -d ' ')
     [ -z "$c" ] && continue
     if [ -n "$formatted" ]; then
@@ -203,6 +226,7 @@ for module in $MODULE_TYPES; do
       formatted="$c"
     fi
   done
+  IFS="$OLD_IFS"
   new_secondary="$new_secondary  $module:    [$formatted]
 "
 done

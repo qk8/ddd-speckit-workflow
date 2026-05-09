@@ -82,9 +82,12 @@ read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$
     /^## TASK-/ {
       if (in_task && status == "IN_PROGRESS") {
         if (ip_count > 0) ip = ip ","
-        ip = ip ip_count
+        ip = ip task_id
       }
       task_idx++
+      # Extract task ID from header: "## TASK-1" -> "TASK-1"
+      task_id = $0
+      sub(/^## /, "", task_id)
       in_task = 1
       status = ""
       next
@@ -98,7 +101,7 @@ read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$
     in_task && status == "DONE" { done++ }
     in_task && status == "TODO" { todo++ }
     in_task && status == "IN_PROGRESS" {
-      if (first_ip == 0) { first_ip = 1; first = ip_count }
+      if (first_ip == 0) { first_ip = 1; first = task_id }
       ip_count++
     }
     in_task && status == "ABANDONED" { abandoned++ }

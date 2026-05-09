@@ -43,6 +43,13 @@ Then RUN THE FULL REGRESSION SUITE:
     - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
 
 INLINE CORRECTION LOOP (if tests fail)
+  MAX_CORRECTION_ITERATIONS = 5. If tests still fail after 5 correction attempts:
+    STOP. Print: "ESCALATION: 5 correction iterations exhausted without passing tests."
+    Print: "Review $TEST_OUTPUT_FILE. Mark task for human review."
+    Mark task for human review in tasks.md (add note: requires human review).
+    Proceed to next task.
+  Track each correction attempt. Increment before each fix.
+
   BEFORE classifying the failure, run the independent diagnostic:
     bash scripts/diagnostic-classifier.sh \
       "$(bash scripts/find-first-feature.sh)" \
