@@ -1,7 +1,28 @@
 Read CLAUDE.md fully.
 
-Determine the current feature: scan .specify/specs/ and find the feature
-whose tasks.md contains the first TODO task.
+# ── Single-task mode (Fix 13: parallel batch support) ─────────
+# If input.args starts with "--single-task TASK-N", process ONLY
+# that specific task. This enables true parallel batch execution
+# where each task gets its own prompt call.
+#
+# Usage: speckit.write-test --single-task TASK-3
+#
+# In single-task mode:
+#   - Skip the PARALLEL MODE section entirely
+#   - Use the explicitly specified task ID instead of auto-detecting
+#   - Process only that one task's test file
+
+# ── Determine target task ──────────────────────────────────────
+if input.args starts with "--single-task ":
+  TARGET_TASK_ID = extract the task ID from input.args
+  Determine the current feature: scan .specify/specs/ and find the feature
+  whose tasks.md contains the first TODO task.
+  But override: use TARGET_TASK_ID instead of the first TODO task.
+else:
+  Determine the current feature: scan .specify/specs/ and find the feature
+  whose tasks.md contains the first TODO task.
+  TARGET_TASK_ID = auto-detected task ID
+
 Read its plan.md and tasks.md.
 
 CHECKPOINT RECOVERY (read .workflow-state.json first):
@@ -51,7 +72,7 @@ REVISION HISTORY:
   and rejected. Read the last 3 entries only. Do not attempt to read the entire file.
 
 ━━ TASK PLAN ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Task: TASK-[N] — [title]
+Task: ${TARGET_TASK_ID:-TASK-[N]} — [title]
 Type: [type]
 Test file to create: [derived from §13 for this type — path and tool]
 Impl files to create: [from Scope.Creates]

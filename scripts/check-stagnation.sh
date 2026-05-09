@@ -101,7 +101,7 @@ else
   TMPFILE=$(mktemp)
   echo "$CURRENT_DONE" > "$TMPFILE"
   mv "$TMPFILE" "$STATE_FILE"
-  if [ "$NEW_CONSEC" -ge 3 ]; then
+  if [ "$NEW_CONSEC" -ge 2 ]; then
     # Detect revision-only loop: stagnation detected but done_count hasn't changed
     if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
       echo "REVISION_ONLY=true"

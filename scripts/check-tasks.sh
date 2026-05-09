@@ -63,22 +63,63 @@ fi
 
 TASKS_FILE="$FEATURE_DIR/tasks.md"
 
-# Sanitize: strip \r (Windows line endings) and trim leading/trailing whitespace.
-# This ensures grep patterns work on files from any editor or OS.
+# Sanitize: strip \r (Windows line endings) only.
+# Do NOT strip leading whitespace — indented scope blocks must be preserved.
 SANITIZED_FILE=$(mktemp)
 trap 'rm -f "$SANITIZED_FILE"' EXIT
-sed 's/\r$//' "$TASKS_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > "$SANITIZED_FILE"
+sed 's/\r$//' "$TASKS_FILE" > "$SANITIZED_FILE"
 TASKS_FILE="$SANITIZED_FILE"
 
-DONE_COUNT=$(grep -c "^Status: DONE$" "$TASKS_FILE" || true)
-TODO_COUNT=$(grep -c "^Status: TODO$" "$TASKS_FILE" || true)
-# Report ALL IN_PROGRESS tasks (comma-separated), not just the first one.
-# Multiple IN_PROGRESS tasks indicate workflow corruption (concurrent sessions).
-IN_PROGRESS_ALL=$(grep -B1 "^Status: IN_PROGRESS$" "$TASKS_FILE" 2>/dev/null | grep "^## TASK" | sed 's/^## //' | tr '\n' ',' | sed 's/,$//' || true)
+# ── Block-aware parsing (Fixes 11 & 15) ──────────────────────
+# Use awk to parse: only match Status lines that appear after a
+# "## TASK-" header and before the next "## TASK-" or "###" header.
+# This avoids false positives from Status-like text in task titles,
+# scope blocks, or description paragraphs.
+#
+# Also outputs IN_PROGRESS_ALL as comma-separated task indices.
+read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$(
+  awk '
+    /^## TASK-/ {
+      if (in_task && status == "IN_PROGRESS") {
+        if (ip_count > 0) ip = ip ","
+        ip = ip ip_count
+      }
+      task_idx++
+      in_task = 1
+      status = ""
+      next
+    }
+    /^###/ { in_task = 0 }
+    in_task && /^Status:/ {
+      s = $0
+      sub(/^Status:[[:space:]]*/, "", s)
+      status = s
+    }
+    in_task && status == "DONE" { done++ }
+    in_task && status == "TODO" { todo++ }
+    in_task && status == "IN_PROGRESS" {
+      if (first_ip == 0) { first_ip = 1; first = ip_count }
+      ip_count++
+    }
+    in_task && status == "ABANDONED" { abandoned++ }
+    END {
+      if (done == "") done = 0
+      if (todo == "") todo = 0
+      if (abandoned == "") abandoned = 0
+      if (first_ip == 0) first = ""
+      printf "%d %d %d %d %s %s\n", done, todo, abandoned, task_idx, first, ip
+    }
+  ' "$SANITIZED_FILE"
+)"
+
+TOTAL_TASKS=$(grep -c "^## TASK-" "$SANITIZED_FILE" || true)
+# Ensure numeric
+DONE_COUNT=${DONE_COUNT:-0}
+TODO_COUNT=${TODO_COUNT:-0}
+ABANDONED_COUNT=${ABANDONED_COUNT:-0}
+IN_PROGRESS_ALL=${IN_PROGRESS_ALL:-}
 # Keep IN_PROGRESS as first one for backward compatibility with workflow conditions
 IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
-ABANDONED_COUNT=$(grep -c "^Status: ABANDONED$" "$TASKS_FILE" || true)
-TOTAL_TASKS=$(grep -c "^## TASK-" "$TASKS_FILE" || true)
 
 if [ -n "$IN_PROGRESS_ALL" ]; then
   if echo "$IN_PROGRESS_ALL" | grep -q ','; then

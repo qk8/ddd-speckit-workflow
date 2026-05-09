@@ -753,6 +753,16 @@ steps:
           "traceability_check"
       - goto: abort
 
+  # ── Fix 10: Auto-derive routing tables from checks[].tier ─────
+  # Runs after plan is complete, before implementation starts.
+  # Derives routing_critical and routing_secondary from the single
+  # source of truth: checks[].tier + checks[].applies_to.
+  - id: derive_routing
+    type: shell
+    command: >
+      bash scripts/derive-routing-tables.sh --write
+      "$(cd "$(dirname "$0")" && pwd)/ddd-clean-arch/preset.yml"
+
   # ── PHASE 5: IMPLEMENT LOOP (DAG-structured) ──────────────────
   # Linear flow: no goto jumps within the iteration.
   # Each step flows to the next. Loops are handled by the while wrapper.
@@ -776,13 +786,35 @@ steps:
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
 
+      # ── Fix 2: Snapshot before each task ──────────────────────
+      # Creates a file hash snapshot for rollback on verification failure.
+      # continue_on_error: true — workflow doesn't break if git is unavailable.
+      - id: pre_task_snapshot
+        type: shell
+        command: >
+          bash scripts/check-point.sh snapshot
+          "{{ steps.check_remaining.output.feature_dir }}"
+          "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
+          "{{ steps.check_remaining.output.feature_dir }}/../.."
+        continue_on_error: true
+
+      # ── Fix 5: Spec revision limit check ──────────────────────
+      # Prevents infinite spec-revise loops. Default max is 2.
+      - id: check_spec_revision_limit
+        type: shell
+        command: >
+          bash scripts/check-spec-revisions.sh --dry-run
+          "{{ steps.check_remaining.output.feature_dir }}"
+
       # ── Issue J: Handle spec_revision tasks ───────────────────
       # If the current task is a spec_revision type, route to
       # speckit.spec-revise instead of the normal implement flow.
+      # Only runs if spec revisions haven't been exhausted.
       - id: check_spec_revision
         type: if
         condition: >
-          {{ steps.check_remaining.output.todo_task_type == 'spec_revision' }}
+          {{ steps.check_remaining.output.todo_task_type == 'spec_revision' }} and
+          {{ steps.check_spec_revision_limit.output.SPEC_REVISION_EXHAUSTED != 'true' }}
         then:
           - id: run_spec_revise
             type: prompt
@@ -795,6 +827,12 @@ steps:
                 Read pending-learnings.md, identify spec corrections needed,
                 create/update plan.md and spec.md, and add fix tasks if needed.
                 After revision, the implement loop will re-process affected tasks.
+          # ── Fix 5: Increment spec revision counter ──────────────
+          - id: record_spec_revision
+            type: shell
+            command: >
+              bash scripts/check-spec-revisions.sh
+              "{{ steps.check_remaining.output.feature_dir }}"
           - id: validate_spec_revision_fixes
             type: shell
             command: >
@@ -1050,13 +1088,14 @@ steps:
         integration: claude
         input:
           args: >
-            Run with --parallel flag to batch independent tasks.
-            In parallel mode: find all TODO tasks whose dependencies are DONE,
-            group them by dependency level, and write tests for each task in the
-            same batch sequentially. After the batch, write the batch task list
-            to .artifacts/batch_tasks.txt and report completion.
-            In single-task mode (no --parallel): write tests for only the first TODO task.
-            Always check Depends-on before starting.
+            Discover the current batch: find all TODO tasks whose Depends-on
+            tasks are all DONE. Process each task in the batch sequentially
+            (write tests for TASK-N, then TASK-N+1, etc.). After processing
+            all tasks in the batch, write the batch task list to
+            .artifacts/batch_tasks.txt (format: "TASK-1, TASK-2, ...") and
+            print "Batch complete: [N] tasks done."
+            If no batch can be formed (no TODO tasks with all deps met), stop.
+            Always check Depends-on before starting each task.
             Use the prompt context at .artifacts/prompts/[task_id]/context.md
             if available — it contains targeted plan sections for this task.
 
@@ -1068,10 +1107,10 @@ steps:
         input:
           args: >
             Implement the code to make the tests written by the previous step pass.
-            In parallel mode (if .artifacts/batch_tasks.txt exists):
+            If .artifacts/batch_tasks.txt exists (batch mode from write-test):
               implement each task in the batch sequentially.
               After the batch, remove .artifacts/batch_tasks.txt.
-            In single-task mode: implement only the first TODO task.
+            Otherwise: implement only the first TODO task.
             Always check Depends-on before starting.
 
       - id: implement_verify
@@ -1096,7 +1135,7 @@ steps:
             type: shell
             command: >
               bash scripts/quick-drift-check.sh
-              "{{ steps.check_remaining.output.feature_dir }}"
+              "{{ steps.check_remaining.output.feature_dir }}" || true
 
       # ── Post-batch consistency (after parallel batches) ─────────
       # Lightweight check for constraint drift + API surface consistency
@@ -1189,7 +1228,7 @@ steps:
               - id: revise-mark-in-progress-acceptance
                 type: shell
                 command: >
-                  bash scripts/set-task-status.sh
+                  bash scripts/lock-task-write.sh
                   "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
                   IN_PROGRESS
                   "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
@@ -1236,7 +1275,7 @@ steps:
               - id: revise-mark-in-progress-checks
                 type: shell
                 command: >
-                  bash scripts/set-task-status.sh
+                  bash scripts/lock-task-write.sh
                   "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
                   IN_PROGRESS
                   "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
@@ -1295,7 +1334,7 @@ steps:
               - id: revise-mark-in-progress-tdd
                 type: shell
                 command: >
-                  bash scripts/set-task-status.sh
+                  bash scripts/lock-task-write.sh
                   "{{ steps.check_remaining.output.feature_dir }}/tasks.md"
                   IN_PROGRESS
                   "{{ steps.check_remaining.output.todo_task_id || 'unknown' }}"
@@ -1771,14 +1810,14 @@ steps:
         type: shell
         command: >
           # Run E2E tests against staging
-          E2E_BASE_URL=http://staging.example.com \
+          E2E_BASE_URL=${DEPLOY_STAGING_URL:-http://staging.example.com} \
           npm run test:e2e 2>&1 || echo "E2E tests completed with some failures"
 
       - id: health_check
         type: shell
         command: >
           # Verify health endpoints
-          HEALTH=$(curl -sf --max-time 10 http://staging.example.com/health 2>&1 || echo "UNHEALTHY")
+          HEALTH=$(curl -sf --max-time 10 ${DEPLOY_STAGING_URL:-http://staging.example.com}/health 2>&1 || echo "UNHEALTHY")
           echo "HEALTH_CHECK: $HEALTH"
 
       - id: migration_verify

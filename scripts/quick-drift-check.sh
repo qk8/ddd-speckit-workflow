@@ -138,11 +138,16 @@ echo "QUICK DRIFT CHECK: $SCANNED files scanned, $VIOLATIONS violations"
 if [ "$VIOLATIONS" -gt 0 ]; then
   echo "DRIFT_DETECTED=true"
   echo "DRIFT_FAIL_COUNT=$VIOLATIONS"
+  echo "QUICK_DRIFT_DETECTED=true"
   echo "QUICK_DRIFT=true"
   echo "  WARNING: Review violations above. The full check Z will run at the next retro."
-  exit 1
+else
+  echo "DRIFT_DETECTED=false"
+  echo "QUICK_DRIFT_DETECTED=false"
+  echo "DRIFT_CLEAN=true"
+  echo "QUICK_DRIFT=true"
+  echo "  All quick checks passed."
 fi
-echo "DRIFT_CLEAN=true"
-echo "QUICK_DRIFT=true"
-echo "  All quick checks passed."
+# Always exit 0 — the workflow reads DRIFT_DETECTED to decide next steps.
+# This prevents set -e from aborting the iteration on drift violations.
 exit 0

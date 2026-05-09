@@ -75,6 +75,7 @@ if [ "$INCREMENTAL" = true ]; then
           ;;
         *)
           # Unknown framework — fall through to full run
+          echo "TEST_INCREMENTAL: UNKNOWN FRAMEWORK — falling back to full test suite" >&2
           INCREMENTAL=false
           ;;
       esac

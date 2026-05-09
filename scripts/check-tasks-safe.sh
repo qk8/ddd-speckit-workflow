@@ -250,7 +250,7 @@ if [ -z "$OUTPUT" ]; then
   source scripts/cadence-defaults.sh
   set -e
   cat <<DEFAULTS
-has_todo=false
+has_todo=true
 done_count=0
 todo_count=0
 in_progress=

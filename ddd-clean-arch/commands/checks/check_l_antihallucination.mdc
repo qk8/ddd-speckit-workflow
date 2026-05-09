@@ -3,48 +3,44 @@ check_id: L
 name: Anti-Hallucination Check
 applies_to: all
 ---
-[L] ANTI-HALLUCINATION CHECK
-  Before committing, verify every external library import and API call:
+[L] ANTI-HALLUCINATION CHECK — DETERMINISTIC PRE-SCAN + VERIFICATION
 
-  1. For every import from a third-party library:
-     - Confirm the package exists in the project's dependencies
-     - Confirm the imported symbol (function/class/constant) actually
-       exists in that package at the version specified in package.json
-       (or equivalent)
-     - If unsure: stop, write the exact import statement, and verify
-       against the official documentation URL
+  STEP 1 — TRUST THE DETERMINISTIC PRE-SCAN
+  The script `scripts/run-antihallucination.sh` has already run
+  before this prompt was generated. It performs real verification:
+    - Checks imports against package.json / requirements.txt / pyproject.toml
+    - Verifies symbol existence at the specified version
+    - Reports actual errors with file:line references
 
-  2. For every method call on a third-party library:
-     - Confirm the method signature matches the package's documented
-       API (parameter types, return type)
-     - Do NOT assume a method exists because a similar one does
+  READ the deterministic check output above.
+  DO NOT attempt to self-verify imports.
+  DO NOT re-check imports that the script already verified.
+  If the script reported violations: fix ONLY those specific violations.
 
-  3. For every HTTP API call:
-     - Confirm the endpoint path matches the api-contract.yaml
-     - Confirm the request/response shapes match the contract schema
+  STEP 2 — PROJECT-DEFINED CLASS VERIFICATION (Issue F)
+  For every method call on a project-defined class (NOT third-party):
+    - Confirm the method name exists on that class (check plan.md §4, §5, §6)
+    - Confirm the method signature (parameter count and types) matches
+      the interface definition in backend-interfaces.[ext] or the
+      implementation in a previously completed task
+    - For repository methods: verify the return type matches the
+      repository_interface definition in plan.md §4
+    - For use case methods: verify the input/output types match
+      the use case class definition in plan.md §6
 
-  4. For every database query:
-     - Confirm table/column names match §12 TABLE definitions
-     - Confirm parameterized queries are used (no string concatenation)
+  STEP 3 — API ENDPOINT VERIFICATION
+  For API endpoint tasks (backend-api type):
+    - Verify every method call in the controller/handler matches
+      an endpoint defined in api-contract.yaml for that specific path+method
+    - Verify the use case class called by the controller exists
+      and has the exact method name referenced
+    - Verify the response mapping uses the exact field names from
+      the api-contract.yaml response schema
 
-  # ── Issue F: Method signature verification ────────────────────
-  5. For every method call on a project-defined class (NOT third-party):
-     - Confirm the method name exists on that class (check plan.md §4, §5, §6)
-     - Confirm the method signature (parameter count and types) matches
-       the interface definition in backend-interfaces.[ext] or the
-       implementation in a previously completed task
-     - For repository methods: verify the return type matches the
-       repository_interface definition in plan.md §4
-     - For use case methods: verify the input/output types match
-       the use case class definition in plan.md §6
-
-  6. For API endpoint tasks (backend-api type):
-     - Verify every method call in the controller/handler matches
-       an endpoint defined in api-contract.yaml for that specific path+method
-     - Verify the use case class called by the controller exists
-       and has the exact method name referenced
-     - Verify the response mapping uses the exact field names from
-       the api-contract.yaml response schema
+  STEP 4 — DATABASE QUERY SAFETY
+  For every database query:
+    - Confirm table/column names match §12 TABLE definitions
+    - Confirm parameterized queries are used (no string concatenation)
 
   If ANY verification fails: fix the code. Do NOT use @ts-ignore,
   eslint-disable, or equivalent to suppress errors.

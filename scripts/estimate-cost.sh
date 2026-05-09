@@ -200,3 +200,32 @@ cat > "$ARTIFACTS_DIR/cost-estimate.json" <<EOF
 EOF
 
 echo "Cost estimate saved to $ARTIFACTS_DIR/cost-estimate.json"
+
+# ── Budget Enforcement ────────────────────────────────────────
+# If MAX_BUDGET is set, compare estimated cost against it.
+# Exit code 2 = exceeded budget. Exit code 0 = within budget.
+# COST_MODEL selects pricing: sonnet (default), opus, haiku.
+
+BUDGET="${MAX_BUDGET:-}"
+COST_MODEL="${COST_MODEL:-sonnet}"
+
+# Parse cost model pricing (per 1M tokens, Claude API pricing)
+case "$COST_MODEL" in
+  sonnet) INPUT_PRICE=3; OUTPUT_PRICE=15 ;;
+  opus)   INPUT_PRICE=15; OUTPUT_PRICE=75 ;;
+  haiku)  INPUT_PRICE=0.8; OUTPUT_PRICE=4 ;;
+  *)      INPUT_PRICE=3; OUTPUT_PRICE=15 ;;
+esac
+
+TOTAL_COST_ACTUAL=$(echo "scale=4; $TOTAL_TOKENS * ($INPUT_PRICE + $OUTPUT_PRICE) / 1000000" | bc 2>/dev/null || echo "0")
+
+if [ -n "$BUDGET" ]; then
+  OVER_BUDGET=$(echo "$TOTAL_COST_ACTUAL > $BUDGET" | bc 2>/dev/null || echo "0")
+  if [ "$OVER_BUDGET" = "1" ]; then
+    echo ""
+    echo "BUDGET EXCEEDED: Estimated cost \$$TOTAL_COST_ACTUAL exceeds budget \$$BUDGET"
+    echo "To proceed: set COST_MODEL=opus|haiku or increase MAX_BUDGET"
+    exit 2
+  fi
+  echo "BUDGET OK: Estimated cost \$$TOTAL_COST_ACTUAL is within budget \$$BUDGET"
+fi
