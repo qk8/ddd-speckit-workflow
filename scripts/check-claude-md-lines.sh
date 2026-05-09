@@ -7,7 +7,7 @@ set -euo pipefail
 
 CLAUDE_MD=".claude/CLAUDE.md"
 HARD_MODE=false
-LIMIT=100
+LIMIT=150
 
 # Parse arguments
 for arg in "$@"; do

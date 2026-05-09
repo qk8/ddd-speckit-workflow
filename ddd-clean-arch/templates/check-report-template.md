@@ -1,5 +1,6 @@
 Checks:
   [A] Arch tests:              PASS
+  [AS] API surface:            PASS | DRIFT — [details]
   [BC] New+Regression:         PASS ([N] new tests, [total N] total, 0 new failures)
   [D] Linter:                  PASS
   [E] Dep scan:                PASS | BLOCKED — [details]
@@ -13,10 +14,12 @@ Checks:
   [M] Failure modes:           PASS | PARTIAL — [N] missed | MISSING — [details]
   [N] Cross-cutting:           PASS | GAP — [details] | N/A
   [O] Security:                PASS | FAIL — [details] | N/A
+  [OW] OWASP basic:            PASS | WARN — [details] | N/A
   [P] Test quality:            PASS | [N] issues — [details] | N/A
   [Q] Resilience:              PASS | [N] scenarios tested | [N] added
   [R] Quantitative:            PASS | [details] | N/A
   [S] Property-based:          PASS | [N] weak, [N] missed | N/A
   [T] Adversarial:             PASS | [N] covered, [N] missed | N/A
   [U] Session/token:           PASS | [N] covered, [N] missed | N/A
+  [US] Session security auto:  PASS | WARN — [details] | N/A
   [Z] Constraint drift:        PASS | FAIL — [details] | N/A

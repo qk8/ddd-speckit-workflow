@@ -1,0 +1,37 @@
+---
+check_id: AS
+name: API Surface Consistency
+applies_to: all
+---
+[AS] API SURFACE CONSISTENCY — ALL task types
+  After each task, verify that the API surface remains consistent across
+  all previously implemented tasks. This catches API drift between batches.
+
+  1. Method signature consistency:
+     - For any interface or class modified by this task, verify that
+       all callers in previously completed tasks still compile/run
+     - No method renamed without updating all call sites
+     - No parameter type changed without updating all call sites
+
+  2. Domain event consistency:
+     - For any domain event published by this task, verify that all
+       event handlers in previously completed tasks accept the event
+       shape defined in plan.md §4
+     - No event field removed or renamed without updating all handlers
+
+  3. Repository interface consistency:
+     - For any repository method modified by this task, verify that
+       all use case classes calling this repository still match the
+       method signature defined in plan.md §4
+     - No return type changed without updating all consumers
+
+  4. API contract consistency (backend-api tasks):
+     - For any endpoint modified by this task, verify that the
+       api-contract.yaml response shape matches what the frontend
+       interface types expect (plan.md §8 + frontend-interfaces)
+     - No response field removed or renamed without updating both sides
+
+  For each item: PASS, FAIL, or N/A.
+  If any FAIL: fix the inconsistency immediately. Do not proceed.
+
+  Print: "API SURFACE CONSISTENCY: [N] checks passed, [N] issues fixed"

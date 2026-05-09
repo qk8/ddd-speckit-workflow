@@ -23,13 +23,9 @@
 #   L:  scripts/run-antihallucination.sh
 #   R:  scripts/run-quantitative.sh
 #   Z:  scripts/quick-drift-check.sh  (already exists)
-#   AS: scripts/api-surface-check.sh   (new: cross-task API consistency)
-#   OW: scripts/run-owasp-basic.sh      (new: OWASP Top 10 basic automated checks)
-#   US: scripts/run-session-security.sh (new: session & token security automated checks)
+#   AS: scripts/api-surface-check.sh   (cross-task API consistency)
 #
 # Non-deterministic (stay as Claude prompts): G, H, J, M, N, O, P, Q, S, T, U, Z(full)
-#   Note: OW and US are automated FIRST PASS supplements to checks O and U.
-#   They do NOT replace the full LLM adversarial review.
 
 set -euo pipefail
 
@@ -110,8 +106,6 @@ get_check_script() {
     R)              echo "run-quantitative.sh" ;;
     Z)              echo "quick-drift-check.sh" ;;
     AS)             echo "api-surface-check.sh" ;;
-    OW)             echo "run-owasp-basic.sh" ;;
-    US)             echo "run-session-security.sh" ;;
     *)              echo "" ;;
   esac
 }

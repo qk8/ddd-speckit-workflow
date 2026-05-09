@@ -1,0 +1,28 @@
+---
+check_id: US
+name: Session & Token Security Automated
+applies_to: [backend-api]
+---
+[US] SESSION & TOKEN SECURITY AUTOMATED CHECK — supplementary to [U] Session & Token Security
+  This is a lightweight automated supplement to check [U]. It does NOT
+  replace the full LLM adversarial review in [U].
+
+  1. Search source code for token handling patterns:
+     - JWT tokens stored in localStorage → flag (should be httpOnly cookie)
+     - Token values in console.log or error messages → flag
+     - Tokens sent in URL query parameters → flag
+
+  2. Verify cookie configuration:
+     - HttpOnly flag set on session cookies
+     - Secure flag set on session cookies (for production)
+     - SameSite attribute configured (Strict or Lax)
+
+  3. Verify token validation:
+     - alg: none attack is rejected (token with "alg":"none" → 401)
+     - Token expiry is checked before acceptance
+     - Refresh tokens are rotated on use
+
+  For each item: PASS, FAIL, or N/A.
+  For every FAIL: fix the issue. Do not proceed until all PASS or N/A.
+
+  Print: "SESSION & TOKEN SECURITY AUTOMATED: [N] checks passed, [N] issues fixed"

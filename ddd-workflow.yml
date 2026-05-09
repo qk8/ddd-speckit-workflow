@@ -375,7 +375,7 @@ steps:
           Format: KEY=placeholder_value (one per line, no blank lines between entries).
           Commit this file. Do NOT commit .env or .env.local.
 
-        CLAUDE.md (update, advisory max 100 lines):
+        CLAUDE.md (update, advisory max 150 lines):
           Use ddd-clean-arch/templates/claude-md-template.md as the structure.
           Fill in every placeholder from plan.md:
             [PROJECT_NAME]       → from project-brief.md Project name
@@ -388,8 +388,8 @@ steps:
             Test conventions     → from §13 (all frameworks, locations, runners)
             Regression commands  → from §13 regression_command (all three)
             Definition of done   → from §17 verbatim
-          Target ≤100 lines. This is advisory — do not cut §16 or §17.
-          If the file exceeds 100 lines, condense the Architecture and Module
+          Target ≤150 lines. This is advisory — do not cut §16 or §17.
+          If the file exceeds 150 lines, condense the Architecture and Module
           boundaries sections, but never omit §16 or §17.
 
         scripts/ci-local.sh (fill in the COMMANDS section):

@@ -1,0 +1,28 @@
+---
+check_id: OW
+name: OWASP Top 10 Basic Automated
+applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
+---
+[OW] OWASP TOP 10 BASIC AUTOMATED CHECK - supplementary to [O] Security Hardening
+  This is a lightweight automated supplement to check [O]. It does NOT
+  replace the full LLM adversarial review in [O].
+
+  1. Search source code for common OWASP patterns:
+     - Hardcoded secrets/passwords/API keys -> flag any matches
+     - SQL string concatenation (not parameterized) -> flag any matches
+     - eval(), exec(), or dynamic function calls -> flag any matches
+     - InnerHTML, document.write(), or equivalent DOM sinks -> flag any matches
+
+  2. For backend-api tasks:
+     - Verify CORS configuration does not include wildcard (*) origins
+     - Verify rate limiting is configured on auth endpoints
+     - Verify CSRF protection is enabled if using cookie-based auth
+
+  3. For frontend-feature tasks:
+     - Verify CSP headers are configured
+     - Verify no sensitive data stored in localStorage
+
+  For each item: PASS, FAIL, or N/A.
+  For every FAIL: fix the issue. Do not proceed until all PASS or N/A.
+
+  Print: "OWASP BASIC: [N] checks passed, [N] issues fixed"

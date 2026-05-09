@@ -1,6 +1,6 @@
 # [PROJECT_NAME]
 # CLAUDE.md — read this at the start of every session.
-# Target max 100 lines. Every line derived from plan.md. No invention.
+# Target max 150 lines. Every line derived from plan.md. No invention.
 
 ## What this is
 [2 sentences from plan.md §1 requirements scope and out_of_scope.
