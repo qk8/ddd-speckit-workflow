@@ -71,6 +71,13 @@ REVISION HISTORY:
   prior revise cycles. Do not repeat fixes that were already tried
   and rejected. Read the last 3 entries only. Do not attempt to read the entire file.
 
+━━ KNOWN PATTERNS (from error memory) ━━━━━━━━━━━━━━━━━━━━━━━━━
+Run: bash scripts/error-memory.sh read "$(bash scripts/find-first-feature.sh)"
+This prints any known correction patterns, abandoned task reasons,
+and drift patterns from recent tasks. Apply these learnings to
+avoid repeating past mistakes on this task.
+If no patterns are printed: no prior learnings — proceed normally.
+
 ━━ TASK PLAN ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Task: ${TARGET_TASK_ID:-TASK-[N]} — [title]
 Type: [type]

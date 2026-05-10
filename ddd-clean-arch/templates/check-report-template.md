@@ -1,5 +1,6 @@
 Checks:
   [A] Arch tests:              PASS
+  [AC] Acceptance coverage:     PASS | NEEDS_REVIEW — [N] | MISSING — [N]
   [AS] API surface:            PASS | DRIFT — [details]
   [BC] New+Regression:         PASS ([N] new tests, [total N] total, 0 new failures)
   [D] Linter:                  PASS

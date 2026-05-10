@@ -138,19 +138,25 @@ checks:
     # consistent across all implemented tasks. Flags API drift between batches.
     tier: critical
     applies_to: all
+  AC:
+    name: "Acceptance Criteria Coverage"
+    # AC = DETERMINISTIC: verifies every acceptance criterion in tasks.md
+    # has at least one matching test file. Uses keyword/pattern matching.
+    tier: secondary
+    applies_to: all
 
 # Derived routing table — auto-derived from checks[].applies_to.
 # Regenerate with: scripts/derive-routing.sh
 # Drift from derived values is flagged by: scripts/validate-routing-table.sh
 routing:
-  backend-domain:   [A, BC, D, E, I, L, M, P, S, Z]
-  backend-infra:    [A, BC, D, E, F, I, L, M, O, P, Q, S, Z]
-  backend-api:      [A, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z]
-  shared:           [BC, D, E, I, K, L, M, N, P, R, S, T, Z]
-  integration:      [BC, D, I, L, M, P, S, Z]
-  frontend-data:    [BC, D, G, I, L, M, O, P, S, Z]
-  frontend-feature: [BC, D, H, I, J, L, M, O, P, S, Z]
-  e2e:              [BC, D, H, I, L, M, P, S, Z]
+  backend-domain:   [A, AC, BC, D, E, I, L, M, P, S, Z]
+  backend-infra:    [A, AC, BC, D, E, F, I, L, M, O, P, Q, S, Z]
+  backend-api:      [A, AC, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z]
+  shared:           [AC, BC, D, E, I, K, L, M, N, P, R, S, T, Z]
+  integration:      [AC, BC, D, I, L, M, P, S, Z]
+  frontend-data:    [AC, BC, D, G, I, L, M, O, P, S, Z]
+  frontend-feature: [AC, BC, D, H, I, J, L, M, O, P, S, Z]
+  e2e:              [AC, BC, D, H, I, L, M, P, S, Z]
 
 # Routing tables by tier — which checks apply to each module type per tier.
 # routing_critical: checks that run on every task execution.
@@ -166,14 +172,14 @@ routing_critical:
   e2e:              [AS, BC, D, I, L, Z]
 
 routing_secondary:
-  backend-domain:   [E, M]
-  backend-infra:    [E, F, M, Q]
-  backend-api:      [E, G, J, K, M, N, R, T]
-  shared:           [E, K, M, N, R, T]
-  integration:      [M]
-  frontend-data:    [G, M, O]
-  frontend-feature: [J, M, O]
-  e2e:              [M]
+  backend-domain:   [AC, E, M]
+  backend-infra:    [AC, E, F, M, Q]
+  backend-api:      [AC, E, G, J, K, M, N, R, T]
+  shared:           [AC, E, K, M, N, R, T]
+  integration:      [AC, M]
+  frontend-data:    [AC, G, M, O]
+  frontend-feature: [AC, J, M, O]
+  e2e:              [AC, M]
 
 # Adaptive retrospective cadence — single source of truth.
 # check-tasks.sh reads these values; speckit.retrospect.md references them.
@@ -202,8 +208,8 @@ cadence:
 # Use project-brief.md's project_profile field to select.
 check_profiles:
   minimal: [A, BC, D, I, L, Z]
-  standard: [A, BC, D, I, L, Z, K, M]
-  full: [A, BC, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z, AS]
+  standard: [A, AC, BC, D, I, L, Z, K, M]
+  full: [A, AC, BC, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, Z, AS]
 
 # Auto-approve human gates when deterministic checks pass.
 # When enabled, acceptance/quality/TDD gates skip to approve

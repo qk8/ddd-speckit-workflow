@@ -52,7 +52,7 @@ Run the deterministic check engine:
 
   bash scripts/check-runner.sh "[feature_dir]" "[task_type]"
 
-This executes all deterministic checks (A, AS, BC, D, E, F, I, K, L, O, OW, R, US, Z) in parallel.
+This executes all deterministic checks (A, AC, AS, BC, D, E, F, I, K, L, O, OW, R, US, Z) in parallel.
 Results are written to .artifacts/check-results/<check-id>.result (PASS/FAIL).
 
 If check-runner.sh exits 0: all deterministic checks passed. Proceed to STEP 3B.
@@ -250,3 +250,32 @@ mkdir -p "$FEATURE_DIR/.artifacts"
 bash scripts/check-point.sh write "$FEATURE_DIR" task_done "$TASK_ID" "$TASK_TYPE" "$BUILT" "$TEST_FILE" 2>/dev/null || true
 
 echo "Checkpoint updated: $TASK_ID marked DONE in .workflow-state.json"
+
+# ── UPDATE ERROR MEMORY ─────────────────────────────────────
+# Record corrections and patterns from this task for future tasks.
+# The diagnostic-classifier.sh output (from STEP 2) contains
+# classification info that can be used to populate error memory.
+
+FEATURE_DIR="[feature_dir from tasks.md location]"
+TASK_ID="[current task ID, e.g. TASK-3]"
+
+# If any corrections were made during the inline correction loop,
+# record them in error memory for future tasks to learn from.
+# The diagnostic classifier output (if available) has the classification:
+if [ -f "$TEST_OUTPUT_FILE" ]; then
+  # Check if the diagnostic was run
+  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "CLASSIFICATION:" | head -1 | sed 's/.*CLASSIFICATION: //' || true)
+  if [ -n "$DIAG_CLASS" ]; then
+    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "$DIAG_CLASS" "Test failure during implementation" "Review diagnostic output and apply fix pattern" 2>/dev/null || true
+  fi
+fi
+
+# Record any drift patterns detected during quick drift check
+if [ -f "$FEATURE_DIR/.artifacts/post-implementation-drift.md" ]; then
+  DRIFT_ISSUES=$(grep -c "VIOLATION\|DRIFT" "$FEATURE_DIR/.artifacts/post-implementation-drift.md" 2>/dev/null || echo 0)
+  if [ "$DRIFT_ISSUES" -gt 0 ]; then
+    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "drift" "$DRIFT_ISSUES drift violations detected" "Review plan.md §16 constraints" 2>/dev/null || true
+  fi
+fi
+
+echo "Error memory updated for $TASK_ID"
