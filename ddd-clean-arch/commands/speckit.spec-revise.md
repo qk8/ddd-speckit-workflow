@@ -26,6 +26,22 @@ Read tasks.md to find any tasks with "Spec changes applied" that were not applie
 Read plan.md sections referenced by pending learnings.
 
 ─────────────────────────────────────────
+STEP 1.5 — SPEC CHANGE IMPACT ANALYSIS
+─────────────────────────────────────────
+Before applying spec corrections, analyze which completed tasks will be affected:
+
+If you have the old and new spec content:
+  Run: bash scripts/spec-impact.sh "$(bash scripts/find-first-feature.sh)" <old_spec_path> <new_spec_path>
+  Read the cascade report showing affected tasks grouped by severity.
+
+If no separate old/new files (editing in place):
+  1. Note which sections you are about to change
+  2. Read tasks.md for all DONE tasks
+  3. Read templates/spec-sections.md to map sections to task types
+  4. Manually identify which tasks are affected
+  5. Print: "AFFECTED TASKS: [list by severity]"
+
+─────────────────────────────────────────
 STEP 2 — IDENTIFY SPEC CORRECTIONS
 ─────────────────────────────────────────
 For each pending learning that proposes a change to plan.md:

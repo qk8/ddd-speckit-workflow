@@ -515,6 +515,44 @@ echo "SUMMARY: $VIOLATION_COUNT violations found ($AFFECTED_FILES files affected
 # Save results for check-runner.sh
 cp "$RESULTS_FILE" "$ARTIFACTS_DIR/check-results/V.result" 2>/dev/null || true
 
+# ── Complexity metrics logging (for trend tracking) ─────────────
+METRICS_DIR="$ARTIFACTS_DIR/complexity-logs"
+mkdir -p "$METRICS_DIR"
+
+# Extract task_id from environment or use placeholder
+METRICS_TASK_ID="${TASK_ID:-task}"
+
+# Count LOC by layer
+LOC_BY_LAYER=""
+for layer_dir in "$SOURCE_DIR"/domain "$SOURCE_DIR"/infra "$SOURCE_DIR"/api "$SOURCE_DIR"/frontend; do
+  if [ -d "$layer_dir" ]; then
+    layer_name=$(basename "$layer_dir")
+    layer_loc=$(find "$layer_dir" -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.java" \) -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
+    LOC_BY_LAYER="${LOC_BY_LAYER}${layer_name}:${layer_loc}|"
+  fi
+done
+
+# Count files by layer
+FILE_COUNT_BY_LAYER=""
+for layer_dir in "$SOURCE_DIR"/domain "$SOURCE_DIR"/infra "$SOURCE_DIR"/api "$SOURCE_DIR"/frontend; do
+  if [ -d "$layer_dir" ]; then
+    layer_name=$(basename "$layer_dir")
+    layer_files=$(find "$layer_dir" -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.java" \) 2>/dev/null | wc -l | tr -d ' ')
+    FILE_COUNT_BY_LAYER="${FILE_COUNT_BY_LAYER}${layer_name}:${layer_files}|"
+  fi
+done
+
+# Total LOC
+TOTAL_LOC=$(find "$SOURCE_DIR" -type f \( -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" -o -name "*.java" -o -name "*.rb" -o -name "*.rs" \) -not -path '*/node_modules/*' -not -path '*/.artifacts/*' -not -path '*/dist/*' -not -path '*/build/*' -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
+
+# Write metrics log
+echo "TASK_ID=$METRICS_TASK_ID" > "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+echo "TOTAL_LOC=$TOTAL_LOC" >> "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+echo "LOC_BY_LAYER=$LOC_BY_LAYER" >> "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+echo "FILE_COUNT_BY_LAYER=$FILE_COUNT_BY_LAYER" >> "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+echo "VIOLATION_COUNT=$VIOLATION_COUNT" >> "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+echo "AFFECTED_FILES=$AFFECTED_FILES" >> "$METRICS_DIR/${METRICS_TASK_ID}.metrics"
+
 if [ "$VIOLATION_COUNT" -gt 0 ]; then
   exit 1
 else

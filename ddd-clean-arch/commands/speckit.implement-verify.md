@@ -279,3 +279,15 @@ if [ -f "$FEATURE_DIR/.artifacts/post-implementation-drift.md" ]; then
 fi
 
 echo "Error memory updated for $TASK_ID"
+
+# ── LOG TEST HEALTH TRENDS ────────────────────────────────────
+# Track test metrics over time to detect degradation.
+FEATURE_DIR="[feature_dir from tasks.md location]"
+TASK_ID="[current task ID]"
+TASK_TYPE="[task type from tasks.md]"
+
+bash scripts/test-health-log.sh "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" 2>/dev/null || true
+
+# ── LOG COMPLEXITY TRENDS ─────────────────────────────────────
+# Track code complexity over time to detect growth.
+bash scripts/complexity-trend.sh "$FEATURE_DIR" "$TASK_ID" 2>/dev/null || true

@@ -465,6 +465,18 @@ build_checkpoint() {
   printf ',\n'
 
   build_checkpoint
+  printf ',\n'
+
+  # ── Impact summary ────────────────────────────────────────────
+  printf '  "impact_summary": '
+  IMPACT_FILE="$FEATURE_DIR/.artifacts/impact-report.txt"
+  if [ -f "$IMPACT_FILE" ] && [ -s "$IMPACT_FILE" ]; then
+    # Read impact report and escape for JSON
+    IMPACT_TEXT=$(cat "$IMPACT_FILE" | tr '\n' ' ' | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
+    printf '"%s"' "$IMPACT_TEXT"
+  else
+    printf '"No impact analysis run yet"'
+  fi
   printf '\n}\n'
 } > "$OUTPUT_FILE"
 

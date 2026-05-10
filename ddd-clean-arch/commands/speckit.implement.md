@@ -38,6 +38,18 @@ Rules (non-negotiable):
 - Spec conflict found → stop and report. Never resolve unilaterally.
 
 ─────────────────────────────────────────
+STEP 1.5 — CROSS-TASK IMPACT CHECK
+─────────────────────────────────────────
+Before implementing, check if files being modified overlap with past or future tasks:
+
+Run: bash scripts/impact-analysis.sh "$(bash scripts/find-first-feature.sh)" [task_id] [task_type] --show-tests
+Read the impact report. If any HIGH risk files are reported:
+  1. Print: "HIGH RISK: <file> — <N> overlapping tasks"
+  2. Review the overlap: which past task created/modified the file, which future task will touch it
+  3. If interface-breaking: note which future tasks may need updates
+  4. Print: "INTERFACE CHANGE WARNING: <file> — future tasks <list> may need updates"
+
+─────────────────────────────────────────
 STEP 2 — IMPLEMENT
 ─────────────────────────────────────────
 Write the implementation until the tests from the previous step pass.
@@ -100,3 +112,12 @@ INLINE CORRECTION LOOP (if tests fail)
 
 When STEP 2 completes successfully, print:
 "IMPLEMENT-CODE DONE — proceeding to quality checks."
+
+# ── RECORD FILE TRACKING ──────────────────────────────────────
+# Track which files this task created/modified for future impact analysis.
+# Discover files by looking at git status or the files you just created/modified.
+FEATURE_DIR="$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")"
+TASK_ID="[task_id from unified-context]"
+if [ -n "$FEATURE_DIR" ]; then
+  bash scripts/track-created-files.sh "$FEATURE_DIR" "$TASK_ID" [list_of_created_modified_files] 2>/dev/null || true
+fi

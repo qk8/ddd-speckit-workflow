@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Test quality trend analysis.
 # Tracks test quality metrics across tasks and flags degradation.
+# Also computes trend direction from test-health.json if available.
 #
 # Usage: test-trend-analyzer.sh <feature_dir>
 # Outputs: TREND_HEALTHY=true|false, DEGRADATION_COUNT=N, DEGRADATION_DETAILS=...
+#          TREND_TOTAL_TESTS=up|down|stable
+#          TREND_PASS_RATE=up|down|stable
 
 set -euo pipefail
 
@@ -101,6 +104,51 @@ else
   echo "DEGRADATION_COUNT=${DEGRADATION_COUNT}"
   echo "  Issues found:"
   grep -E 'TRIVIAL_ASSERTIONS|EMPTY_TESTS|LOW_VARIETY' "${ARTIFACTS_DIR}/test-trend-report.md" | head -20
+fi
+
+# ── Trend computation from test-health.json ─────────────────────
+HEALTH_FILE="${ARTIFACTS_DIR}/test-health.json"
+
+if [ -f "$HEALTH_FILE" ]; then
+  TREND_TOTAL_TESTS=$(awk '
+    /"total_test_count"/ {
+      gsub(/.*"total_test_count":[[:space:]]*/, "")
+      gsub(/[,}].*/, "")
+      values[++n] = $0 + 0
+    }
+    END {
+      if (n < 3) { print "insufficient_data" }
+      else {
+        avg = (values[n] + values[n-1] + values[n-2]) / 3
+        if (values[n] > avg * 1.05) print "up"
+        else if (values[n] < avg * 0.95) print "down"
+        else print "stable"
+      }
+    }
+  ' "$HEALTH_FILE" 2>/dev/null || echo "insufficient_data")
+
+  TREND_PASS_RATE=$(awk '
+    /"pass_rate"/ {
+      gsub(/.*"pass_rate":[[:space:]]*/, "")
+      gsub(/[,}].*/, "")
+      values[++n] = $0 + 0
+    }
+    END {
+      if (n < 3) { print "insufficient_data" }
+      else {
+        avg = (values[n] + values[n-1] + values[n-2]) / 3
+        if (values[n] > avg * 1.05) print "up"
+        else if (values[n] < avg * 0.95) print "down"
+        else print "stable"
+      }
+    }
+  ' "$HEALTH_FILE" 2>/dev/null || echo "insufficient_data")
+
+  echo "TREND_TOTAL_TESTS=${TREND_TOTAL_TESTS}"
+  echo "TREND_PASS_RATE=${TREND_PASS_RATE}"
+else
+  echo "TREND_TOTAL_TESTS=insufficient_data"
+  echo "TREND_PASS_RATE=insufficient_data"
 fi
 
 exit 0
