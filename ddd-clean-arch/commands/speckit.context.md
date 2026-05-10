@@ -9,20 +9,36 @@
 #   5. Applicable §16 constraints
 # Everything else is elided with "[truncated — see plan.md for full details]"
 
-Read CLAUDE.md fully.
-Read the feature preamble from templates/preamble.md.
+# Load unified context for the next task
+FEATURE_DIR=$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")
+if [ -z "$FEATURE_DIR" ]; then
+  echo "No feature directory found. Run /speckit.plan first."
+  exit 0
+fi
 
-Check for IN_PROGRESS tasks first:
-  Follow the task selection protocol: guides/task-selection.md
-  If IN_PROGRESS task found:
-    Read plan.md sections relevant to this task's Type (same as speckit.implement).
-    Print compact context for this IN_PROGRESS task.
-    Stop.
-If no such task exists: "No unblocked tasks. Run /speckit.status." and stop.
+# Find next TODO task
+NEXT_TASK=$(bash scripts/prompt-context.sh "$FEATURE_DIR" || echo "")
+if [ -z "$NEXT_TASK" ]; then
+  echo "No unblocked tasks. Run /speckit.status."
+  exit 0
+fi
 
-Print: Next task: TASK-[N] — [title] | Type: [type] | Scope: [files]
-Then read ONLY the plan.md sections for this task's Type.
-Read the spec-sections mapping from templates/spec-sections.md.
+# Extract task_id and task_type from prompt-context output
+TASK_ID=$(echo "$NEXT_TASK" | grep -oE 'TASK-[0-9]+' | head -1 || echo "TASK-1")
+TASK_TYPE=$(echo "$NEXT_TASK" | grep -oE 'backend-domain|backend-infra|backend-api|shared|integration|frontend-data|frontend-feature|e2e' | head -1 || echo "backend-domain")
+
+# Generate unified context
+bash scripts/unified-context.sh "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" > /dev/null 2>&1
+
+# Read unified context
+Read .artifacts/unified-context.json.
+
+# Check for IN_PROGRESS tasks first
+# If unified-context shows an IN_PROGRESS task:
+#   Print compact context for this IN_PROGRESS task.
+#   Stop.
+
+Print: Next task: [task.id] — [task.title] | Type: [task.type] | Scope: [task.scope]
 
 # ── Apply --max-lines truncation (Issue E) ──────────────────────
 # If --max-lines N was specified:
@@ -37,19 +53,19 @@ Read the spec-sections mapping from templates/spec-sections.md.
 Print compact context:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTEXT LOADED — TASK-[N]: [title] | Type: [type]
+CONTEXT LOADED — [task.id]: [task.title] | Type: [task.type]
 
 RELEVANT SPEC:
-  [Only the fields directly needed — verbatim from plan.md]
+  [from plan_sections — verbatim content]
 
 KEY NAMES (§2 + §4):
-  [class/event/field names for this task only]
+  [from plan_sections with section matching §2 or §4]
 
 LAYER RULES:
-  [rules for this task's layer only]
+  [from layer_rules for relevant layers]
 
 CONSTRAINTS TO WATCH (§16):
-  [constraints this task could plausibly violate]
+  [from constraints.rules]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TASK SUMMARY (confirm before coding):

@@ -1,4 +1,14 @@
-Read CLAUDE.md fully.
+Read .artifacts/unified-context.json. This file contains all context for the current task:
+  - Task details (id, title, status, type, depends_on, scope, acceptance_criteria, do_not)
+  - Relevant plan.md sections (FULL text, no truncation)
+  - §16 constraints
+  - Layer rules (only relevant layers for this task type)
+  - Test instructions (FULL text, no truncation)
+  - Error memory corrections
+  - Checkpoint state
+
+If unified-context.json does not exist, generate it:
+  Run: bash scripts/unified-context.sh "$(bash scripts/find-first-feature.sh)" [task_id] [task_type]
 
 # ── Single-task mode (Fix 13: parallel batch support) ─────────
 # If input.args starts with "--single-task TASK-N", process ONLY

@@ -1,16 +1,25 @@
-Read tasks.md to determine the current task (first TODO or first IN_PROGRESS).
-Read plan.md §13 and CLAUDE.md for layer rules and constraints.
+Read .artifacts/unified-context.json. This file contains all context for the current task:
+  - Task details (id, title, status, type, depends_on, scope, acceptance_criteria, do_not)
+  - Relevant plan.md sections (FULL text, no truncation)
+  - §16 constraints
+  - Layer rules (only relevant layers for this task type)
+  - Test instructions
+  - Error memory corrections
+  - Checkpoint state
+
+If unified-context.json does not exist, generate it:
+  Run: bash scripts/unified-context.sh "$(bash scripts/find-first-feature.sh)" [task_id] [task_type]
 
 ━━ TASK PLAN (condensed) ━━━━━━━━━━━━━━━━━━━━
-Task: TASK-[N] — [title]
-Type: [type]
+Task: [task.id] — [task.title]
+Type: [task.type]
 Test file (written by previous step): [discover from feature directory — look for newly created test files]
-Impl files to create: [from Scope.Creates]
-Files to modify: [from Scope.Modifies]
-Acceptance criteria: [numbered, verbatim from tasks.md]
-Do NOT: [verbatim from task]
-Layer rules for this type: [from CLAUDE.md]
-§16 constraints that apply: [relevant ones]
+Impl files to create: [from task.scope.creates]
+Files to modify: [from task.scope.modifies]
+Acceptance criteria: [from task.acceptance_criteria, numbered]
+Do NOT: [from task.do_not]
+Layer rules for this type: [from layer_rules]
+§16 constraints that apply: [from constraints.rules]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━ KNOWN PATTERNS (from error memory) ━━━━━━━━━━━━━━━━━━━━━━━━━
