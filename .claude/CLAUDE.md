@@ -1,0 +1,1 @@
+Never use sub-agents or parallel tool calls. Work sequentially only. One task at a time.
