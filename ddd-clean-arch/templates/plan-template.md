@@ -641,6 +641,51 @@ contract_testing:
 # The stages defined above in ci_execution_order must match ci-local.sh.
 ci_execution_order:
 
+# ── COMPLEXITY BUDGET ─────────────────────────────────────────
+# Per-task complexity limits prevent tasks from becoming too large.
+# Tasks exceeding these limits should be split before implementation.
+# Enforced by: scripts/code-quality-thresholds.sh
+complexity_budget:
+  max_lines_per_file:
+    domain:    300
+    application: 200
+    infrastructure: 250
+    api:       200
+    shared:    150
+    test:      200
+  max_functions_per_file: 25
+  max_parameters_per_function: 5
+  max_nesting_depth: 4
+  max_cyclomatic_complexity: 10
+  max_file_length: 400
+
+# ── INTER-TASK COMMUNICATION PROTOCOL ─────────────────────────
+# Tasks communicate through shared artifacts, NOT through direct
+# file writes to each other's scope. This prevents silent overwrites.
+#
+# Format: .artifacts/task-status.json
+#
+# {
+#   "version": 1,
+#   "tasks": {
+#     "TASK-N": {
+#       "status": "TODO|IN_PROGRESS|DONE|BLOCKED|ABANDONED",
+#       "updated_at": "ISO 8601 timestamp",
+#       "blocking_reason": null or "string",
+#       "interfaces_produced": ["interface_name"],
+#       "interfaces_consumed": ["interface_name"],
+#       "notes": "optional free-text"
+#     }
+#   }
+# }
+#
+# Rules:
+#   - Only the task's own implement step writes to its entry
+#   - Interface declarations are appended (never replaced)
+#   - Status changes require a gate approval (acceptance or quality)
+#   - Blocked status requires a non-null blocking_reason
+#   - Read access is free (any task can read any entry)
+
 ─────────────────────────────────
 §14 MONOREPO & DEVELOPER EXPERIENCE
 ─────────────────────────────────

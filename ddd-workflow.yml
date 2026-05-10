@@ -585,6 +585,20 @@ steps:
     max_iterations: 0
     steps: []
 
+  # ── PHASE 3.5: PRE-MORTEM ANALYSIS ────────────────────────────
+  # Proactively identify failure modes before task implementation begins.
+  # Reduces silent spec drift and cascading bugs.
+  - id: pre-mortem
+    command: speckit.pre-mortem
+    integration: claude
+    input:
+      args: >
+        Run pre-mortem analysis on the approved plan.
+        Read plan.md and tasks.md. Identify architectural, dependency,
+        testing, operational, and spec-implementation risks.
+        Document mitigations in .artifacts/pre-mortem.md.
+        If risk is HIGH, review mitigations before proceeding.
+
   # ── PHASE 4: TASKS ─────────────────────────────────────────────
   # Tasks phase runs in a loop with max 5 revisions to prevent
   # infinite revise-validate-tasks cycles (circular deps, etc.).
@@ -857,6 +871,37 @@ steps:
               "{{ steps.check_remaining.output.feature_dir }}"
               "{{ steps.implement_loop_iteration.output.count || 1 }}"
 
+      # ── Periodic LLM quality check (every 10 iterations) ────────
+      # Detects fatigue degradation: high revision counts signal
+      # ambiguous specs or over-complex tasks.
+      - id: check_llm_quality
+        type: if
+        condition: "{{ steps.implement_loop_iteration.output.count || 1 }} % 10 == 0"
+        then:
+          - id: run_llm_quality
+            type: shell
+            command: >
+              bash scripts/measure-llm-quality.sh
+              "{{ steps.check_remaining.output.feature_dir }}" || true
+
+      # ── Periodic session health + scope audit (every 20 iterations) ──
+      # Health dashboard shows progress, risk, and stagnation.
+      # Scope audit catches feature creep before it compounds.
+      - id: check_periodic_health
+        type: if
+        condition: "{{ steps.implement_loop_iteration.output.count || 1 }} % 20 == 0"
+        then:
+          - id: run_session_health
+            type: shell
+            command: >
+              bash scripts/session-health.sh
+              "{{ steps.check_remaining.output.feature_dir }}" || true
+          - id: run_scope_audit
+            type: shell
+            command: >
+              bash scripts/scope-audit.sh
+              "{{ steps.check_remaining.output.feature_dir }}" || true
+
       # ── Parse Error ──
       - id: check_parse_error
         type: if
@@ -1080,11 +1125,16 @@ steps:
           bash scripts/pre-task-validate.sh
           "{{ steps.check_remaining.output.feature_dir }}"
 
-      # ── Prompt Context Generation ──
+      # ── Prompt Context Generation (with hard line cap) ──────────
+      # Pipes through context-limited.sh to enforce a maximum output size,
+      # preventing context window overflow. Falls back to prompt-context.sh
+      # if context-limited.sh is unavailable.
       - id: generate_prompt_context
         type: shell
         command: >
           bash scripts/prompt-context.sh "{{ steps.check_remaining.output.feature_dir }}"
+          | head -n 500
+          || true
 
       # ── PHASE 3A: WRITE FAILING TESTS (TDD red phase) ──────────
       - id: write_test
@@ -1733,6 +1783,22 @@ steps:
         command: >
           bash scripts/record-phase-revision.sh fix_needed_round 1
       - goto: fix_needed_round
+
+  # ── Spec-Code Delta Report ────────────────────────────────────
+  # Produces a comprehensive diff between spec and implementation
+  # after final verify. Catches any remaining discrepancies.
+  - id: spec_code_delta
+    type: prompt
+    command: speckit.verify
+    integration: claude
+    input:
+      args: >
+        Produce a spec-code delta report.
+        Compare plan.md and tasks.md against the actual codebase.
+        List any remaining discrepancies not caught by the full verify.
+        Write summary to .artifacts/spec-code-delta.md.
+        Print: "SPEC-CODE DELTA: CLEAN (no remaining discrepancies)"
+        or "SPEC-CODE DELTA: [N] remaining issues found"
 
   - id: backup-before-fix-needed
     type: shell

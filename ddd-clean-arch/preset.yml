@@ -159,18 +159,26 @@ checks:
     # Patterns defined in scripts/concurrency-patterns.conf.
     tier: secondary
     applies_to: [backend-domain, backend-infra, backend-api, shared]
+  NT:
+    name: "Negative Test Coverage"
+    # NT = DETERMINISTIC: checks that every public method / API endpoint
+    # has at least one negative test (invalid input, unauthorized, conflict).
+    # Scans test files for patterns like "invalid", "error", "unauthorized",
+    # "rejects", "throws", "400", "401", "403", "409", "422".
+    tier: secondary
+    applies_to: [backend-domain, backend-infra, backend-api, shared]
 
 # Derived routing table — auto-derived from checks[].applies_to.
 # Regenerate with: scripts/derive-routing.sh
 # Drift from derived values is flagged by: scripts/validate-routing-table.sh
 routing:
-  backend-domain:   [A, AC, BC, D, E, I, L, M, P, S, V, W, Z]
-  backend-infra:    [A, AC, BC, D, E, F, I, L, M, O, P, Q, S, V, W, Z]
-  backend-api:      [A, AC, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, Z]
-  shared:           [AC, AS, BC, D, E, I, K, L, M, N, P, R, S, T, V, W, Z]
+  backend-domain:   [A, AC, BC, D, E, I, L, M, NT, P, S, V, W, Z]
+  backend-infra:    [A, AC, BC, D, E, F, I, L, M, N, NT, O, P, Q, S, V, W, Z]
+  backend-api:      [A, AC, BC, D, E, G, I, J, K, L, M, N, NT, O, P, Q, R, S, T, U, V, W, Z]
+  shared:           [AC, AS, BC, D, E, I, K, L, M, N, NT, P, R, S, T, V, W, Z]
   integration:      [AC, BC, D, I, L, M, P, S, V, Z]
-  frontend-data:    [AC, BC, D, G, I, L, M, O, P, S, V, Z]
-  frontend-feature: [AC, BC, D, H, I, J, L, M, O, P, S, V, Z]
+  frontend-data:    [AC, BC, D, G, I, L, M, NT, O, P, S, V, Z]
+  frontend-feature: [AC, BC, D, H, I, J, L, M, NT, O, P, S, V, Z]
   e2e:              [AC, BC, D, H, I, L, M, P, S, V, Z]
 
 # Routing tables by tier — which checks apply to each module type per tier.
@@ -187,13 +195,13 @@ routing_critical:
   e2e:              [BC, D, I, L, Z]
 
 routing_secondary:
-  backend-domain:   [AC, AS, E, M, V, W]
-  backend-infra:    [AC, AS, E, F, M, Q, V, W]
-  backend-api:      [AC, AS, E, G, J, K, M, N, R, T, V, W]
-  shared:           [AC, AS, E, K, M, N, R, T, V, W]
+  backend-domain:   [AC, AS, E, M, NT, V, W]
+  backend-infra:    [AC, AS, E, F, M, NT, Q, V, W]
+  backend-api:      [AC, AS, E, G, J, K, M, N, NT, R, T, V, W]
+  shared:           [AC, AS, E, K, M, N, NT, R, T, V, W]
   integration:      [AC, M, V]
-  frontend-data:    [AC, G, M, O, V]
-  frontend-feature: [AC, J, M, O, V]
+  frontend-data:    [AC, G, M, NT, O, V]
+  frontend-feature: [AC, J, M, NT, O, V]
   e2e:              [AC, M, V]
 
 # Adaptive retrospective cadence — single source of truth.
@@ -223,8 +231,8 @@ cadence:
 # Use project-brief.md's project_profile field to select.
 check_profiles:
   minimal: [A, BC, D, I, L, Z]
-  standard: [A, AC, BC, D, I, L, Z, K, M, V, W]
-  full: [A, AC, BC, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, Z, AS]
+  standard: [A, AC, BC, D, I, L, Z, K, M, NT, V, W]
+  full: [A, AC, BC, D, E, F, G, H, I, J, K, L, M, N, NT, O, P, Q, R, S, T, U, V, W, Z, AS]
 
 # Auto-approve human gates when deterministic checks pass.
 # When enabled, acceptance/quality/TDD gates skip to approve

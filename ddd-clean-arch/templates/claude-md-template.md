@@ -88,3 +88,12 @@ Local CI:   bash scripts/ci-local.sh
   - [ ] Test file committed to codebase
   - [ ] All checks from preset.yml routing table pass
   - [ ] [additional criteria from §17]
+
+## Scope boundary
+Every file you create or modify MUST belong to a specific task in tasks.md.
+Before creating or modifying any file:
+  1. Find the task that owns this file (check tasks.md scope.creates / scope.modifies)
+  2. If no task owns it: STOP — either add the file to a task scope, or abort
+  3. Never create files "just in case" — every file must have a task owner
+  4. If implementing a feature not listed in any task: STOP and report drift
+This is the global feature creep guard. Violation creates a compliance record.

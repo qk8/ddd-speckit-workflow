@@ -209,3 +209,32 @@ If the test file path is not known, pass the test directory:
   bash scripts/verify-test-quality.sh "[test_directory]"
 
 Print: "DETERMINISTIC CHECK: [N] errors, [M] warnings"
+
+─────────────────────────────────────────
+STEP 1.7 — TEST COMPLETENESS CHECK
+─────────────────────────────────────────
+Verify test coverage is complete before proceeding to implementation:
+
+POSITIVE COVERAGE (happy path):
+  For each acceptance criterion, confirm at least one test exists.
+  Test name should reference the specific scenario (not just "test 1").
+
+NEGATIVE COVERAGE (error paths):
+  For each public method / API endpoint, confirm at least one negative test:
+    - Invalid input (empty string, null, wrong type, out-of-range value)
+    - Unauthorized access (missing auth, wrong role, expired token)
+    - Conflict detection (duplicate key, concurrent modification)
+    - Resource exhaustion (empty collection, missing dependency)
+  If the acceptance criteria only cover happy paths: add at least one
+  negative test per public interface. Document why no negative test is needed
+  if the interface is internal-only.
+
+SEMANTIC QUALITY:
+  Tests must PROVE acceptance criteria, not just exercise code:
+    - "expect(result.status).toBe(200)" alone is NOT sufficient
+    - "expect(result.body.data.id).toBe(expectedId)" PROVES the right entity was created
+    - Prefer specific assertions over "no exception thrown"
+    - Each test should have exactly one primary assertion about the outcome
+    - Helper assertions (setup verification) are acceptable
+
+Print: "TEST COMPLETENESS: [N] positive, [N] negative, [N] semantic issues"
