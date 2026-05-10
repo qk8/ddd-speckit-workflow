@@ -52,7 +52,7 @@ Run the deterministic check engine:
 
   bash scripts/check-runner.sh "[feature_dir]" "[task_type]"
 
-This executes all deterministic checks (A, AC, AS, BC, D, E, F, I, K, L, O, OW, R, US, V, Z) in parallel.
+This executes all deterministic checks (A, AC, AS, BC, D, E, F, I, K, L, O, OW, R, US, V, W, Z) in parallel.
 Results are written to .artifacts/check-results/<check-id>.result (PASS/FAIL).
 
 If check-runner.sh exits 0: all deterministic checks passed. Proceed to STEP 3B.

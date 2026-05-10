@@ -24,4 +24,5 @@ Checks:
   [U] Session/token:           PASS | [N] covered, [N] missed | N/A
   [US] Session security auto:  PASS | WARN — [details] | N/A
   [V] Code complexity:         PASS | WARN — [N] violations | FAIL — [details]
+  [W] Concurrency safety:     PASS | WARN — [N] issues | FAIL — [details] | N/A
   [Z] Constraint drift:        PASS | FAIL — [details] | N/A
