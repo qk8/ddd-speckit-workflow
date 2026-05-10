@@ -23,4 +23,5 @@ Checks:
   [T] Adversarial:             PASS | [N] covered, [N] missed | N/A
   [U] Session/token:           PASS | [N] covered, [N] missed | N/A
   [US] Session security auto:  PASS | WARN — [details] | N/A
+  [V] Code complexity:         PASS | WARN — [N] violations | FAIL — [details]
   [Z] Constraint drift:        PASS | FAIL — [details] | N/A

@@ -25,6 +25,7 @@
 #   Z:  scripts/quick-drift-check.sh  (already exists)
 #   AS: scripts/api-surface-check.sh   (cross-task API consistency)
 #   AC: scripts/verify-acceptance-coverage.sh  (acceptance criteria test coverage)
+#   V:  scripts/verify-code-quality.sh        (code complexity gates)
 #
 # Non-deterministic (stay as Claude prompts): G, H, J, M, N, O, P, Q, S, T, U, Z(full)
 
@@ -108,6 +109,7 @@ get_check_script() {
     Z)              echo "quick-drift-check.sh" ;;
     AS)             echo "api-surface-check.sh" ;;
     AC)             echo "verify-acceptance-coverage.sh" ;;
+    V)              echo "verify-code-quality.sh" ;;
     *)              echo "" ;;
   esac
 }
