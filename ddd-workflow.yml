@@ -414,6 +414,11 @@ steps:
 
         End with: "Plan DevEx (gitignore, CLAUDE.md, ci-local.sh, conventions) complete."
 
+  # ── Validate CLAUDE.md §16 has exactly 10 actionable constraints ─
+  - id: validate-drift-readiness
+    type: shell
+    command: "bash scripts/validate-claude-md-constraints.sh"
+
   # ── CLAUDE.md LINE COUNT (advisory, soft warning) ───────────────
   # Previously a hard cap at 150 lines. Converted to advisory at 100 lines
   # to prevent Claude from paraphrasing or omitting essential content.
@@ -1775,6 +1780,12 @@ steps:
             command: >
               bash scripts/record-and-trim.sh fix_needed_round
               "{{ steps.fix_needed_round_iteration.output.count || 1 }}"
+          # ── Rollback code to last checkpoint before re-running ─
+          - id: rollback_to_checkpoint
+            type: shell
+            command: >
+              bash scripts/check-point.sh rollback
+              "{{ steps.check_remaining.output.feature_dir }}" || echo "No checkpoint available — proceeding without rollback"
           - goto: implement_loop
         on_abort: abort
 

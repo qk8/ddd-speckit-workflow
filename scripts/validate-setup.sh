@@ -118,6 +118,21 @@ else
   report WARN "Skipping ShellCheck validation (not installed)"
 fi
 
+# ── 9. Check profile + complexity compatibility ───────────────
+# Minimal profile (6 checks) is incompatible with complex complexity (80+ tasks).
+PROJECT_BRIEF="$(pwd)/project-brief.md"
+if [ -f "$PROJECT_BRIEF" ]; then
+  PROFILE=$(grep -oP '(?<=^Project Profile: ).*' "$PROJECT_BRIEF" 2>/dev/null || grep -oP '(?<=profile: ).*' "$PROJECT_BRIEF" 2>/dev/null || echo "standard")
+  COMPLEXITY=$(grep -oP '(?<=^Complexity: ).*' "$PROJECT_BRIEF" 2>/dev/null || echo "medium")
+  if [ "$PROFILE" = "minimal" ] && [ "$COMPLEXITY" = "complex" ]; then
+    report FAIL "Minimal check profile (6 checks) is incompatible with complex complexity — use 'standard' or 'full' profile"
+  elif [ "$PROFILE" = "minimal" ] && [ "$COMPLEXITY" = "medium" ]; then
+    report WARN "Minimal profile with medium complexity — consider 'standard' for better coverage"
+  fi
+else
+  report WARN "project-brief.md not found — skipping profile/complexity compatibility check"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "Setup validation: $FAIL_COUNT FAIL, $WARN_COUNT WARN, $PASS_COUNT PASS"

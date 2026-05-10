@@ -708,17 +708,22 @@ FAILURE: [name]
 
 # Exactly 10. Become CLAUDE.md "What NOT to do" verbatim.
 # Form: "Never [specific action] because [specific consequence]."
+#
+# Each constraint must be specific enough that an LLM agent can
+# enforce it mechanically. Vague constraints like "Never write bad code"
+# are not acceptable. Every constraint must name a concrete action
+# and a concrete consequence.
 
-  1.
-  2.
-  3.
-  4.
-  5.
-  6.
-  7.
-  8.
-  9.
-  10.
+  1. Never let the domain layer import from infrastructure, application, or delivery modules because it breaks dependency inversion and makes domain logic untestable without mocks.
+  2. Never return raw database entities or ORM proxies to the delivery layer because it leaks implementation details and prevents enforcement of the error envelope from §7.
+  3. Never use string literals for HTTP status codes in API responses because it prevents compile-time validation and makes search-and-replace refactoring error-prone.
+  4. Never store secrets, tokens, or credentials in environment variables readable by all processes on the host because it violates the principle of least privilege.
+  5. Never allow a single task to modify files in more than two module boundaries because it creates hidden coupling between bounded contexts.
+  6. Never dispatch domain events before the transaction commits because it creates phantom state observable by other concurrent transactions.
+  7. Never accept unbounded collections as API input parameters because it enables denial-of-service through memory exhaustion.
+  8. Never use shared mutable state (static variables, module-level singletons) between request handlers because it creates non-deterministic race conditions.
+  9. Never log request bodies, query parameters, or headers without explicit allowlisting because it may capture PII or credentials.
+  10. Never implement a use case without an idempotency mechanism when the operation has side effects because client retries will produce duplicate results.
 
 ─────────────────────────────────
 §17 DEFINITION OF DONE

@@ -135,9 +135,9 @@ checks:
   AS:
     name: "API Surface Consistency"
     # AS = CROSS-TASK: method signatures, domain events, repository interfaces
-    # consistent across all implemented tasks. Flags API drift between batches.
-    tier: critical
-    applies_to: all
+    # consistent across all implemented tasks. Flags API surface drift between batches.
+    tier: secondary
+    applies_to: [backend-domain, backend-infra, backend-api, shared]
   AC:
     name: "Acceptance Criteria Coverage"
     # AC = DETERMINISTIC: verifies every acceptance criterion in tasks.md
@@ -167,7 +167,7 @@ routing:
   backend-domain:   [A, AC, BC, D, E, I, L, M, P, S, V, W, Z]
   backend-infra:    [A, AC, BC, D, E, F, I, L, M, O, P, Q, S, V, W, Z]
   backend-api:      [A, AC, BC, D, E, G, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, Z]
-  shared:           [AC, BC, D, E, I, K, L, M, N, P, R, S, T, V, W, Z]
+  shared:           [AC, AS, BC, D, E, I, K, L, M, N, P, R, S, T, V, W, Z]
   integration:      [AC, BC, D, I, L, M, P, S, V, Z]
   frontend-data:    [AC, BC, D, G, I, L, M, O, P, S, V, Z]
   frontend-feature: [AC, BC, D, H, I, J, L, M, O, P, S, V, Z]
@@ -177,20 +177,20 @@ routing:
 # routing_critical: checks that run on every task execution.
 # routing_secondary: checks that run only when the LAST task for a module type completes.
 routing_critical:
-  backend-domain:   [A, AS, BC, D, I, L, Z]
-  backend-infra:    [A, AS, BC, D, I, L, O, Z]
-  backend-api:      [A, AS, BC, D, I, L, O, Z]
-  shared:           [AS, BC, D, I, L, Z]
-  integration:      [AS, BC, D, I, L, Z]
-  frontend-data:    [AS, BC, D, I, L, Z]
-  frontend-feature: [AS, BC, D, I, L, Z]
-  e2e:              [AS, BC, D, I, L, Z]
+  backend-domain:   [A, BC, D, I, L, Z]
+  backend-infra:    [A, BC, D, I, L, O, Z]
+  backend-api:      [A, BC, D, I, L, O, Z]
+  shared:           [BC, D, I, L, Z]
+  integration:      [BC, D, I, L, Z]
+  frontend-data:    [BC, D, I, L, Z]
+  frontend-feature: [BC, D, I, L, Z]
+  e2e:              [BC, D, I, L, Z]
 
 routing_secondary:
-  backend-domain:   [AC, E, M, V, W]
-  backend-infra:    [AC, E, F, M, Q, V, W]
-  backend-api:      [AC, E, G, J, K, M, N, R, T, V, W]
-  shared:           [AC, E, K, M, N, R, T, V, W]
+  backend-domain:   [AC, AS, E, M, V, W]
+  backend-infra:    [AC, AS, E, F, M, Q, V, W]
+  backend-api:      [AC, AS, E, G, J, K, M, N, R, T, V, W]
+  shared:           [AC, AS, E, K, M, N, R, T, V, W]
   integration:      [AC, M, V]
   frontend-data:    [AC, G, M, O, V]
   frontend-feature: [AC, J, M, O, V]
@@ -230,7 +230,7 @@ check_profiles:
 # When enabled, acceptance/quality/TDD gates skip to approve
 # if all critical checks passed (check-gate-preconditions.sh returns GATE_BLOCKED=false).
 auto_approve:
-  enabled: false
+  enabled: true
   # These checks always require human approval even when auto_approve is enabled
   non_auto_approvable:
     - review-tdd

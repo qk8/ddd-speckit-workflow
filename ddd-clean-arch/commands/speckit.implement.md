@@ -22,6 +22,20 @@ Layer rules for this type: [from layer_rules]
 §16 constraints that apply: [from constraints.rules]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+─────────────────────────────────────────
+STEP 0 — TASK SELECTION (per guides/task-selection.md)
+─────────────────────────────────────────
+Before selecting which task to implement, follow the task selection protocol:
+
+1. Scan tasks.md for any task with Status: IN_PROGRESS.
+   If found: continue with that task.
+2. If no IN_PROGRESS task: find the first TODO task where all Depends-on tasks are DONE.
+3. Skip tasks whose Depends-on includes any non-DONE task (these are BLOCKED).
+4. Among eligible TODO tasks, prefer: backend-domain > backend-infra > backend-api >
+   shared > integration > frontend-data > frontend-feature > e2e.
+
+Print: "Selected TASK-[N] — [title] (Type: [type])"
+
 ━━ KNOWN PATTERNS (from error memory) ━━━━━━━━━━━━━━━━━━━━━━━━━
 Run: bash scripts/error-memory.sh read "$(bash scripts/find-first-feature.sh)"
 This prints any known correction patterns, abandoned task reasons,
@@ -71,8 +85,8 @@ Then RUN THE FULL REGRESSION SUITE:
     - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
 
 INLINE CORRECTION LOOP (if tests fail)
-  MAX_CORRECTION_ITERATIONS = 5. If tests still fail after 5 correction attempts:
-    STOP. Print: "ESCALATION: 5 correction iterations exhausted without passing tests."
+  MAX_CORRECTION_ITERATIONS = 3. If tests still fail after 3 correction attempts:
+    STOP. Print: "ESCALATION: 3 correction iterations exhausted without passing tests."
     Print: "Review $TEST_OUTPUT_FILE. Mark task for human review."
     Mark task for human review in tasks.md (add note: requires human review).
     Proceed to next task.
