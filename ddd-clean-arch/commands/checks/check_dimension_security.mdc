@@ -1,0 +1,36 @@
+# Check: Security
+
+Run the security dimension sub-checks. This ensures no secrets, basic OWASP compliance, and proper session/token handling.
+
+## Sub-checks
+
+1. **Secret Scan** — Check for hardcoded secrets, keys, or tokens
+   - See: [check_i_secret_scan.mdc](check_i_secret_scan.mdc)
+   - Script: `scripts/secret-scan.sh`
+
+2. **OWASP Basic** — Basic OWASP Top 10 compliance
+   - See: [check_ow_owasp_basic.mdc](check_ow_owasp_basic.mdc)
+   - Script: `scripts/run-owasp-basic.sh`
+
+3. **Session Security** — Session and token security patterns
+   - See: [check_u_session.mdc](check_u_session.mdc)
+   - Script: `scripts/run-session-security.sh`
+
+## Instructions
+
+1. Run `scripts/secret-scan.sh <feature_dir>` — no secrets detected
+2. Run `scripts/run-owasp-basic.sh <feature_dir>` — OWASP basics covered
+3. Run `scripts/run-session-security.sh <feature_dir>` — session security patterns present
+4. If any sub-check fails:
+   - Remove or rotate any exposed secrets
+   - Add input validation, output encoding, CSRF protection as needed
+   - Ensure secure session configuration (HttpOnly, Secure, SameSite flags)
+5. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Critical tier**: ALL sub-checks must pass.
+- Zero secrets in code (use environment variables or secret managers).
+- Input validation on all external inputs.
+- Output encoding to prevent XSS.
+- Proper authentication and authorization checks.

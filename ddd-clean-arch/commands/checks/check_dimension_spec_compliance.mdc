@@ -1,0 +1,34 @@
+# Check: Spec Compliance
+
+Run the spec compliance dimension sub-checks. This ensures implementation matches the spec — no drift, constraints honored, API surface consistent.
+
+## Sub-checks
+
+1. **Drift Detection** — Check for constraint drift from plan
+   - See: [check_z_drift.mdc](check_z_drift.mdc)
+   - Script: `scripts/quick-drift-check.sh`
+
+2. **Constraints** — Verify no hallucinated features or API surfaces
+   - See: [check_l_antihallucination.mdc](check_l_antihallucination.mdc)
+   - Script: `scripts/run-antihallucination.sh`
+
+3. **API Surface** — Verify API surface consistent across tasks
+   - Script: `scripts/api-surface-check.sh`
+
+## Instructions
+
+1. Run `scripts/quick-drift-check.sh <feature_dir>` — no constraint drift
+2. Run `scripts/run-antihallucination.sh <feature_dir>` — no hallucinated features
+3. Run `scripts/api-surface-check.sh <feature_dir>` — API surface consistent
+4. If any sub-check fails:
+   - Compare implementation against plan.md and spec.md
+   - Remove hallucinated features or revert unauthorized changes
+   - Align API surface with cross-task agreements
+5. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Critical tier**: ALL sub-checks must pass.
+- Implementation must match spec sections identified for this task type.
+- No new public APIs or methods beyond what the plan specifies.
+- API surface changes must be consistent with other tasks in the same batch.

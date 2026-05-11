@@ -1,0 +1,29 @@
+# Check: Resilience
+
+Run the resilience dimension sub-checks. This ensures resilience testing and adversarial input handling.
+
+## Sub-checks
+
+1. **Resilience Testing** — Verify circuit breakers, retries, timeouts are tested
+   - Script: `scripts/check-resilience.sh` (to be implemented)
+
+2. **Adversarial Input** — Verify malformed input, rate limiting, chaos scenarios
+   - See: [check_t_adversarial.mdc](check_t_adversarial.mdc)
+   - Script: `scripts/check-adversarial.sh` (to be implemented)
+
+## Instructions
+
+1. Run `scripts/check-resilience.sh <feature_dir>` — resilience patterns tested
+2. Run `scripts/check-adversarial.sh <feature_dir>` — adversarial inputs handled
+3. If any sub-check fails:
+   - Add retry logic with exponential backoff
+   - Add circuit breaker patterns for external dependencies
+   - Add tests for malformed input, oversized payloads, race conditions
+4. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Tertiary tier**: informational only, logged for review.
+- External calls have retry and timeout logic.
+- Circuit breakers for downstream dependencies.
+- Malformed input is gracefully rejected.

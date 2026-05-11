@@ -1,0 +1,29 @@
+# Check: Performance
+
+Run the performance dimension sub-checks. This ensures performance budgets and quantitative gates are met.
+
+## Sub-checks
+
+1. **Performance Budget** — Verify response times and throughput within budget
+   - Script: `scripts/check-performance-budget.sh` (to be implemented)
+
+2. **Quantitative Gate** — Run quantitative performance checks
+   - See: [check_r_quantitative.mdc](check_r_quantitative.mdc)
+   - Script: `scripts/run-quantitative.sh`
+
+## Instructions
+
+1. Run `scripts/check-performance-budget.sh <feature_dir>` — within performance budget
+2. Run `scripts/run-quantitative.sh <feature_dir>` — quantitative gates pass
+3. If any sub-check fails:
+   - Profile slow endpoints
+   - Add caching where appropriate
+   - Optimize database queries
+4. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Tertiary tier**: informational only, logged for review.
+- Response times within defined budget (e.g., p95 < 200ms for API endpoints).
+- No N+1 query patterns.
+- Memory usage within bounds.

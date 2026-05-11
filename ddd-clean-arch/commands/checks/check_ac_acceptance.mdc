@@ -1,0 +1,19 @@
+# Check: Acceptance Criteria Coverage
+
+Verify every acceptance criterion in tasks.md has at least one matching test file.
+
+## Instructions
+
+1. Parse acceptance criteria from `tasks.md` for the current task
+2. For each criterion:
+   - Search test files for matching keywords/patterns
+   - Verify at least one test file references the criterion
+   - Check that the test actually asserts the behavior (not just a comment)
+3. Report unmatched criteria
+4. Record results in `.artifacts/check-results/AC.result`
+
+## Gate Criteria
+
+- **Secondary tier**: failures logged for review.
+- 100% of acceptance criteria have matching test coverage.
+- Tests assert behavior (not just exercise code).

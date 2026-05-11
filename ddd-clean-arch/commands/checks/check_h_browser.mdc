@@ -4,6 +4,7 @@ name: Browser Verification
 applies_to: [frontend-feature, e2e]
 ---
 [H] BROWSER VERIFICATION — frontend-feature and e2e tasks only
+
   Run the E2E test file headlessly first:
     Command: plan.md §13 regression_command.e2e_only
     Required: all tests pass headlessly.
@@ -11,7 +12,6 @@ applies_to: [frontend-feature, e2e]
 
   If Playwright MCP is available (local Claude Code):
     Replay the E2E test scenario using Playwright MCP visible browser.
-    This adds human-visible confirmation that the UI looks correct.
     Take a screenshot at the final state of the happy path.
     Save to: docs/test-results/[YYYY-MM-DD]-TASK-[N]-[feature].png
     Read browser console output -- flag any errors or unhandled rejections.
@@ -33,3 +33,5 @@ applies_to: [frontend-feature, e2e]
   If Playwright MCP is not available (web sandbox):
     Headless only. Print warning: "Playwright MCP not available -- visual
     verification skipped. All headless E2E tests pass."
+
+Record results in: .artifacts/check-results/H.result

@@ -1,0 +1,41 @@
+# Check: Integration
+
+Run the integration dimension sub-checks. This ensures architecture tests, API contracts, migrations, and cross-cutting concerns are handled properly.
+
+## Sub-checks
+
+1. **Architectural Tests** — Verify layer boundaries are respected
+   - See: [check_a_arch.mdc](check_a_arch.mdc)
+   - Script: `scripts/run-arch-tests.sh`
+
+2. **API Contract** — Verify API contract changes are backward compatible
+   - See: [check_k_contract.mdc](check_k_contract.mdc)
+   - Script: `scripts/validate-api-contract.sh`
+
+3. **Migration Test** — Verify database migrations are reversible and tested
+   - Script: `scripts/run-migration-test.sh`
+
+4. **Cross-Cutting** — Verify cross-cutting concerns are properly delegated
+   - See: [check_n_crosscutting.mdc](check_n_crosscutting.mdc)
+   - Script: `scripts/check-crosscutting.sh` (to be implemented)
+
+## Instructions
+
+1. Run `scripts/run-arch-tests.sh <feature_dir>` — layer boundaries respected
+2. Run `scripts/validate-api-contract.sh <feature_dir>` — API contract compatible
+3. Run `scripts/run-migration-test.sh <feature_dir>` — migrations reversible
+4. Run `scripts/check-crosscutting.sh <feature_dir>` — cross-cutting concerns delegated
+5. If any sub-check fails:
+   - Fix layer violations (move code to correct layer)
+   - Update API contract or ensure backward compatibility
+   - Add migration rollback tests
+   - Move cross-cutting logic to middleware/pipes/guards
+6. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Secondary tier**: failures logged for review but don't block progress.
+- Domain layer has no infrastructure dependencies.
+- API changes don't break existing consumers.
+- Migrations have both up and down scripts.
+- Cross-cutting concerns (logging, auth, validation) use centralized mechanisms.

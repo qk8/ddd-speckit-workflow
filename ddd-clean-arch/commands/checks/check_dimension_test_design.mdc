@@ -1,0 +1,35 @@
+# Check: Test Design
+
+Run the test design dimension sub-checks. This ensures test quality, failure mode coverage, and negative test coverage.
+
+## Sub-checks
+
+1. **Test Quality** — Verify tests prove acceptance criteria with proper fixture usage
+   - See: [check_p_test_quality.mdc](check_p_test_quality.mdc)
+   - Script: `scripts/verify-test-quality.sh`
+
+2. **Failure Modes** — Check error paths and edge cases are covered
+   - See: [check_m_failure_modes.mdc](check_m_failure_modes.mdc)
+   - Script: `scripts/check-failure-modes.sh` (to be implemented)
+
+3. **Negative Tests** — Verify negative tests for public APIs
+   - See: [check_nt_negative_tests.mdc](check_nt_negative_tests.mdc)
+   - Script: `scripts/verify-negative-tests.sh` (to be implemented)
+
+## Instructions
+
+1. Run `scripts/verify-test-quality.sh <feature_dir>` — tests follow quality standards
+2. Run `scripts/check-failure-modes.sh <feature_dir>` — error paths covered
+3. Run `scripts/verify-negative-tests.sh <feature_dir>` — negative tests present
+4. If any sub-check fails:
+   - Add missing error path tests
+   - Improve test assertions (avoid stubbing everything)
+   - Add negative tests for all public APIs
+5. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Secondary tier**: failures logged for review but don't block progress.
+- Every acceptance criterion has at least one passing test.
+- Error paths (exceptions, invalid input, timeouts) have dedicated tests.
+- Public APIs have negative tests (400, 401, 403, 409, 422 responses).

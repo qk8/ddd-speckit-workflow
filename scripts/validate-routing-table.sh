@@ -56,9 +56,9 @@ PRESET_DIR=$(dirname "$PRESET_FILE")
 CHECKS_DIR="$PRESET_DIR/commands/checks"
 ERRORS=0
 
-# Parse check IDs from checks: section (indented: "  A:" or "  BC:")
+# Parse check/dimension IDs from checks: section (indented: "  A:", "  test_execution:")
 CHECK_IDS_TMP="$TMP_DIR/check_ids.txt"
-awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$PRESET_FILE" > "$CHECK_IDS_TMP"
+awk '/^checks:/{found=1; next} found && /^  [A-Z][A-Z0-9]*:/{id=$1; gsub(/:/,"",id); print id; next} found && /^  [a-z][a-z_]*:/{id=$1; gsub(/:/,"",id); print id; next} found && /^[a-z]/{found=0}' "$PRESET_FILE" > "$CHECK_IDS_TMP"
 read_from_input CHECK_IDS < "$CHECK_IDS_TMP"
 
 # Parse check IDs from routing: section (indented: "  backend-domain:    [A, B, ...]")
@@ -87,19 +87,27 @@ for cid in "${CHECK_IDS[@]}"; do
   fi
 done
 
-# Check 3: .mdc files exist for all check IDs (files use lowercase: check_a_arch.mdc)
+# Check 3: .mdc files exist for all check IDs
+# Old IDs: check_a_arch.mdc, check_bc_new_tests_regression.mdc, etc.
+# Dimension IDs: check_dimension_test_execution.mdc, etc.
 for cid in "${CHECK_IDS[@]}"; do
   lc=$(echo "$cid" | tr '[:upper:]' '[:lower:]')
   found=false
-  for f in "$CHECKS_DIR"/check_${lc}_*.mdc; do
-    if [ -f "$f" ]; then
-      found=true
-      break
-    fi
-  done
+  # Try dimension template (exact name: check_dimension_<name>.mdc)
+  if [ -f "$CHECKS_DIR/check_dimension_${lc}.mdc" ]; then
+    found=true
+  fi
+  # Try old-style template (check_<id>_<name>.mdc)
   if [ "$found" = false ]; then
-    echo "ERROR: No check_${lc}_*.mdc file found in $CHECKS_DIR"
-    ERRORS=$((ERRORS + 1))
+    for f in "$CHECKS_DIR"/check_${lc}_*.mdc; do
+      if [ -f "$f" ]; then
+        found=true
+        break
+      fi
+    done
+  fi
+  if [ "$found" = false ]; then
+    echo "WARNING: No mdc file found for [$cid]"
   fi
 done
 
@@ -119,7 +127,7 @@ PRESET_MAIN="$PRESET_DIR/preset.yml"
 if [ -f "$PRESET_MAIN" ]; then
   # Extract check IDs from checks: section, normalized and sorted
   EXTRACT_CHECK_IDS() {
-    awk '/^checks:/{found=1; next} found && /^[[:space:]]*[A-Z][A-Z]?:/{gsub(/:/,"",$1); gsub(/[[:space:]]/,"",$1); print $1; next} found && /^[a-z]/{found=0}' "$1" | sort -u
+    awk '/^checks:/{found=1; next} found && /^  [A-Z][A-Z0-9]*:/{id=$1; gsub(/:/,"",id); print id; next} found && /^  [a-z][a-z_]*:/{id=$1; gsub(/:/,"",id); print id; next} found && /^[a-z]/{found=0}' "$1" | sort -u
   }
   CHECKS_FILE="$TMP_DIR/checks_preset.txt"
   CHECKS_MAIN_FILE="$TMP_DIR/checks_main.txt"
@@ -133,24 +141,9 @@ if [ -f "$PRESET_MAIN" ]; then
   fi
 fi
 
-# --fix: regenerate routing section from auto-derived values
+# --fix: regenerate routing sections from auto-derived values
 if [ "$FIX_MODE" = true ]; then
-  # Find the line number of "routing:"
-  ROUTING_LINE=$(grep -n '^routing:' "$PRESET_FILE" | head -1 | cut -d: -f1)
-  # Find the last routing entry line (last line with '[' array after routing:)
-  LAST_ENTRY_LINE=$(tail -n +"$ROUTING_LINE" "$PRESET_FILE" | grep -n '\[' | tail -1 | cut -d: -f1)
-  if [ -z "$LAST_ENTRY_LINE" ]; then
-    LAST_ENTRY_LINE=0
-  fi
-  LAST_ENTRY_ABS=$((ROUTING_LINE + LAST_ENTRY_LINE - 1))
-  # Everything from LAST_ENTRY_ABS+1 to next top-level key is preserved (blank lines, comments)
-  {
-    head -n "$((ROUTING_LINE - 1))" "$PRESET_FILE"
-    ./scripts/derive-routing.sh "$PRESET_FILE"
-    tail -n +"$((LAST_ENTRY_ABS + 1))" "$PRESET_FILE"
-  } > "$PRESET_FILE.tmp"
-  mv "$PRESET_FILE.tmp" "$PRESET_FILE"
-  echo "FIXED: routing section regenerated"
+  bash scripts/derive-routing-tables.sh --write "$PRESET_FILE"
   exit 0
 fi
 

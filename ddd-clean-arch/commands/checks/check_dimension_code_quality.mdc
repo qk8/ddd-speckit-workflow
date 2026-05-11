@@ -1,0 +1,34 @@
+# Check: Code Quality
+
+Run the code quality dimension sub-checks. This ensures code meets linting, complexity, and naming standards.
+
+## Sub-checks
+
+1. **Lint** — Run the project linter
+   - See: [check_d_linter.mdc](check_d_linter.mdc)
+   - Script: `scripts/run-lint.sh`
+
+2. **Complexity** — Check function length, nesting depth, cyclomatic complexity
+   - See: [check_v_code_complexity.mdc](check_v_code_complexity.mdc)
+   - Script: `scripts/verify-code-quality.sh`
+
+3. **Naming** — Verify naming conventions follow language/project standards
+   - Script: `scripts/verify-naming-conventions.sh` (to be implemented)
+
+## Instructions
+
+1. Run `scripts/run-lint.sh <feature_dir>` — no lint errors
+2. Run `scripts/verify-code-quality.sh <feature_dir>` — complexity within thresholds
+3. Run `scripts/verify-naming-conventions.sh <feature_dir>` — naming conventions followed
+4. If any sub-check fails:
+   - Fix lint errors (automatically fixable ones first)
+   - Refactor complex functions (split, reduce nesting)
+   - Rename non-conforming identifiers
+5. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Critical tier**: ALL sub-checks must pass.
+- Linter: zero errors (warnings allowed with suppression comments)
+- Complexity: per thresholds in `scripts/code-quality-thresholds.sh`
+- Naming: follow established project conventions

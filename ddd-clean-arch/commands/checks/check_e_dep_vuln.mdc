@@ -1,0 +1,18 @@
+# Check: Dependency Vulnerability Scan
+
+Scan project dependencies for known security vulnerabilities.
+
+## Instructions
+
+1. Run `scripts/run-dep-scan.sh <feature_dir>`
+2. Review the vulnerability report for critical/high severity issues
+3. If vulnerabilities found:
+   - Update vulnerable packages to patched versions
+   - If no patch available, add exception with documented rationale
+4. Record results in `.artifacts/check-results/E.result`
+
+## Gate Criteria
+
+- **Secondary tier**: failures logged for review.
+- Zero critical or high severity vulnerabilities.
+- Medium/low vulnerabilities documented with risk acceptance.

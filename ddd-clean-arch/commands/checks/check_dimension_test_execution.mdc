@@ -1,0 +1,28 @@
+# Check: Test Execution
+
+Run the test execution dimension sub-checks. This ensures new tests run AND the full regression suite passes.
+
+## Sub-checks
+
+1. **Regression** — Run the full regression test suite
+   - See: [check_bc_new_tests_regression.mdc](check_bc_new_tests_regression.mdc)
+   - Script: `scripts/run-regression.sh`
+
+2. **New Tests** — Verify new tests compile and pass
+   - Script: `scripts/run-new-tests.sh` (to be implemented)
+
+## Instructions
+
+1. Run `scripts/run-regression.sh <feature_dir>` — all existing tests must pass
+2. Run `scripts/run-new-tests.sh <feature_dir>` — new tests must pass
+3. If any sub-check fails:
+   - Review the test output for root cause
+   - Fix the failing tests or the code under test
+   - Re-run the failed sub-checks
+4. Record results in `.artifacts/check-results/`
+
+## Gate Criteria
+
+- **Critical tier**: ALL sub-checks must pass. Any failure blocks progress.
+- Regression suite must include all previously passing tests.
+- New tests must cover the acceptance criteria for this task.

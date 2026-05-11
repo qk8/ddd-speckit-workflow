@@ -4,16 +4,20 @@ name: Error Handling Assertions
 applies_to: [backend-api, frontend-data]
 ---
 [G] ERROR HANDLING ASSERTIONS — backend-api and frontend-data tasks only
-  Verify that the test file from Step 1 already asserts error handling.
-  If any assertion is missing: add it to the test file now (not optional).
+
+Verify that the test file asserts error handling:
+  1. All exceptions are caught and logged
+  2. Error responses include meaningful messages
+  3. Error envelope shape matches project conventions
 
   If Type is backend-api, verify the API test asserts:
-    1. Correlation ID header (exact name from §8) present in HTTP response
+    1. Correlation ID header present in HTTP response
     2. Error envelope shape matches §7 exactly for each error type tested
-    (Structured log assertion is not automated -- note in completion report
-     that log output was manually verified during implementation)
+    3. Structured log assertion noted in completion report (manual verification)
 
   If Type is frontend-data, verify the unit test asserts:
     1. Correlation ID attached to infrastructure_error and unexpected_error objects
-    2. All four error types return the correct discriminated union tag
+    2. All error types return the correct discriminated union tag
     3. No function throws -- all errors are returned as typed values
+
+Record results in: .artifacts/check-results/G.result

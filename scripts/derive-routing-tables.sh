@@ -4,19 +4,16 @@
 # Usage: bash scripts/derive-routing-tables.sh [--write] <preset_file>
 #
 # Reads ddd-clean-arch/preset.yml and auto-derives:
-#   routing_critical:    critical-tier checks per module type
-#   routing_secondary:   secondary-tier checks per module type
+#   routing:            all applicable checks/dimensions per module type
+#   routing_critical:   critical-tier checks/dimensions per module type
+#   routing_secondary:  secondary-tier checks/dimensions per module type
 #
 # Without --write: prints the derived tables to stdout for review.
 # With --write: updates preset.yml in place.
 #
-# Issue B: Eliminates the 4 sources of truth problem by deriving
-# routing_critical and routing_secondary automatically from the
-# single source of truth: checks[].tier + checks[].applies_to.
-#
-# The manual routing_critical and routing_secondary tables in preset.yml
-# are now ONLY for override purposes. If they exist and differ from the
-# derived values, a warning is printed.
+# NEW (v2): Works with consolidated dimensions. Dimensions have sub_checks.
+# The routing tables reference dimension IDs, not individual check IDs.
+# Tertiary dimensions are NOT included in routing tables (deferred to code review).
 #
 # Bash 3.2 compatible (no declare -A associative arrays).
 
@@ -46,8 +43,8 @@ fi
 TMPDIR_DERIVE=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_DERIVE"' EXIT
 
-# ── Parse checks from preset.yml ─────────────────────────────────
-# Store parsed data in temp files: one file per check.
+# ── Parse checks/dimensions from preset.yml ─────────────────────
+# Store parsed data in temp files: one file per check/dimension.
 # Format per check file: "TIER\nAPPLIES_TO"
 
 CHECKS_DIR="$TMPDIR_DERIVE/checks"
@@ -56,9 +53,11 @@ mkdir -p "$CHECKS_DIR"
 current_check=""
 
 while IFS= read -r line; do
-  # Match check ID line (e.g., "  A:" or "  BC:")
-  if echo "$line" | grep -qE '^\s{2}[A-Z][A-Z0-9]*:'; then
-    current_check=$(echo "$line" | sed 's/^\s*\([A-Z][A-Z0-9]*\):.*/\1/')
+  # Match check/dimension ID line (2-space indent, valid ID, colon-terminated)
+  # IDs: uppercase letters/digits (A, BC, AC, AS) or lowercase snake_case (test_execution)
+  # Excludes sub-fields like sub_checks, runs_on (indented at 4+ spaces)
+  if echo "$line" | grep -qE '^  ([A-Z][A-Z0-9]*|[a-z][a-z_]*):$'; then
+    current_check=$(echo "$line" | sed 's/^  \([A-Z][A-Z0-9]*\|[a-z][a-z_]*\):.*/\1/')
     echo "" > "$CHECKS_DIR/$current_check.tier"
     echo "" > "$CHECKS_DIR/$current_check.applies"
     continue
@@ -77,10 +76,7 @@ while IFS= read -r line; do
     continue
   fi
 
-  # Reset current_check on new top-level key (no leading whitespace, or minimal indent
-  # that is NOT a check sub-field like tier/applies_to/name).
-  # Check sub-fields (tier, applies_to, name, comments) are indented with 2+ spaces.
-  # Top-level keys (commands, checks, routing, cadence, etc.) start at column 0.
+  # Reset current_check on new top-level key
   if [ -n "$current_check" ] && echo "$line" | grep -qE '^[a-z]'; then
     current_check=""
   fi
@@ -90,11 +86,11 @@ done < "$PRESET_FILE"
 MODULE_TYPES="backend-domain backend-infra backend-api shared integration frontend-data frontend-feature e2e"
 
 # ── Derive routing tables ────────────────────────────────────────
-# Store derived results in temp files.
 ROUTING_DIR="$TMPDIR_DERIVE/routing"
 mkdir -p "$ROUTING_DIR"
 
 for module in $MODULE_TYPES; do
+  echo "" > "$ROUTING_DIR/all_$module"
   echo "" > "$ROUTING_DIR/critical_$module"
   echo "" > "$ROUTING_DIR/secondary_$module"
 done
@@ -108,7 +104,6 @@ for check_file in "$CHECKS_DIR"/*.tier; do
   [ -z "$applies" ] && continue
 
   for module in $MODULE_TYPES; do
-    # Check if module is in applies_to list
     is_applied=false
     if [ "$applies" = "all" ]; then
       is_applied=true
@@ -126,6 +121,19 @@ for check_file in "$CHECKS_DIR"/*.tier; do
     fi
 
     if [ "$is_applied" = true ]; then
+      # Add to "all" routing table (only critical + secondary, skip tertiary)
+      case "$tier" in
+        critical|secondary)
+          existing=$(cat "$ROUTING_DIR/all_$module")
+          if [ -n "$existing" ]; then
+            echo "$existing, $check_id" > "$ROUTING_DIR/all_$module"
+          else
+            echo "$check_id" > "$ROUTING_DIR/all_$module"
+          fi
+          ;;
+      esac
+
+      # Add to tier-specific routing table (skip tertiary)
       case "$tier" in
         critical)
           existing=$(cat "$ROUTING_DIR/critical_$module")
@@ -143,14 +151,20 @@ for check_file in "$CHECKS_DIR"/*.tier; do
             echo "$check_id" > "$ROUTING_DIR/secondary_$module"
           fi
           ;;
-        # tertiary checks are NOT included in either table (deferred to code review)
+        # tertiary: NOT included in routing tables (deferred to code review)
       esac
     fi
   done
 done
 
 # ── Output derived tables ────────────────────────────────────────
-echo "━━━ Derived Routing Tables ━━━"
+echo "━━━ Derived Routing Tables (v2 — dimensions) ━━━"
+echo ""
+echo "routing:"
+for module in $MODULE_TYPES; do
+  echo "  $module: [$(cat "$ROUTING_DIR/all_$module")]"
+done
+
 echo ""
 echo "routing_critical:"
 for module in $MODULE_TYPES; do
@@ -168,17 +182,8 @@ if [ "$WRITE_MODE" = false ]; then
   echo ""
   echo "━━━ Comparison with existing tables ━━━"
   echo ""
-
-  for tier_name in critical secondary; do
-    if grep -q "routing_${tier_name}:" "$PRESET_FILE" 2>/dev/null; then
-      echo "routing_${tier_name} EXISTS in preset.yml"
-      echo "  Derived values shown above — compare manually."
-      echo "  Run with --write to auto-update preset.yml."
-    else
-      echo "routing_${tier_name}: NOT FOUND in preset.yml (new table)"
-    fi
-  done
-
+  echo "Note: Manual overrides in preset.yml may intentionally differ"
+  echo "from derived values (e.g., per-module-tier variations)."
   echo ""
   echo "To update preset.yml with derived values:"
   echo "  bash scripts/derive-routing-tables.sh --write $PRESET_FILE"
@@ -190,10 +195,11 @@ echo ""
 echo "━━━ Writing to $PRESET_FILE ━━━"
 
 # Build the new routing tables as YAML strings
+new_all=""
 new_critical=""
+new_secondary=""
 for module in $MODULE_TYPES; do
-  checks=$(cat "$ROUTING_DIR/critical_$module")
-  # Format as YAML list
+  checks=$(cat "$ROUTING_DIR/all_$module")
   formatted=""
   OLD_IFS="$IFS"
   IFS=','
@@ -207,15 +213,27 @@ for module in $MODULE_TYPES; do
     fi
   done
   IFS="$OLD_IFS"
+  new_all="$new_all  $module:   [$formatted]
+"
+
+  checks=$(cat "$ROUTING_DIR/critical_$module")
+  formatted=""
+  IFS=','
+  for c in $checks; do
+    c=$(echo "$c" | tr -d ' ')
+    [ -z "$c" ] && continue
+    if [ -n "$formatted" ]; then
+      formatted="$formatted, $c"
+    else
+      formatted="$c"
+    fi
+  done
+  IFS="$OLD_IFS"
   new_critical="$new_critical  $module:   [$formatted]
 "
-done
 
-new_secondary=""
-for module in $MODULE_TYPES; do
   checks=$(cat "$ROUTING_DIR/secondary_$module")
   formatted=""
-  OLD_IFS="$IFS"
   IFS=','
   for c in $checks; do
     c=$(echo "$c" | tr -d ' ')
@@ -231,29 +249,35 @@ for module in $MODULE_TYPES; do
 "
 done
 
-# Use awk to replace the routing_critical and routing_secondary sections
+# Use awk to replace routing, routing_critical, routing_secondary sections
 TMPFILE=$(mktemp)
 
-awk -v new_crit="$new_critical" -v new_sec="$new_secondary" '
-  /^routing_critical:/ {
+awk -v new_all="$new_all" -v new_crit="$new_critical" -v new_sec="$new_secondary" '
+  /^routing:/ && !/^routing_/ {
     print
-    # Skip old critical section
+    # Skip old routing section (indented lines under routing:)
     getline
-    while ($0 ~ /^\s+[a-z]/ && !/^routing_secondary:/ && !/^routing:$/ && !/^cadence:/ && !/^check_profiles:/ && !/^auto_approve:/) {
+    while ($0 ~ /^\s+[a-z]/ && !/^routing_/ && !/^cadence:/ && !/^check_profiles:/ && !/^auto_approve:/) {
       getline
     }
-    # Print new critical section
+    printf "%s", new_all
+    next
+  }
+  /^routing_critical:/ {
+    print
+    getline
+    while ($0 ~ /^\s+[a-z]/ && !/^routing_/ && !/^cadence:/ && !/^check_profiles:/ && !/^auto_approve:/) {
+      getline
+    }
     printf "%s", new_crit
     next
   }
   /^routing_secondary:/ {
     print
-    # Skip old secondary section
     getline
     while ($0 ~ /^\s+[a-z]/ && !/^cadence:/ && !/^check_profiles:/ && !/^auto_approve:/) {
       getline
     }
-    # Print new secondary section
     printf "%s", new_sec
     next
   }
@@ -262,5 +286,5 @@ awk -v new_crit="$new_critical" -v new_sec="$new_secondary" '
 
 mv "$TMPFILE" "$PRESET_FILE"
 
-echo "Updated routing_critical and routing_secondary in $PRESET_FILE"
+echo "Updated routing, routing_critical, and routing_secondary in $PRESET_FILE"
 echo "Review the changes and verify correctness."
