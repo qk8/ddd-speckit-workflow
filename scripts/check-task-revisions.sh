@@ -45,6 +45,47 @@ else
   TASK_ID="${2:?Usage: check-task-revisions.sh <feature_dir> <task_id> [max_revisions]}"
 fi
 
+# ── Fast path: state.json ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  # Check if task is ABANDONED
+  TASK_STATUS=$(bash scripts/state-engine.sh read "$FEATURE_DIR" "tasks.$TASK_ID.status" 2>/dev/null || echo "UNKNOWN")
+  case "$TASK_STATUS" in
+    *[Aa][Bb][Aa][Nn][Dd][Oo][Nn][Ee][Dd]*)
+      echo "REVISION_COUNT=0"
+      echo "REVISION_OK=true"
+      echo "REVISION_EXHAUSTED=false"
+      echo "CURRENT_TASK=$TASK_ID"
+      echo "NOTE: Counter reset — task was ABANDONED and restarted."
+      exit 0
+      ;;
+  esac
+
+  # Read current revision count from state.json
+  CURRENT=$(bash scripts/state-engine.sh read "$FEATURE_DIR" "revisions.per_task.$TASK_ID" 2>/dev/null || echo 0)
+  case "$CURRENT" in
+    ''|*[!0-9]*) CURRENT=0 ;;
+  esac
+
+  echo "REVISION_COUNT=$CURRENT"
+  echo "REVISION_OK=true"
+  echo "REVISION_EXHAUSTED=false"
+  echo "CURRENT_TASK=$TASK_ID"
+
+  if [ "$CURRENT" -ge "$MAX_REVISIONS" ]; then
+    echo "REVISION_OK=false"
+    echo "REVISION_EXHAUSTED=true"
+    echo "TASK $TASK_ID has exceeded $MAX_REVISIONS revisions ($CURRENT attempts)." >&2
+    exit 1
+  fi
+
+  if [ "$DRY_RUN" = false ]; then
+    bash scripts/state-engine.sh write "$FEATURE_DIR" "revisions.per_task.$TASK_ID" "$((CURRENT + 1))" >/dev/null
+    echo "REVISION_COUNT=$((CURRENT + 1))"
+  fi
+  exit 0
+fi
+
+# ── Legacy path ──
 REVISIONS_DIR="$FEATURE_DIR/.artifacts/task-revisions"
 mkdir -p "$REVISIONS_DIR"
 

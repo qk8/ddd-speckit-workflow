@@ -29,6 +29,7 @@ mkdir -p "$TRACKING_DIR"
 > "$TRACKING_DIR/${TASK_ID}.files"
 > "$TRACKING_DIR/${TASK_ID}.files.hashes"
 
+FILES_JSON=""
 for f in "$@"; do
   echo "$f" >> "$TRACKING_DIR/${TASK_ID}.files"
   if [ "$TRACK_HASHES" = true ]; then
@@ -37,6 +38,17 @@ for f in "$@"; do
       echo "${f}:${hash_val}" >> "$TRACKING_DIR/${TASK_ID}.files.hashes"
     fi
   fi
+  # Build JSON array for state.json
+  if [ -n "$FILES_JSON" ]; then
+    FILES_JSON="${FILES_JSON}, \"$f\""
+  else
+    FILES_JSON="\"$f\""
+  fi
 done
+
+# ── Fast path: update state.json ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  bash scripts/state-engine.sh write "$FEATURE_DIR" "tasks.$TASK_ID.files_modified" "[$FILES_JSON]" >/dev/null 2>&1 || true
+fi
 
 echo "Tracked ${#@} files for $TASK_ID"

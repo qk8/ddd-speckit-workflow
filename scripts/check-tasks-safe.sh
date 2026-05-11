@@ -75,6 +75,96 @@ ensure_numeric() {
   fi
 }
 
+# ── Attempt 0: Read state.json (unified state engine) ──────────
+if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/state.json" ]; then
+  JSON_FILE="$FEATURE_DIR/state.json"
+  # Validate: must contain version and tasks fields
+  if jq -e 'has("version") and has("tasks")' "$JSON_FILE" >/dev/null 2>&1; then
+    # Count task statuses from state.json using jq
+    _done=$(jq '[.tasks | to_entries[] | select(.value.status == "DONE")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
+    _in_prog=$(jq '[.tasks | to_entries[] | select(.value.status == "IN_PROGRESS")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
+    _abandoned=$(jq '[.tasks | to_entries[] | select(.value.status == "ABANDONED")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
+    _done=$(ensure_numeric "$_done" 0)
+    _in_prog=$(ensure_numeric "$_in_prog" 0)
+    _abandoned=$(ensure_numeric "$_abandoned" 0)
+    _done=${_done:-0}
+    _in_prog=${_in_prog:-0}
+    _abandoned=${_abandoned:-0}
+    _total=$(( _done + _in_prog + _abandoned ))
+    _todo=$(( _total - _done ))
+    _todo=${_todo:-0}
+    [ "$_todo" -lt 0 ] 2>/dev/null && _todo=0
+
+    # Extract IN_PROGRESS task IDs
+    IN_PROGRESS_ALL=""
+    if [ "$_in_prog" -gt 0 ] 2>/dev/null; then
+      IN_PROGRESS_ALL=$(jq -r '[.tasks | to_entries[] | select(.value.status == "IN_PROGRESS") | .key] | join(",")' "$JSON_FILE" 2>/dev/null || true)
+    fi
+    IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
+
+    # Read metadata
+    _complexity="medium"
+    _retro_interval=10
+    _next_due=5
+    # Check if state.json has top-level complexity/interval (legacy .workflow-state.json compat)
+    _cj=$(parse_json_field "complexity" "$JSON_FILE")
+    if [ -n "$_cj" ]; then
+      _complexity="$_cj"
+    fi
+    _ij=$(parse_json_field "interval" "$JSON_FILE")
+    if [ -n "$_ij" ]; then
+      _retro_interval=$(ensure_numeric "$_ij" 10)
+    fi
+    _nj=$(parse_json_field "next_due" "$JSON_FILE")
+    if [ -n "$_nj" ]; then
+      _next_due=$(ensure_numeric "$_nj" 5)
+    fi
+    _done_count_check=${_done}
+
+    # ── Stale state validation: cross-check against tasks.md ──
+    _layer1_valid=true
+    if [ -f "$FEATURE_DIR/tasks.md" ]; then
+      _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
+      _diff=$((_done - _actual_done))
+      [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
+      if [ "$_diff" -gt 1 ]; then
+        _layer1_valid=false
+      fi
+    fi
+
+    if [ "$_layer1_valid" = true ]; then
+      _retro_trigger="false"
+      if [ "$_done_count_check" -ge "$_next_due" ] 2>/dev/null; then
+        _remainder=$(( (_done_count_check - _next_due) % _retro_interval ))
+        if [ "$_remainder" -eq 0 ]; then
+          _retro_trigger="true"
+        fi
+      fi
+
+      if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
+        HAS_TODO="true"
+      else
+        HAS_TODO="false"
+      fi
+
+      OUTPUT="has_todo=${HAS_TODO}
+done_count=${_done}
+todo_count=${_todo}
+in_progress=${IN_PROGRESS}
+in_progress_all=${IN_PROGRESS_ALL}
+abandoned_count=${_abandoned}
+total_tasks=${_total}
+complexity=${_complexity}
+retro_interval=${_retro_interval}
+first_retro_threshold=${_next_due}
+retro_trigger=${_retro_trigger}
+feature_dir=${FEATURE_DIR}
+todo_task_id=
+todo_task_type="
+    fi
+  fi
+fi
+
 # ── Attempt 1: Read .workflow-state.json (structured checkpoint) ──
 if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
   JSON_FILE="$FEATURE_DIR/.workflow-state.json"
@@ -164,7 +254,7 @@ first_retro_threshold=${_next_due}
 retro_trigger=${_retro_trigger}
 feature_dir=${FEATURE_DIR}
 todo_task_id=
-todo_task_type=
+todo_task_type="
     fi
     # If _layer1_valid is false, fall through to layer 2/3
   fi
@@ -231,7 +321,7 @@ first_retro_threshold=5
 retro_trigger=${_retro_trigger}
 feature_dir=${FEATURE_DIR}
 todo_task_id=
-todo_task_type=
+todo_task_type="
   fi
 fi
 

@@ -258,6 +258,11 @@ if [ -n "$TRENDS" ] && [ -f "$HEALTH_FILE" ]; then
   sed -i "s/\"trends\": {}/\"trends\": {${TRENDS}}/" "$HEALTH_FILE" 2>/dev/null || true
 fi
 
+# ── Fast path: also record to state.json history ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  bash scripts/state-engine.sh history-append "$FEATURE_DIR" "{\"phase\":\"verify\",\"task\":\"$TASK_ID\",\"iteration\":0,\"result\":\"$([ \"$PASS_RATE\" -ge 80 ] && echo PASS || echo WARN)\",\"test_count\":$TOTAL_TEST_COUNT,\"pass_rate\":$PASS_RATE,\"exec_time_ms\":$EXEC_TIME_MS,\"timestamp\":\"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\"}" >/dev/null 2>&1 || true
+fi
+
 # ── Step 7: Output ──────────────────────────────────────────────
 echo "TEST HEALTH: ${TASK_ID} | ${TOTAL_TEST_COUNT} tests, ${PASS_RATE}% pass, ${EXEC_TIME_MS}ms, ${FLAKY_COUNT} flaky"
 

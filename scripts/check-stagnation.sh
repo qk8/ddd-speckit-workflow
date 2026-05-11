@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Detects implementation stagnation: no tasks completed for N consecutive iterations.
+# Delegates to state-engine.sh if state.json exists.
 # Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks>
 #        check-stagnation.sh --reset <feature_dir>
 #        check-stagnation.sh --record-drift <feature_dir>
+#        check-stagnation.sh --increment-continue <feature_dir>
 # Outputs: STAGNANT=true|false, CONSECUTIVE_NO_PROGRESS=N, CONSECUTIVE_CONTINUES=N
 
 set -euo pipefail
@@ -25,13 +27,71 @@ else
   TOTAL_TASKS="${3:?}"
 fi
 
+# ── State engine path ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  if [ "$RESET_MODE" = true ]; then
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.consecutive_no_progress 0 >/dev/null
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.consecutive_continues 0 >/dev/null
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
+  if [ "$RECORD_DRIFT" = true ]; then
+    bash scripts/state-engine.sh task-incr "$FEATURE_DIR" _stagnation drift_violations >/dev/null 2>&1 || true
+    local_dv=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.drift_violations 2>/dev/null || echo 0)
+    echo "DRIFT_VIOLATION_COUNT=$local_dv"
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
+  if [ "$INCREMENT_CONTINUE" = true ]; then
+    bash scripts/state-engine.sh task-incr "$FEATURE_DIR" _stagnation consecutive_continues >/dev/null 2>&1 || true
+    local_cc=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.consecutive_continues 2>/dev/null || echo 0)
+    echo "CONSECUTIVE_CONTINUES=$local_cc"
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
+  # Main stagnation check
+  local_prev=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.last_done_count 2>/dev/null || echo "-1")
+  case "$local_prev" in ''|*[!0-9-]*) local_prev=-1 ;; esac
+  local_consec=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.consecutive_no_progress 2>/dev/null || echo 0)
+  case "$local_consec" in ''|*[!0-9]*) local_consec=0 ;; esac
+
+  if [ "$CURRENT_DONE" -gt "$local_prev" ] || [ "$TOTAL_TASKS" -eq 0 ] || [ "$local_prev" -eq -1 ]; then
+    echo "STAGNANT=false"
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.last_done_count "$CURRENT_DONE" >/dev/null
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.consecutive_no_progress 0 >/dev/null
+  else
+    local_new_consec=$((local_consec + 1))
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.consecutive_no_progress "$local_new_consec" >/dev/null
+    bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.last_done_count "$CURRENT_DONE" >/dev/null
+    if [ "$local_new_consec" -ge 2 ]; then
+      if [ "$CURRENT_DONE" -eq "$local_prev" ] && [ "$local_prev" -ne -1 ]; then
+        echo "REVISION_ONLY=true"
+      else
+        echo "REVISION_ONLY=false"
+      fi
+      echo "STAGNANT=true"
+      echo "CONSECUTIVE_NO_PROGRESS=$local_new_consec"
+    else
+      echo "REVISION_ONLY=false"
+      echo "STAGNANT=false"
+      echo "CONSECUTIVE_NO_PROGRESS=$local_new_consec"
+    fi
+  fi
+  local_cc=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.consecutive_continues 2>/dev/null || echo 0)
+  echo "CONSECUTIVE_CONTINUES=$local_cc"
+  exit 0
+fi
+
+# ── Legacy path ──
 STATE_FILE="$FEATURE_DIR/.stagnation_state"
 CONSEC_FILE="$STATE_FILE.consec"
 CONTINUE_FILE="$STATE_FILE.continue_count"
 mkdir -p "$FEATURE_DIR"
 
 if [ "$RESET_MODE" = true ]; then
-  # Atomic reset: write both values to temp file, then mv
   TMPFILE=$(mktemp)
   echo "0" > "$TMPFILE"
   echo "0" >> "$TMPFILE"
@@ -44,13 +104,9 @@ if [ "$RESET_MODE" = true ]; then
 fi
 
 if [ "$RECORD_DRIFT" = true ]; then
-  # Record a drift violation for diagnosis.
-  # Stagnation and drift are independent signals — do NOT reset stagnation.
   DRIFT_FILE="$STATE_FILE.drift_count"
   DRIFT_COUNT=$(cat "$DRIFT_FILE" 2>/dev/null || echo 0)
-  case "$DRIFT_COUNT" in
-    ''|*[!0-9]*) DRIFT_COUNT=0 ;;
-  esac
+  case "$DRIFT_COUNT" in ''|*[!0-9]*) DRIFT_COUNT=0 ;; esac
   DRIFT_COUNT=$((DRIFT_COUNT + 1))
   echo "$DRIFT_COUNT" > "$DRIFT_FILE"
   echo "DRIFT_VIOLATION_COUNT=$DRIFT_COUNT"
@@ -60,11 +116,8 @@ if [ "$RECORD_DRIFT" = true ]; then
 fi
 
 if [ "$INCREMENT_CONTINUE" = true ]; then
-  # Increment the consecutive continue counter (called when user selects "continue" on stagnation gate)
   CURRENT_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
-  case "$CURRENT_CONTINUES" in
-    ''|*[!0-9]*) CURRENT_CONTINUES=0 ;;
-  esac
+  case "$CURRENT_CONTINUES" in ''|*[!0-9]*) CURRENT_CONTINUES=0 ;; esac
   echo "$((CURRENT_CONTINUES + 1))" > "$CONTINUE_FILE"
   echo "CONSECUTIVE_CONTINUES=$((CURRENT_CONTINUES + 1))"
   echo "STAGNANT=false"
@@ -73,15 +126,9 @@ if [ "$INCREMENT_CONTINUE" = true ]; then
 fi
 
 PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1")
-# Validate PREV_DONE is numeric; default to -1 if not
-case "$PREV_DONE" in
-  ''|*[!0-9-]*) PREV_DONE=-1 ;;
-esac
+case "$PREV_DONE" in ''|*[!0-9-]*) PREV_DONE=-1 ;; esac
 CONSECUTIVE=$(cat "$CONSEC_FILE" 2>/dev/null || echo 0)
-# Validate CONSECUTIVE is numeric; default to 0 if not
-case "$CONSECUTIVE" in
-  ''|*[!0-9]*) CONSECUTIVE=0 ;;
-esac
+case "$CONSECUTIVE" in ''|*[!0-9]*) CONSECUTIVE=0 ;; esac
 
 if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
   echo "STAGNANT=false"
@@ -102,7 +149,6 @@ else
   echo "$CURRENT_DONE" > "$TMPFILE"
   mv "$TMPFILE" "$STATE_FILE"
   if [ "$NEW_CONSEC" -ge 2 ]; then
-    # Detect revision-only loop: stagnation detected but done_count hasn't changed
     if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
       echo "REVISION_ONLY=true"
     else
@@ -117,9 +163,6 @@ else
   fi
 fi
 
-# Output consecutive continue count
 CONSECUTIVE_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
-case "$CONSECUTIVE_CONTINUES" in
-  ''|*[!0-9]*) CONSECUTIVE_CONTINUES=0 ;;
-esac
+case "$CONSECUTIVE_CONTINUES" in ''|*[!0-9]*) CONSECUTIVE_CONTINUES=0 ;; esac
 echo "CONSECUTIVE_CONTINUES=$CONSECUTIVE_CONTINUES"

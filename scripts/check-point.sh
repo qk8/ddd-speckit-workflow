@@ -27,6 +27,46 @@ MODE="${1:?Usage: check-point.sh <read|write|snapshot|rollback|diff> <feature_di
 FEATURE_DIR="${2:?Usage: check-point.sh <read|write|snapshot|rollback|diff> <feature_dir> <action> [args...]}"
 ACTION="${3:-}"
 
+# ── Delegate task operations to state-engine.sh if state.json exists ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  case "$MODE" in
+    read)
+      # Return a minimal compatible JSON (the old format)
+      local_tasks=$(bash scripts/state-engine.sh read "$FEATURE_DIR" tasks 2>/dev/null || echo '{}')
+      cat <<EOF
+{"version":"2.0","metadata":{"created_at":"","updated_at":"","complexity":"medium","total_tasks":0},"tasks":$local_tasks,"batch_plan":{},"stagnation":{"consecutive":0,"last_done_count":0},"retrospective":{"next_due":5,"interval":10},"workflow":{"current_phase":"init","current_iteration":0}}
+EOF
+      exit 0
+      ;;
+    write)
+      case "$ACTION" in
+        task_done)
+          local_tid="$4"; local_type="$5"; local_built="$6"; local_test="$7"
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" status DONE >/dev/null
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" type "$local_type" >/dev/null
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" revision_count 0 >/dev/null
+          exit 0
+          ;;
+        task_in_progress)
+          local_tid="$4"; local_type="$5"
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" status IN_PROGRESS >/dev/null
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" type "$local_type" >/dev/null
+          exit 0
+          ;;
+        task_abandoned)
+          local_tid="$4"; local_reason="${5:-Manual abandon}"
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" status ABANDONED >/dev/null
+          bash scripts/state-engine.sh task-set "$FEATURE_DIR" "$local_tid" blocking_reason "$local_reason" >/dev/null
+          exit 0
+          ;;
+      esac
+      ;;
+    snapshot|rollback|diff)
+      # Snapshot/rollback/diff are file-level operations — delegate to legacy code below
+      ;;
+  esac
+fi
+
 CHECKPOINT_FILE="$FEATURE_DIR/.workflow-state.json"
 mkdir -p "$FEATURE_DIR/.artifacts"
 

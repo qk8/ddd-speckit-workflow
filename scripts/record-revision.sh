@@ -46,6 +46,19 @@ if [ -z "$FEATURE_DIR" ] || [ ! -d "$FEATURE_DIR" ]; then
   exit 0
 fi
 
+# ── Fast path: state.json ──
+if [ -f "$FEATURE_DIR/state.json" ]; then
+  bash scripts/state-engine.sh history-append "$FEATURE_DIR" "{\"phase\":\"revise\",\"step\":\"$STEP_ID\",\"iteration\":$ITERATION,\"summary\":\"$SUMMARY\",\"timestamp\":\"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\"}" >/dev/null 2>&1 || true
+  # Also append to revision_history.md for human readability
+  cat >> "$FEATURE_DIR/revision_history.md" <<EOF
+
+### Revision $ITERATION — $STEP_ID
+Timestamp: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
+Summary: $SUMMARY
+EOF
+  exit 0
+fi
+
 HISTORY="$FEATURE_DIR/revision_history.md"
 mkdir -p "$FEATURE_DIR"
 
