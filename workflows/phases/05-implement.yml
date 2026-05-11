@@ -1,0 +1,731 @@
+# ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
+# DAG-structured task execution with checks, gates, stagnation detection.
+# Condition: has_todo == true AND revision not exhausted.
+# max_iterations: max(50, total_tasks * 2).
+
+steps:
+
+  - id: impl_loop
+    type: while
+    condition: >
+      {{ steps.impl_check_remaining.output.has_todo == 'true' }} and
+      {{ steps.impl_check_revisions_dry.output.REVISION_EXHAUSTED != 'true' }}
+    max_iterations: >
+      {{ (steps.impl_check_remaining.output.total_tasks | int) * 2 > 50
+         ? (steps.impl_check_remaining.output.total_tasks | int) * 2
+         : 50 }}
+    steps:
+
+      - id: impl_check_remaining
+        type: shell
+        command: "bash scripts/check-tasks-safe.sh"
+
+      - id: impl_snapshot
+        type: shell
+        command: >
+          bash scripts/check-point.sh snapshot
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+          "{{ steps.impl_check_remaining.output.feature_dir }}/../.."
+        continue_on_error: true
+
+      - id: impl_check_spec_revision_limit
+        type: shell
+        command: >
+          bash scripts/check-spec-revisions.sh --dry-run
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_check_spec_revision
+        type: if
+        condition: >
+          {{ steps.impl_check_remaining.output.todo_task_type == 'spec_revision' }} and
+          {{ steps.impl_check_spec_revision_limit.output.SPEC_REVISION_EXHAUSTED != 'true' }}
+        then:
+          - id: impl_run_spec_revise
+            type: prompt
+            command: speckit.spec-revise
+            integration: claude
+            input:
+              args: >
+                This is a spec_revision task — the spec was discovered to be
+                wrong during implementation.
+                Read pending-learnings.md, identify spec corrections needed,
+                create/update plan.md and spec.md, and add fix tasks if needed.
+                After revision, the implement loop will re-process affected tasks.
+          - id: impl_record_spec_revision
+            type: shell
+            command: >
+              bash scripts/check-spec-revisions.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: impl_validate_spec_revision_fixes
+            type: shell
+            command: >
+              bash scripts/validate-fix-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_check_cleanup
+        type: if
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} == 25 or {{ steps.impl_loop_iteration.output.count || 1 }} == 40"
+        then:
+          - id: impl_cleanup
+            type: shell
+            command: >
+              bash scripts/cleanup-artifacts.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_loop_iteration.output.count || 1 }}"
+
+      - id: impl_check_llm_quality
+        type: if
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+        then:
+          - id: impl_run_llm_quality
+            type: shell
+            command: >
+              bash scripts/measure-llm-quality.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+      - id: impl_check_periodic
+        type: if
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 20 == 0"
+        then:
+          - id: impl_session_health
+            type: shell
+            command: >
+              bash scripts/session-health.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+          - id: impl_scope_audit
+            type: shell
+            command: >
+              bash scripts/scope-audit.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+      - id: impl_check_parse_error
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
+        then:
+          - id: impl_parse_error_gate
+            type: gate
+            message: |
+              ⚠ Task tracking is BROKEN — check-tasks.sh failed to parse tasks.md.
+
+              The workflow cannot safely determine task state.
+              Manual inspection of tasks.md is required before continuing.
+
+              Options:
+                fix — Edit tasks.md to fix formatting, then restart the workflow.
+                abort — Cancel the workflow.
+            options: [fix, abort]
+            on_abort:
+              - id: impl_cleanup_parse
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "parse_error"
+              - goto: abort
+
+      - id: impl_check_all_done
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.has_todo == 'false' }}"
+        then:
+          - id: impl_done_summary
+            type: shell
+            command: >
+              bash scripts/log-impl-complete.sh
+              "{{ steps.impl_check_remaining.output.done_count }}"
+              "{{ steps.impl_check_remaining.output.total_tasks }}"
+              "{{ steps.impl_check_remaining.output.abandoned_count | int }}"
+          - id: impl_post_drift
+            command: speckit.check
+            integration: claude
+            input:
+              args: >
+                Run a lightweight constraint drift check.
+                Check only constraint drift for the 3 most common violation
+                patterns from quick-drift-check.sh:
+                  1. Layer rule violations
+                  2. Missing correlation ID
+                  3. Test data isolation violations
+                Report PASS/FAIL for each. If any FAIL: note it but do not block.
+                Write findings to .artifacts/post-implementation-drift.md.
+                This is advisory — the full speckit.verify will run in Phase 7.
+
+      - id: impl_stagnation_check
+        type: shell
+        command: >
+          bash scripts/check-stagnation.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_check_remaining.output.done_count }}"
+          "{{ steps.impl_check_remaining.output.total_tasks }}"
+
+      - id: impl_stagnation_gate
+        type: if
+        condition: "{{ steps.impl_stagnation_check.output.STAGNANT == 'true' }}"
+        then:
+          - id: impl_stagnation_review
+            type: gate
+            message: |
+              ⚠ IMPLEMENTATION STAGNATION DETECTED
+
+              No new tasks completed for {{ steps.impl_stagnation_check.output.CONSECUTIVE_NO_PROGRESS }} consecutive iterations.
+              Tasks may be blocked, flaky, or the spec may be unrealistic.
+              {% if steps.impl_stagnation_check.output.CONSECUTIVE_CONTINUES | int >= 2 %}
+              **Continue option exhausted** ({{ steps.impl_stagnation_check.output.CONSECUTIVE_CONTINUES }} consecutive continues).
+              You must troubleshoot or abort.
+              {% endif %}
+
+              Options:
+                continue — Force-continue (risk wasting iterations).
+                troubleshoot — Run /speckit.status to diagnose, then decide.
+                abort — Cancel the workflow for manual review.
+              {% if steps.impl_stagnation_check.output.REVISION_ONLY == 'true' %}
+              **Revision loop detected** — revising without completing tasks.
+              **Recommended: Select "troubleshoot" or "abort".**
+              Continuing a revision loop wastes iterations.
+              {% endif %}
+            options: [continue, troubleshoot, abort]
+            on_continue:
+              - id: impl_stag_increment
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --increment-continue
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+              - id: impl_stag_reset
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --reset
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+            on_troubleshoot:
+              - id: impl_status
+                command: speckit.status
+                integration: claude
+              - id: impl_context
+                command: speckit.context
+                integration: claude
+                input:
+                  args: >
+                    Load focused context for the stuck task.
+                    Read tasks.md, identify the IN_PROGRESS or first TODO task.
+                    Read plan.md sections relevant to that task.
+                    Produce a targeted context window: task scope, acceptance
+                    criteria, relevant plan sections, and any error history.
+              - id: impl_resume
+                type: shell
+                command: >
+                  bash scripts/reset-stagnation.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+            on_abort:
+              - id: impl_cleanup_stag
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "stagnation"
+              - goto: abort
+
+      - id: impl_progress
+        type: shell
+        command: >
+          bash scripts/log-iteration-progress.sh
+          "{{ steps.impl_loop_iteration.output.count || 1 }}"
+          "{{ steps.impl_check_remaining.output.done_count }}"
+          "{{ steps.impl_check_remaining.output.total_tasks }}"
+          "{{ steps.impl_check_remaining.output.todo_count }}"
+          "{{ steps.impl_check_remaining.output.in_progress || 'none' }}"
+
+      - id: impl_check_in_progress
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.in_progress != '' }}"
+        then:
+          - id: impl_resolve_in_progress
+            type: gate
+            message: |
+              ⚠ IN_PROGRESS task(s) detected from a previous interrupted session:
+                {{ steps.impl_check_remaining.output.in_progress }}
+              {% if steps.impl_check_remaining.output.in_progress_all != '' and steps.impl_check_remaining.output.in_progress_all != steps.impl_check_remaining.output.in_progress %}
+              Additional IN_PROGRESS tasks: {{ steps.impl_check_remaining.output.in_progress_all }}
+              {% endif %}
+
+              A previous session was interrupted before this task completed.
+              The task may have partial files on disk.
+
+              Choose how to proceed:
+                restart  — Mark the task TODO and restart it cleanly.
+                continue — Leave it IN_PROGRESS and attempt to resume.
+                abandon  — Mark it ABANDONED and skip to the next TODO task.
+            options: [restart, continue, abandon]
+            on_restart:
+              - id: impl_validate_deps
+                type: shell
+                command: >
+                  bash scripts/validate-task-deps.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  "{{ steps.impl_check_remaining.output.in_progress }}"
+              - id: impl_restart_all
+                type: shell
+                command: >
+                  bash scripts/resolve-all-in-progress.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  TODO "Crash recovery — restarted all IN_PROGRESS tasks"
+            on_abandon:
+              type: shell
+              command: >
+                bash scripts/resolve-all-in-progress.sh
+                "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                ABANDONED "Crash recovery — abandoning all IN_PROGRESS tasks with cascade"
+
+      - id: impl_check_abandoned
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.abandoned_count | int > 0 }}"
+        then:
+          - id: impl_warn_abandoned
+            type: gate
+            message: |
+              ⚠ {{ steps.impl_check_remaining.output.abandoned_count }} ABANDONED task(s) found.
+              Approve to continue. Revise to clean up abandoned tasks.
+            options: [approve, revise]
+            on_revise:
+              - id: impl_clean_abandoned
+                type: prompt
+                integration: claude
+                input:
+                  args: >
+                    Read tasks.md. For each ABANDONED task, either delete the
+                    task section or reset its status to TODO. Print a summary.
+
+      - id: impl_check_revisions_dry
+        type: shell
+        command: >
+          bash scripts/check-task-revisions.sh
+          --dry-run
+          --auto
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "3"
+
+      - id: impl_pre_task_validate
+        type: shell
+        command: >
+          bash scripts/pre-task-validate.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_generate_context
+        type: shell
+        command: >
+          bash scripts/prompt-context.sh "{{ steps.impl_check_remaining.output.feature_dir }}"
+          | head -n 500
+          || true
+
+      - id: impl_write_test
+        type: prompt
+        command: speckit.write-test
+        integration: claude
+        input:
+          args: >
+            Discover the current batch: find all TODO tasks whose Depends-on
+            tasks are all DONE. Process each task in the batch sequentially
+            (write tests for TASK-N, then TASK-N+1, etc.). After processing
+            all tasks in the batch, write the batch task list to
+            .artifacts/batch_tasks.txt (format: "TASK-1, TASK-2, ...") and
+            print "Batch complete: [N] tasks done."
+            If no batch can be formed (no TODO tasks with all deps met), stop.
+            Always check Depends-on before starting each task.
+            Use the prompt context at .artifacts/prompts/[task_id]/context.md
+            if available — it contains targeted plan sections for this task.
+
+      - id: impl_execute
+        type: prompt
+        command: speckit.implement
+        integration: claude
+        input:
+          args: >
+            Implement the code to make the tests written by the previous step pass.
+            If .artifacts/batch_tasks.txt exists (batch mode from write-test):
+              implement each task in the batch sequentially.
+              After the batch, remove .artifacts/batch_tasks.txt.
+            Otherwise: implement only the first TODO task.
+            Always check Depends-on before starting.
+
+      - id: impl_verify
+        type: prompt
+        command: speckit.implement-verify
+        integration: claude
+        input:
+          args: >
+            Continue from the just-completed implementation.
+            Run quality checks (STEP 3) and produce the completion report (STEP 4).
+            Do NOT re-implement — only verify and report.
+
+      - id: impl_per_task_drift
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.todo_count | int }} > 0"
+        then:
+          - id: impl_quick_drift
+            type: shell
+            command: >
+              bash scripts/quick-drift-check.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+      - id: impl_post_batch_consistency
+        type: if
+        condition: >
+          {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+          {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+        then:
+          - id: impl_batch_consistency
+            type: prompt
+            command: speckit.batch-consistency
+            integration: claude
+            input:
+              args: >
+                Run post-batch consistency check.
+                Read the batch task list from .artifacts/batch_tasks.txt.
+                This is lightweight — check only constraint drift and API surface.
+                If .artifacts/batch_tasks.txt does not exist, skip silently.
+
+      - id: impl_merge_check
+        type: if
+        condition: >
+          {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+          {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+        then:
+          - id: impl_run_merge_check
+            type: shell
+            command: >
+              bash scripts/verify-batch-consistency.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_post_verify_cp
+        type: shell
+        command: >
+          bash scripts/post-verify-checkpoint.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_increment_revision
+        type: shell
+        command: >
+          bash scripts/check-task-revisions.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+          "3"
+
+      - id: impl_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh implement {{ steps.impl_loop_iteration.output.count || 1 }}"
+
+      - id: impl_pre_acceptance
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}" "acceptance"
+
+      - id: impl_review_acceptance
+        type: if
+        condition: >
+          {{ steps.impl_pre_acceptance.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.impl_pre_acceptance.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.impl_pre_acceptance.output.GATE_FORCE_HUMAN == 'false' }}
+        then:
+          - id: impl_accept_auto
+            type: shell
+            command: "echo 'Acceptance gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: impl_accept_gate
+            type: gate
+            message: |
+              Review acceptance criteria for the last task.
+
+              [ ] All acceptance criteria satisfied (test name + file:line references)?
+              [ ] Test file committed alongside implementation?
+
+              {% if steps.impl_pre_acceptance.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_acceptance.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: impl_lock_accept
+                type: shell
+                command: >
+                  bash scripts/lock-task-write.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — acceptance criteria not met."
+
+      - id: impl_pre_checks
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}" "quality"
+
+      - id: impl_review_checks
+        type: if
+        condition: >
+          {{ steps.impl_pre_checks.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.impl_pre_checks.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.impl_pre_checks.output.GATE_FORCE_HUMAN == 'false' }}
+        then:
+          - id: impl_checks_auto
+            type: shell
+            command: "echo 'Quality checks gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: impl_checks_gate
+            type: gate
+            message: |
+              Review quality check results for the last task.
+
+              [ ] All applicable checks passed (all checks in routing table)?
+              [ ] Check [BC] new tests + regression: zero new failures in existing test suite?
+              [ ] Check [J] performance budget: within §10 budget?
+              [ ] Check [K] contract enforcement: API matches api-contract.yaml?
+              [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
+
+              {% if steps.impl_pre_checks.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_checks.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: impl_lock_checks
+                type: shell
+                command: >
+                  bash scripts/lock-task-write.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — quality checks not met."
+
+      - id: impl_pre_tdd
+        type: shell
+        command: >
+          bash scripts/check-gate-preconditions.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}" "tdd"
+
+      - id: impl_review_tdd
+        type: if
+        condition: >
+          {{ steps.impl_pre_tdd.output.AUTO_APPROVE == 'true' }} and
+          {{ steps.impl_pre_tdd.output.GATE_BLOCKED == 'false' }} and
+          {{ steps.impl_pre_tdd.output.GATE_FORCE_HUMAN == 'false' }}
+        then:
+          - id: impl_tdd_auto
+            type: shell
+            command: "echo 'TDD gate auto-approved (all deterministic checks passed)'"
+        else:
+          - id: impl_tdd_gate
+            type: gate
+            message: |
+              Review TDD integrity for the last task.
+
+              [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
+              [ ] Test audit: no trivial assertions or over-masking found?
+              [ ] Test correctness: each test name proves its acceptance criterion?
+              [ ] Test correctness: [BC] new tests PASS with correct assertions?
+              [ ] Test correctness: factory/fixture used for test data isolation?
+              [ ] Red phase: failure evidence captured before implementation?
+              [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
+
+              {% if steps.impl_pre_tdd.output.GATE_BLOCKED == 'true' %}
+              **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_tdd.output.FAILING_CHECKS }}
+              You MUST revise. Approval is disabled until checks pass.
+              {% endif %}
+              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
+              **Revision threshold exceeded**. You MUST revise.
+              {% endif %}
+
+              Approve to continue to the next task.
+              Revise to send the task back for fixes.
+              Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
+            options: [approve, revise, stop]
+            on_stop:
+              type: shell
+              command: >
+                bash scripts/save-pause-state.sh
+                "{{ steps.impl_check_remaining.output.feature_dir }}"
+                "review-tdd"
+            on_revise:
+              - id: impl_lock_tdd
+                type: shell
+                command: >
+                  bash scripts/lock-task-write.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  IN_PROGRESS
+                  "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+                  "Task sent back for revision — TDD integrity issues."
+
+      - id: impl_retro_drift
+        type: if
+        condition: "{{ steps.impl_check_remaining.output.retro_trigger == 'true' }}"
+        then:
+          - id: impl_reset_drift_revisions
+            type: shell
+            command: "echo '0' > '{{ steps.impl_check_remaining.output.feature_dir }}/.drift_revisions'"
+
+          - id: impl_test_trend
+            type: shell
+            command: >
+              bash scripts/test-trend-analyzer.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+          - id: impl_retrospect
+            type: prompt
+            command: speckit.retrospect
+            integration: claude
+            input:
+              args: >
+                Read .artifacts/test-trend-report.md if available.
+                Use the trend report to assess test suite health.
+                If TREND_HEALTHY=false: flag degradation areas for attention.
+                If no trend report available: proceed with standard retrospective.
+
+          - id: impl_retrospect_review
+            type: gate
+            message: |
+              Review the retrospect report.
+              Approve when all blocking issues are resolved.
+              Revise to send back for more iteration (within implement_loop).
+              Select abort if further iteration is not warranted
+              (will trigger again next implement_loop iteration).
+            options: [approve, revise, abort]
+            on_revise:
+              - id: impl_record_retro
+                type: shell
+                command: >
+                  bash scripts/record-and-trim.sh implement_loop
+                  "{{ steps.impl_loop_iteration.output.count || 1 }}"
+              - goto: impl_retrospect
+
+          - id: impl_drift_check
+            type: prompt
+            command: speckit.check
+            integration: claude
+            input:
+              args: >
+                Run only check [Z] — Constraint Drift Detection.
+                Compare the implementation just completed against plan.md §16
+                (Architectural constraints). plan.md §16 is the source of truth.
+                CLAUDE.md is advisory and may paraphrase constraints — DO NOT
+                rely on CLAUDE.md for constraint checking. Read plan.md directly.
+                Report PASS/FAIL/N/A for each constraint.
+                For any FAIL: fix the violation immediately.
+                Write a detailed report to .artifacts/drift_check_report.md
+                with each constraint, its result, and file:line references for FAILs.
+
+          - id: impl_drift_result
+            type: shell
+            command: >
+              bash scripts/check-drift.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+          - id: impl_drift_revision_check
+            type: shell
+            command: >
+              bash scripts/check-drift-revisions.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+          - id: impl_drift_gate
+            type: gate
+            message: |
+              Drift check: {{ steps.impl_drift_result.output || "skipped (no retro trigger)" }}
+              {% if steps.impl_drift_result.output.DRIFT_DETECTED == 'true' %}
+              **DRIFT DETECTED** ({{ steps.impl_drift_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
+              {{ steps.impl_drift_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
+              Fix the violations above and revise to re-run drift detection.
+              {% if steps.impl_drift_revision_check.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' %}
+              **Drift revision limit reached**. You must abort for manual review.
+              {% endif %}
+              {% endif %}
+            options: [approve, revise, abort]
+            on_revise:
+              - id: impl_record_drift
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --record-drift
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+              - id: impl_drift_rev_check
+                type: shell
+                command: >
+                  bash scripts/check-drift-revisions.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+              - id: impl_drift_rev_limit
+                type: if
+                condition: "{{ steps.impl_drift_rev_check.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' }}"
+                then:
+                  - id: impl_drift_exhausted
+                    type: gate
+                    message: |
+                      Drift fix exhausted 2 revision attempts.
+                      The violations cannot be fixed automatically.
+                      Must abort for manual review.
+                    options: [abort]
+                    on_abort:
+                      - goto: abort
+                else:
+                  - goto: impl_drift_check
+            on_abort:
+              - id: impl_cleanup_drift
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "drift_check"
+              - goto: abort
+
+          - id: impl_traceability_recheck
+            type: shell
+            command: >
+              bash scripts/traceability-check.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+          - id: impl_traceability_gate
+            type: gate
+            message: |
+              Periodic traceability re-check (every 5 tasks):
+              {% if steps.impl_traceability_recheck.output.TRACEABLE == 'false' %}
+              **GAPS DETECTED** ({{ steps.impl_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
+              {{ steps.impl_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
+              Implementation has drifted from spec. Fix tasks.md or spec to close gaps.
+              {% else %}
+              All tasks still traceable to spec. No drift detected.
+              {% endif %}
+            options: [approve, revise]
+            on_revise:
+              - id: impl_add_trace_fixes
+                type: prompt
+                integration: claude
+                input:
+                  args: >
+                    Read tasks.md and the traceability check output above.
+                    For each gap (missing spec reference, missing plan section
+                    coverage), add a specific fix task to tasks.md with clear
+                    acceptance criteria. Print the list of added tasks.
+
+          - id: impl_post_gate_cp
+            type: shell
+            command: >
+              bash scripts/post-gate-checkpoint.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_module_verify
+        type: if
+        condition: >
+          {{ steps.impl_check_remaining.output.retro_trigger == 'true' }}
+        then:
+          - id: impl_run_module_verify
+            type: prompt
+            command: speckit.verify
+            integration: claude
+            input:
+              args: >
+                Run speckit.verify with scope "module" (not "full").
+                Verify only the module type that just completed.
+                This is a lightweight check — focus on the recently
+                completed task's module, not the entire codebase.
+                Write findings to .artifacts/module-verify-report.md.
+                If drift detected: fix in code or add fix task.

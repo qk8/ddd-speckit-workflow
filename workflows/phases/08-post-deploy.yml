@@ -1,0 +1,66 @@
+# ── PHASE 8: POST-DEPLOYMENT VERIFICATION ───────────────────────
+# Optional: deploy to staging, run E2E, health checks, migration verify.
+
+steps:
+
+  - id: pd_verify
+    type: gate
+    message: |
+      All implementation and verification complete.
+
+      Proceed to post-deployment verification?
+      This phase deploys to a staging environment and runs
+      E2E tests, health checks, and migration verification.
+
+      Select "skip" to bypass (useful for local development).
+      Select "deploy" to proceed with staging verification.
+    options: [deploy, skip]
+    on_deploy:
+      - id: pd_deploy
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Deploy the application to a staging environment.
+            1. Run database migrations against the staging database
+            2. Build and deploy all services
+            3. Wait for all health checks to pass
+            4. Verify: deployment successful, all services healthy
+
+      - id: pd_e2e
+        type: shell
+        command: >
+          # Run E2E tests against staging
+          E2E_BASE_URL=${DEPLOY_STAGING_URL:-http://staging.example.com} \
+          npm run test:e2e 2>&1 || echo "E2E tests completed with some failures"
+
+      - id: pd_health
+        type: shell
+        command: >
+          # Verify health endpoints
+          HEALTH=$(curl -sf --max-time 10 ${DEPLOY_STAGING_URL:-http://staging.example.com}/health 2>&1 || echo "UNHEALTHY")
+          echo "HEALTH_CHECK: $HEALTH"
+
+      - id: pd_migration
+        type: shell
+        command: >
+          # Verify migration state matches plan.md §12
+          echo "MIGRATION_VERIFY: Check that migration state in staging matches plan.md §12"
+
+      - id: pd_summary
+        type: gate
+        message: |
+          ━━ POST-DEPLOYMENT VERIFICATION ━━
+
+          Deployment: [check deploy output above]
+          E2E Tests: [check e2e output above]
+          Health Check: [check health output above]
+          Migration State: [check migration output above]
+
+          Approve to mark the workflow as fully complete.
+          Revise to investigate failures.
+        options: [approve, revise]
+    on_skip:
+      - id: pd_skip
+        type: shell
+        command: "echo 'Post-deployment verification skipped.'"

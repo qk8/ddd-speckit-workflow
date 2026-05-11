@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# build-workflow.sh — Merge orchestrator + phase files into runtime YAML
+#
+# Usage: scripts/build-workflow.sh [orchestrator_path] [output_path]
+#
+# Reads the orchestrator's imports list, extracts `steps:` sections from
+# each phase file, and produces a single flat YAML suitable for the
+# workflow engine.
+#
+# Output: merged YAML to stdout (or to output_path).
+
+set -euo pipefail
+
+ORCHESTRATOR="${1:-ddd-workflow.yml}"
+OUTPUT="${2:-/dev/stdout}"
+
+if [ ! -f "$ORCHESTRATOR" ]; then
+  echo "ERROR: Orchestrator not found: $ORCHESTRATOR" >&2
+  exit 1
+fi
+
+# Extract header (everything before `imports:`)
+HEADER=$(sed '/^imports:/,$d' "$ORCHESTRATOR")
+
+# Extract import paths
+IMPORT_PATHS=$(grep -E '^\s+- ' "$ORCHESTRATOR" | sed 's/^  - //' | grep '\.yml$')
+
+# Start building output
+{
+  echo "$HEADER"
+  echo "steps:"
+
+  for phase_file in $IMPORT_PATHS; do
+    if [ ! -f "$phase_file" ]; then
+      echo "# WARNING: Phase file not found: $phase_file (skipping)" >&2
+      continue
+    fi
+
+    # Extract steps section from phase file
+    # Handles nested indentation within while loops and if blocks
+    IN_STEPS=false
+    SKIP_BLANKS=true
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^steps: ]]; then
+        IN_STEPS=true
+        SKIP_BLANKS=true
+        continue
+      fi
+      if $IN_STEPS; then
+        # Skip leading blank lines right after steps:
+        if $SKIP_BLANKS; then
+          if [[ -z "$line" ]]; then
+            continue
+          fi
+          SKIP_BLANKS=false
+        fi
+        # Blank lines within steps are preserved as-is (with indent added)
+        if [[ -z "$line" ]]; then
+          echo ""
+          continue
+        fi
+        # Lines starting with whitespace are step content — add 2 spaces indent
+        if [[ "$line" =~ ^[[:space:]] ]]; then
+          echo "  $line"
+        else
+          # Non-indented, non-empty line = end of steps section
+          break
+        fi
+      fi
+    done < "$phase_file"
+
+    # Add a comment separator between phases
+    echo ""
+    echo "  # ── End of phase: $(basename "$phase_file") ──"
+    echo ""
+  done
+} > "$OUTPUT"
+
+echo "Build complete: $(wc -l < "$OUTPUT") lines → $OUTPUT" >&2

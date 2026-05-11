@@ -1,0 +1,105 @@
+# ── PHASE 6: CODE REVIEW ────────────────────────────────────────
+# Adversarial hardening + bounded code review loop.
+
+steps:
+
+  - id: cr_adversarial
+    command: speckit.code-review
+    integration: claude
+    input:
+      args: >
+        Run the catastrophic scenario hardening review:
+        Read plan.md §15 highest_risk_paths.
+        For each path, simulate: database drop mid-transaction, idempotency key
+        eviction, client retry storm (5x in 100ms), downstream 503 halfway through.
+        Verify or fix: ACID compliance, idempotency, exponential backoff with jitter,
+        graceful degradation.
+        Write findings to .artifacts/hardening-report.md.
+
+  - id: cr_backup
+    type: shell
+    command: >
+      bash scripts/backup-tasks.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" "pre-code-review"
+
+  - id: cr_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: cr_review
+        command: speckit.code-review
+        integration: claude
+        input:
+          args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Run the full code review checklist.
+            Every item must be PASS, FAIL, or N/A.
+            For every FAIL: apply the fix immediately.
+            Produce REVIEW_REPORT.md documenting the outcome.
+
+      - id: cr_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh code-review {{ steps.cr_round_iteration.output.count || 1 }}"
+
+      - id: cr_gate
+        type: gate
+        message: |
+          ━━ CODE REVIEW ROUND {{ steps.cr_round_iteration.output.count || 1 }}/3 ━━
+
+          Review the code review checklist results.
+
+          [ ] All security items: PASS or N/A
+          [ ] All correctness items: PASS
+          [ ] All performance items: PASS or N/A
+          [ ] All maintainability items: PASS
+          [ ] All accessibility items: PASS, N/A
+          [ ] REVIEW_REPORT.md produced
+          {% if steps.cr_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. You MUST revise.
+          {% endif %}
+
+          Approve to continue to final verify.
+          Revise to send the checklist back for fixes.
+        options: [approve, revise, abort]
+        on_revise:
+          - id: cr_record
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh code_review_round
+              "{{ steps.cr_round_iteration.output.count || 1 }}"
+          - id: cr_validate_fixes
+            type: shell
+            command: >
+              bash scripts/validate-fix-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: cr_backup_fixes
+            type: shell
+            command: >
+              bash scripts/backup-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" "code-review"
+          - id: cr_plan_fixes
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read REVIEW_REPORT.md and tasks.md. For every FAIL item, add a
+                specific fix task to tasks.md with clear acceptance criteria.
+
+                DEDUPLICATION: Before adding each fix task, check if a task with
+                the same acceptance criterion already exists in tasks.md (any status).
+                If the same FAIL item was already addressed in a previous revision round:
+                - Skip it — it was already added.
+                - Do NOT create a duplicate task.
+                Print: "Added [N] new fix tasks, skipped [M] duplicates from previous rounds."
+          - goto: cr_review
+        on_abort:
+          - id: cr_cleanup_abort
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "code_review"
+          - goto: abort

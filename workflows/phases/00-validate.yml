@@ -1,0 +1,62 @@
+# ── PHASE 0: VALIDATE SETUP ─────────────────────────────────────
+# Prerequisite checks before starting the workflow.
+
+steps:
+
+  - id: v_setup
+    type: shell
+    command: "bash scripts/validate-setup.sh"
+
+  - id: v_preflight
+    type: prompt
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md.
+        Check that ALL of the following fields are filled in
+        (not placeholder text in brackets):
+          - Project name
+          - What does this system do (at least 2 sentences)
+          - Stack: backend_language, backend_framework, database,
+                   frontend_language, frontend_framework, monorepo_tool
+          - Complexity: simple | medium | complex
+          - At least one hard constraint or explicit "none"
+          - At least one out-of-scope item or explicit "none"
+          - Security posture
+
+        If any field is missing or still contains placeholder text:
+          List the missing fields and stop.
+          Print: "Fill in project-brief.md and run the workflow again."
+
+        If all fields are present:
+          Print a one-paragraph summary of what you read.
+
+        Also check the following tooling is installed locally:
+          - gitleaks: run 'gitleaks version' — needed for secret scanning
+          - node: run 'node --version' — needed for Playwright MCP
+
+        If gitleaks is missing: print a warning suggesting
+          'bash scripts/setup-hooks.sh' to install it.
+        If node is missing: print a warning suggesting
+          'bash scripts/setup-mcp.sh' after installing Node.js.
+
+        Print: "project-brief.md is complete — proceeding."
+
+  - id: v_review_preflight
+    type: gate
+    message: |
+      Review the project-brief.md summary above.
+      Does it correctly reflect your project?
+      Revise to send back for clarification fixes.
+      Select abort if the project brief needs significant rewriting.
+    options: [approve, revise, abort]
+    on_revise:
+      - goto: cl_round
+    on_abort:
+      - id: v_cleanup_abort
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "preflight"
+      - goto: abort

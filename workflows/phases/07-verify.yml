@@ -1,0 +1,154 @@
+# ── PHASE 7: FINAL VERIFY + FIX NEEDED ──────────────────────────
+# Post-loop checks, full verify, spec-code delta, fix_needed loop.
+
+steps:
+
+  - id: vf_post_loop_check
+    type: shell
+    command: "bash scripts/check-tasks-safe.sh"
+
+  - id: vf_regression_baseline
+    type: if
+    condition: >
+      {{ steps.vf_post_loop_check.output.has_todo == 'false' }}
+    then:
+      - id: vf_run_regression
+        type: shell
+        command: >
+          bash scripts/regression-baseline.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: vf_integration_smoke
+        type: shell
+        command: >
+          bash scripts/integration-smoke.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: vf_verify_all
+    type: if
+    condition: >
+      {{ steps.vf_post_loop_check.output.has_todo == 'true' }} or
+      {{ steps.vf_post_loop_check.output.abandoned_count | int }} > 0
+    then:
+      - id: vf_incomplete_warning
+        type: shell
+        command: >
+          bash scripts/log-incomplete-implementation.sh
+          "{{ steps.vf_post_loop_check.output.todo_count }}"
+          "{{ steps.vf_post_loop_check.output.abandoned_count }}"
+          "{{ steps.vf_post_loop_check.output.in_progress }}"
+
+  - id: vf_abandoned_summary
+    type: if
+    condition: >
+      {{ steps.vf_post_loop_check.output.abandoned_count | int }} > 0
+    then:
+      - id: vf_run_abandoned
+        command: speckit.abandoned-summary
+        integration: claude
+        input:
+          args: >
+            List all ABANDONED tasks from tasks.md.
+            For each, summarize: task title, reason for abandonment (from tasks.md notes),
+            and what functionality is missing as a result.
+            Write the summary to .artifacts/abandoned-tasks-summary.md.
+            Print: "ABANDONED TASKS SUMMARY: [N] tasks abandoned"
+
+  - id: vf_final_verify
+    command: speckit.verify
+    integration: claude
+    input:
+      args: "full"
+
+  - id: vf_review_final
+    type: gate
+    message: |
+      Review the final verify report.
+
+      CLEAN → spec and code are fully aligned. Ready to merge.
+      DRIFT DETECTED → fix issues before merging.
+        For each issue, decide: fix in code (align to spec) or fix in spec
+        (intentional deviation). Add fix tasks to tasks.md if needed,
+        then select "fix-needed" to resume the implement loop.
+    options: [approved-clean, fix-needed, abort]
+    on_abort:
+      - id: vf_cleanup_abort
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "final_verify"
+      - goto: abort
+    on_fix-needed:
+      - id: vf_record_fix_needed
+        type: shell
+        command: >
+          bash scripts/record-phase-revision.sh fix_needed_round 1
+      - goto: fix_needed_round
+
+  - id: vf_spec_code_delta
+    type: prompt
+    command: speckit.verify
+    integration: claude
+    input:
+      args: >
+        Produce a spec-code delta report.
+        Compare plan.md and tasks.md against the actual codebase.
+        List any remaining discrepancies not caught by the full verify.
+        Write summary to .artifacts/spec-code-delta.md.
+        Print: "SPEC-CODE DELTA: CLEAN (no remaining discrepancies)"
+        or "SPEC-CODE DELTA: [N] remaining issues found"
+
+  - id: vf_backup_fix_needed
+    type: shell
+    command: >
+      bash scripts/backup-tasks.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" "pre-fix-needed"
+
+  - id: fix_needed_round
+    type: while
+    condition: "true"
+    max_iterations: 2
+    steps:
+      - id: fix_needed_gate
+        type: gate
+        message: |
+          Review the final verify report for remaining drift issues.
+          CLEAN → spec and code are fully aligned. Ready to merge.
+          DRIFT DETECTED → fix issues before merging.
+            For each issue, decide: fix in code (align to spec) or fix in spec
+            (intentional deviation). Add fix tasks to tasks.md if needed.
+          Round {{ steps.fix_needed_round_iteration.output.count || 1 }}/2.
+        options: [approved-clean, fix-needed, abort]
+        on_fix-needed:
+          - id: fix_add_tasks
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read tasks.md and the final verify report.
+                Use ddd-clean-arch/templates/fix-task-template.md to format each fix task.
+                For each drift issue, add a fix task to tasks.md with clear
+                acceptance criteria. Print the list of added tasks.
+          - id: fix_validate
+            type: shell
+            command: >
+              bash scripts/validate-fix-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: fix_backup
+            type: shell
+            command: >
+              bash scripts/backup-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" "fix-needed"
+          - id: fix_record
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh fix_needed_round
+              "{{ steps.fix_needed_round_iteration.output.count || 1 }}"
+          - id: fix_rollback
+            type: shell
+            command: >
+              bash scripts/check-point.sh rollback
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || echo "No checkpoint available — proceeding without rollback"
+          - goto: impl_loop
+        on_abort: abort

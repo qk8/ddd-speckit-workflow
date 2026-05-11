@@ -1,0 +1,55 @@
+# ── PHASE 1: CLARIFY (bounded) ──────────────────────────────────
+# 3-round max clarification loop.
+
+steps:
+
+  - id: cl_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: cl_ask
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            Read project-brief.md fully.
+
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Based on what you read, ask 3-5 targeted clarifying questions.
+            Focus only on things that are genuinely ambiguous or missing and that
+            would significantly affect architecture decisions.
+            Do not ask about things already covered in the brief.
+            Do not ask generic questions.
+
+            Good questions probe: edge cases in the core domain, conflict
+            resolution between competing requirements, specific compliance
+            obligations, external system API constraints, and expected
+            data volumes for the most critical operations.
+
+      - id: cl_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh clarify {{ steps.cl_round_iteration.output.count || 1 }}"
+
+      - id: cl_review
+        type: gate
+        message: |
+          ━━ CLARIFY ROUND {{ steps.cl_round_iteration.output.count || 1 }}/3 ━━
+
+          Answer the clarifying questions above.
+          Edit your answers directly in this gate if needed.
+          Approve when requirements are well-understood.
+          {% if steps.cl_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded** ({{ steps.cl_round_iteration.output.count || 1 }}/3).
+          Approving on next iteration.
+          {% endif %}
+        options: [approve, re-clarify]
+        on_re-clarify:
+          - id: cl_record
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh clarify_round
+              "{{ steps.cl_round_iteration.output.count || 1 }}"
+          - goto: cl_ask

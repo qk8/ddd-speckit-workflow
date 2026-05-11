@@ -1,0 +1,182 @@
+# ── PHASE 4: TASKS + VALIDATION ─────────────────────────────────
+# Pre-mortem, tasks generation loop, traceability check, routing derivation.
+
+steps:
+
+  - id: ts_premortem
+    command: speckit.pre-mortem
+    integration: claude
+    input:
+      args: >
+        Run pre-mortem analysis on the approved plan.
+        Read plan.md and tasks.md. Identify architectural, dependency,
+        testing, operational, and spec-implementation risks.
+        Document mitigations in .artifacts/pre-mortem.md.
+        If risk is HIGH, review mitigations before proceeding.
+
+  - id: ts_phase
+    type: while
+    condition: "true"
+    max_iterations: 5
+    steps:
+
+      - id: ts_generate
+        command: speckit.tasks
+        integration: claude
+        input:
+          args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Read plan.md and use ddd-clean-arch/templates/tasks-template.md.
+
+            Produce one task per aggregate (domain layer), one per aggregate
+            (infra layer), one per endpoint group (api layer), then shared,
+            then integration tasks, then frontend-data, frontend-feature, e2e —
+            in that order.
+
+            AFTER producing shared/frontend-data/frontend-feature/e2e tasks,
+            read plan.md §3 (Bounded contexts). For each bounded context relationship
+            (shared kernel, ACL, open host service, publisher-subscriber),
+            produce an integration task:
+
+              ## TASK-[N]
+              Title: [Context A] → [Context B] integration
+              Type: integration
+              Depends on: [all domain + infra + api tasks for both contexts]
+              Scope:
+                Creates:
+                  - tests/integration/[contextA]_[contextB]_IntegrationTest.[ext]
+                Modifies:
+                  - none
+              Acceptance criteria:
+                - [Test verifies that an event/command from Context A correctly
+                  triggers the expected behavior in Context B through the ACL/shared kernel]
+              Do NOT:
+                - [Do not implement domain logic — only write the integration test]
+
+            Task order must be:
+              1. backend-domain → 2. backend-infra → 3. backend-api →
+              4. shared → 5. integration (cross-context) →
+              6. frontend-data → 7. frontend-feature → 8. e2e
+
+            Rules:
+              - Acceptance criteria must name exact classes from plan.md.
+                Form: "calling [ExactClass].[method]([input]) raises/returns [output]"
+              - Each task has exactly one "Do NOT" scope-creep guard.
+              - Max 5 files and max 1 aggregate per task.
+              - All Depends-on fields must reference earlier tasks.
+              - No circular dependencies.
+
+      - id: ts_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh tasks {{ steps.ts_phase_iteration.output.count || 1 }}"
+
+      - id: ts_review
+        type: gate
+        message: |
+          Review .specify/specs/[feature]/tasks.md
+
+          [ ] Task order: domain → infra → api → shared → integration → frontend-data → frontend-feature → e2e
+          [ ] Integration tasks: one per bounded context relationship (shared kernel, ACL, publisher-subscriber)?
+          [ ] Acceptance criteria verifiable (name exact classes/methods from plan.md)?
+          [ ] Each "Do NOT" guard is specific to that task?
+          [ ] No task touches more than 5 files or more than 1 aggregate?
+          [ ] All Depends-on references are to earlier tasks?
+
+          Approving proceeds to task dependency graph validation before implementation.
+          {% if steps.ts_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise]
+        on_revise:
+          - id: ts_record
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh tasks_phase
+              "{{ steps.ts_phase_iteration.output.count || 1 }}"
+          - goto: ts_generate
+
+      - id: ts_validate
+        type: shell
+        command: "bash scripts/validate-tasks.sh"
+
+      - id: ts_validate_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh tasks {{ steps.ts_phase_iteration.output.count || 1 }}"
+
+      - id: ts_validate_review
+        type: gate
+        message: |
+          Review the task dependency graph validation results above.
+
+          ERRORS must be fixed before implementation starts:
+            - Circular dependencies
+            - References to non-existent tasks
+
+          WARNINGS are advisory:
+            - Task ordering issues (depends-on appears after dependent task)
+
+          If there are errors, select "revise" to fix tasks.md.
+          If clean, select "approve" to start implementation.
+          Maximum 5 revision cycles ({{ steps.ts_phase_iteration.output.count || 1 }}/5).
+          {% if steps.ts_validate_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise, abort]
+        on_abort:
+          - id: ts_cleanup_abort
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "tasks_phase"
+          - goto: abort
+        on_revise:
+          - id: ts_record_validate
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh validation_revision
+              "{{ steps.ts_phase_iteration.output.count || 1 }}"
+          - goto: ts_generate
+
+  - id: ts_traceability
+    type: shell
+    command: >
+      bash scripts/traceability-check.sh
+      "$(bash scripts/find-first-feature.sh)"
+
+  - id: ts_show_cost
+    type: shell
+    command: >
+      bash scripts/estimate-cost.sh
+      "$(bash scripts/find-first-feature.sh)"
+
+  - id: ts_trace_review
+    type: gate
+    message: |
+      Traceability check results:
+      {% if steps.ts_traceability.output.TRACEABLE == 'false' %}
+      **GAPS DETECTED** ({{ steps.ts_traceability.output.TRACE_GAP_COUNT || 0 }} gap(s)):
+      {{ steps.ts_traceability.output.TRACE_GAPS || "See stderr above." }}
+      Fix tasks.md to close gaps, then revise.
+      {% else %}
+      All tasks traceable to plan.md. No gaps detected.
+      {% endif %}
+    options: [approve, revise, abort]
+    on_revise:
+      - goto: ts_phase
+    on_abort:
+      - id: ts_cleanup_trace
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "traceability_check"
+      - goto: abort
+
+  - id: ts_derive_routing
+    type: shell
+    command: >
+      bash scripts/derive-routing-tables.sh --write
+      "$(cd "$(dirname "$0")" && pwd)/ddd-clean-arch/preset.yml"

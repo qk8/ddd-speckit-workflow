@@ -1,0 +1,94 @@
+# ── PHASE 2: SPEC + AUDIT ───────────────────────────────────────
+# Spec generation and adversarial audit loop.
+
+steps:
+
+  - id: sp_spec
+    command: speckit.specify
+    integration: claude
+    input:
+      args: >
+        Read project-brief.md and the clarification answers from the
+        previous phase. Produce the feature spec (spec.md).
+
+  - id: sp_review_spec
+    type: gate
+    message: |
+      Review .specify/specs/[feature]/spec.md
+      Does it correctly capture user stories and acceptance requirements?
+      Are there missing scenarios or incorrect assumptions?
+      Approve to proceed to the technical plan.
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: sp_audit_round
+    type: while
+    condition: "true"
+    max_iterations: 3
+    steps:
+      - id: sp_audit
+        type: prompt
+        integration: claude
+        input:
+          args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Read .specify/specs/[feature]/spec.md. Then produce an adversarial
+            audit with exactly these sections:
+
+            ### Hidden Requirements
+            [Requirements implied by the spec but not stated. For each finding:
+            CITE: spec.md line [N]: '[exact spec sentence]' supports this finding.]
+
+            ### Contradictions
+            [Any two requirements that cannot both be true simultaneously. For each:
+            CITE: spec.md line [N]: '[exact spec sentence A]' and
+            CITE: spec.md line [M]: '[exact spec sentence B]' are contradictory.]
+
+            ### Ambiguities
+            [Any phrase a developer could interpret two different ways. For each:
+            CITE: spec.md line [N]: '[ambiguous phrase]'.
+            Possible interpretations: [list].]
+
+            ### Missing Edge Cases
+            [Empty states, error states, etc. For each:
+            CITE: spec.md line [N]: '[related spec sentence]'.]
+
+            ### Security Surfaces
+            [Any feature that introduces a security surface not addressed in the spec.
+            For each: CITE: spec.md line [N]: '[feature spec]'.]
+
+            MANDATORY CITATION RULE: Every audit item MUST include a CITE line
+            referencing the exact spec sentence (with line number) that supports
+            the finding. Format: CITE: spec.md line [N]: '[exact spec sentence]'
+            Findings without a CITE line are considered noise and should be
+            excluded from the final report. Do not produce items without citations.
+
+            Print the audit. Do NOT modify spec.md yet. The human will
+            review and decide what to add.
+
+      - id: sp_audit_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh spec {{ steps.sp_audit_round_iteration.output.count || 1 }}"
+
+      - id: sp_review_audit
+        type: gate
+        message: |
+          ━━ AUDIT ROUND {{ steps.sp_audit_round_iteration.output.count || 1 }}/3 ━━
+
+          Review the adversarial spec audit above.
+          Edit spec.md to resolve every item: add missing requirements,
+          clarify ambiguities, document contradictions resolved.
+          Approve when the spec is unambiguous and complete.
+          {% if steps.sp_audit_threshold.output.AUTO_APPROVE == 'true' %}
+          **Revision threshold exceeded**. Approving on next iteration.
+          {% endif %}
+        options: [approve, revise]
+        on_revise:
+          - id: sp_record
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh audit_round
+              "{{ steps.sp_audit_round_iteration.output.count || 1 }}"
+          - goto: sp_audit
