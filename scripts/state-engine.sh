@@ -16,6 +16,8 @@
 #   state-engine.sh history-prune <feature_dir> <keep>          — keep last N history entries
 #   state-engine.sh task-set <feature_dir> <task_id> <key> <value> — set a field on a task
 #   state-engine.sh task-incr <feature_dir> <task_id> <key>    — increment a numeric field on a task
+#   state-engine.sh cadence-increment <counter_key>            — increment a cadence counter
+#   state-engine.sh cadence-reset <counter_key>                — reset a cadence counter to 0
 #
 # State is stored in <feature_dir>/state.json
 # Old format files are preserved as .bak after migration.
@@ -87,6 +89,35 @@ do_init() {
     "tasks_phase": 0,
     "fix_needed": 0,
     "per_task": {}
+  },
+  "spec": {
+    "version": 1,
+    "last_revision_at": null
+  },
+  "auto_revise": {
+    "count": 0,
+    "last_gate": null
+  },
+  "cadence": {
+    "traceability_counter": 0,
+    "traceability_interval": 15
+  },
+  "context": {
+    "generation_count": 0,
+    "last_snapshot": null,
+    "rotation_threshold": 10
+  },
+  "risk_profile": "low",
+  "workflow": {
+    "skip_commits": false,
+    "commit_policy": "per-task",
+    "last_commit_sha": null
+  },
+  "token_budget": {
+    "estimated_total": 0,
+    "actual_used": 0,
+    "warning_threshold": 0.8,
+    "critical_threshold": 0.9
   },
   "metadata": {
     "created_at": "$ts",
@@ -281,6 +312,45 @@ do_history_prune() {
   jq --argjson keep "$keep" \
     '.history = (.history[-($keep):]) | .metadata.updated_at = "'"$(now_utc)"'"' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+}
+
+# ── Spec version increment ───────────────────────────────────────
+do_spec_increment() {
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.spec.version = (.spec.version + 1) | .spec.last_revision_at = $ts | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "SPEC: version incremented to $(jq -r '.spec.version' "$STATE_FILE")"
+}
+
+# ── Cadence operations ───────────────────────────────────────────
+
+do_cadence_increment() {
+  local counter_key="${1:?Usage: state-engine.sh cadence-increment <counter_key>}"
+  ensure_exists
+
+  local jq_path=".cadence.${counter_key}"
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.cadence."'"$counter_key"' = (.cadence."'"$counter_key"' // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CADENCE: ${counter_key} incremented to $(jq -r '.cadence."'"$counter_key"'" "$STATE_FILE")"
+}
+
+do_cadence_reset() {
+  local counter_key="${1:?Usage: state-engine.sh cadence-reset <counter_key>}"
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.cadence."'"$counter_key"' = 0 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CADENCE: ${counter_key} reset to 0"
 }
 
 # ── Generate tasks.md ────────────────────────────────────────────
@@ -722,11 +792,14 @@ case "$MODE" in
   generate-tasks-md) do_generate_tasks_md ;;
   history-append)   do_history_append "$3" ;;
   history-prune)    do_history_prune "$3" ;;
+  spec-increment)   do_spec_increment ;;
+  cadence-increment) do_cadence_increment "$3" ;;
+  cadence-reset)    do_cadence_reset "$3" ;;
   task-set)         do_task_set "$3" "$4" "${5:-}" ;;
   task-incr)        do_task_incr "$3" "$4" ;;
   *)
     echo "Unknown mode: $MODE" >&2
-    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|task-set|task-incr> <feature_dir> [args...]" >&2
+    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|task-set|task-incr> <feature_dir> [args...]" >&2
     exit 1
     ;;
 esac

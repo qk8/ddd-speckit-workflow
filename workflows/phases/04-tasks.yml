@@ -85,8 +85,9 @@ steps:
           [ ] All Depends-on references are to earlier tasks?
 
           Approving proceeds to task dependency graph validation before implementation.
-          {% if steps.ts_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          {% if steps.ts_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.ts_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
           {% endif %}
         options: [approve, revise]
         on_revise:
@@ -120,8 +121,9 @@ steps:
           If there are errors, select "revise" to fix tasks.md.
           If clean, select "approve" to start implementation.
           Maximum 5 revision cycles ({{ steps.ts_phase_iteration.output.count || 1 }}/5).
-          {% if steps.ts_validate_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          {% if steps.ts_validate_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.ts_validate_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
           {% endif %}
         options: [approve, revise, abort]
         on_abort:

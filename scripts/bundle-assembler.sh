@@ -60,6 +60,7 @@ PRESET_YML="${BASE_DIR}/ddd-clean-arch/preset.yml"
 TEST_INSTR_DIR="${BASE_DIR}/ddd-clean-arch/templates/test-instructions"
 GUIDE_CORRECTION="${BASE_DIR}/ddd-clean-arch/guides/correction-loop.md"
 GUIDE_TASK_SEL="${BASE_DIR}/ddd-clean-arch/guides/task-selection.md"
+FAILURE_MODES="${BASE_DIR}/docs/failure-modes.md"
 IMPACT_REPORT="${FEATURE_DIR}/.artifacts/impact-report.txt"
 
 # ── Helpers ─────────────────────────────────────────────────────
@@ -124,6 +125,11 @@ get_section_nums() {
     }
   ' "$SPEC_SECTIONS" 2>/dev/null | grep -oE '§[0-9]+' | sed 's/§//' | sort -un || true
 }
+
+# ── Context rotation (implement phase only) ─────────────────────
+if [ "$PHASE" = "implement" ]; then
+  bash scripts/context-rotate.sh "$FEATURE_DIR" 2>/dev/null || true
+fi
 
 # ── Output header ──────────────────────────────────────────────
 {
@@ -193,6 +199,9 @@ plan)
   else
     echo "  (not found)"
   fi
+  echo ""
+  echo "## Failure Mode Catalog"
+  maybe_file "$FAILURE_MODES"
   ;;
 
 tasks)

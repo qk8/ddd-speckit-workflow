@@ -1,18 +1,32 @@
 #!/usr/bin/env bash
 # build-workflow.sh — Merge orchestrator + phase files into runtime YAML
 #
-# Usage: scripts/build-workflow.sh [orchestrator_path] [output_path]
+# Usage: scripts/build-workflow.sh [orchestrator_path] [output_path] [--validate]
 #
 # Reads the orchestrator's imports list, extracts `steps:` sections from
 # each phase file, and produces a single flat YAML suitable for the
 # workflow engine.
 #
 # Output: merged YAML to stdout (or to output_path).
+# --validate: Run DAG validation on goto references after merge.
 
 set -euo pipefail
 
-ORCHESTRATOR="${1:-ddd-workflow.yml}"
-OUTPUT="${2:-/dev/stdout}"
+ORCHESTRATOR="ddd-workflow.yml"
+OUTPUT="/dev/stdout"
+VALIDATE=""
+
+# Parse arguments: positional args for orchestrator/output, --validate flag
+POS_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --validate) VALIDATE="--validate" ;;
+    *) POS_ARGS+=("$arg") ;;
+  esac
+done
+
+ORCHESTRATOR="${POS_ARGS[0]:-ddd-workflow.yml}"
+OUTPUT="${POS_ARGS[1]:-/dev/stdout}"
 
 if [ ! -f "$ORCHESTRATOR" ]; then
   echo "ERROR: Orchestrator not found: $ORCHESTRATOR" >&2
@@ -77,3 +91,14 @@ IMPORT_PATHS=$(grep -E '^\s+- ' "$ORCHESTRATOR" | sed 's/^  - //' | grep '\.yml$
 } > "$OUTPUT"
 
 echo "Build complete: $(wc -l < "$OUTPUT") lines → $OUTPUT" >&2
+
+# Optional DAG validation
+if [ "$VALIDATE" = "--validate" ]; then
+  echo "" >&2
+  echo "Running DAG validation..." >&2
+  bash scripts/validate-workflow-dag.sh || {
+    echo "DAG validation failed — aborting build" >&2
+    exit 1
+  }
+  echo "DAG validation passed." >&2
+fi

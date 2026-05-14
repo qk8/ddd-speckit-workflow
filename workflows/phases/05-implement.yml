@@ -1,7 +1,8 @@
 # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
 # DAG-structured task execution with checks, gates, stagnation detection.
 # Condition: has_todo == true AND revision not exhausted.
-# max_iterations: max(50, total_tasks * 2).
+# max_iterations: 100 (computed by compute-loop-limits.sh as max(50, total_tasks * 2))
+# For projects >50 tasks, increase via scripts/compute-loop-limits.sh --floor 50 --multiplier 2 --total_tasks N
 
 steps:
 
@@ -10,11 +11,15 @@ steps:
     condition: >
       {{ steps.impl_check_remaining.output.has_todo == 'true' }} and
       {{ steps.impl_check_revisions_dry.output.REVISION_EXHAUSTED != 'true' }}
-    max_iterations: >
-      {{ (steps.impl_check_remaining.output.total_tasks | int) * 2 > 50
-         ? (steps.impl_check_remaining.output.total_tasks | int) * 2
-         : 50 }}
+    max_iterations: 100
     steps:
+
+      - id: impl_check_pause_resume
+        type: shell
+        command: >
+          bash scripts/workflow-resume.sh
+          "$(bash scripts/find-first-feature.sh)"
+        continue_on_error: true
 
       - id: impl_check_remaining
         type: shell
@@ -61,6 +66,11 @@ steps:
             type: shell
             command: >
               bash scripts/validate-fix-tasks.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: impl_spec_version_increment
+            type: shell
+            command: >
+              bash scripts/state-engine.sh spec-increment
               "{{ steps.impl_check_remaining.output.feature_dir }}"
 
       - id: impl_check_cleanup
@@ -232,6 +242,18 @@ steps:
           "{{ steps.impl_check_remaining.output.total_tasks }}"
           "{{ steps.impl_check_remaining.output.todo_count }}"
           "{{ steps.impl_check_remaining.output.in_progress || 'none' }}"
+
+      - id: impl_increment_traceability_counter
+        type: shell
+        command: >
+          bash scripts/state-engine.sh cadence-increment traceability_counter
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_check_traceability_due
+        type: shell
+        command: >
+          bash scripts/traceability-cadence.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
 
       - id: impl_check_in_progress
         type: if
@@ -423,7 +445,8 @@ steps:
         condition: >
           {{ steps.impl_pre_acceptance.output.AUTO_APPROVE == 'true' }} and
           {{ steps.impl_pre_acceptance.output.GATE_BLOCKED == 'false' }} and
-          {{ steps.impl_pre_acceptance.output.GATE_FORCE_HUMAN == 'false' }}
+          {{ steps.impl_pre_acceptance.output.GATE_FORCE_HUMAN == 'false' }} and
+          {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }}
         then:
           - id: impl_accept_auto
             type: shell
@@ -441,8 +464,9 @@ steps:
               **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_acceptance.output.FAILING_CHECKS }}
               You MUST revise. Approval is disabled until checks pass.
               {% endif %}
-              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
-              **Revision threshold exceeded**. You MUST revise.
+              {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
+              **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
+              **Action**: Select "revise" to run retrospect on remaining tasks.
               {% endif %}
             options: [approve, revise]
             on_revise:
@@ -466,7 +490,8 @@ steps:
         condition: >
           {{ steps.impl_pre_checks.output.AUTO_APPROVE == 'true' }} and
           {{ steps.impl_pre_checks.output.GATE_BLOCKED == 'false' }} and
-          {{ steps.impl_pre_checks.output.GATE_FORCE_HUMAN == 'false' }}
+          {{ steps.impl_pre_checks.output.GATE_FORCE_HUMAN == 'false' }} and
+          {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }}
         then:
           - id: impl_checks_auto
             type: shell
@@ -487,8 +512,9 @@ steps:
               **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_checks.output.FAILING_CHECKS }}
               You MUST revise. Approval is disabled until checks pass.
               {% endif %}
-              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
-              **Revision threshold exceeded**. You MUST revise.
+              {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
+              **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
+              **Action**: Select "revise" to run retrospect on remaining tasks.
               {% endif %}
             options: [approve, revise]
             on_revise:
@@ -512,7 +538,8 @@ steps:
         condition: >
           {{ steps.impl_pre_tdd.output.AUTO_APPROVE == 'true' }} and
           {{ steps.impl_pre_tdd.output.GATE_BLOCKED == 'false' }} and
-          {{ steps.impl_pre_tdd.output.GATE_FORCE_HUMAN == 'false' }}
+          {{ steps.impl_pre_tdd.output.GATE_FORCE_HUMAN == 'false' }} and
+          {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }}
         then:
           - id: impl_tdd_auto
             type: shell
@@ -535,8 +562,9 @@ steps:
               **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_tdd.output.FAILING_CHECKS }}
               You MUST revise. Approval is disabled until checks pass.
               {% endif %}
-              {% if steps.impl_threshold.output.AUTO_APPROVE == 'true' %}
-              **Revision threshold exceeded**. You MUST revise.
+              {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
+              **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
+              **Action**: Select "revise" to run retrospect on remaining tasks.
               {% endif %}
 
               Approve to continue to the next task.
@@ -677,6 +705,17 @@ steps:
                   "drift_check"
               - goto: abort
 
+          - id: impl_post_gate_cp
+            type: shell
+            command: >
+              bash scripts/post-gate-checkpoint.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_check_traceability
+        type: if
+        condition: >
+          {{ steps.impl_check_traceability_due.output.TRACEABILITY_DUE == 'true' }}
+        then:
           - id: impl_traceability_recheck
             type: shell
             command: >
@@ -686,7 +725,7 @@ steps:
           - id: impl_traceability_gate
             type: gate
             message: |
-              Periodic traceability re-check (every 5 tasks):
+              Periodic traceability re-check (every {{ steps.impl_check_traceability_due.output.TRACEABILITY_INTERVAL || 15 }} tasks):
               {% if steps.impl_traceability_recheck.output.TRACEABLE == 'false' %}
               **GAPS DETECTED** ({{ steps.impl_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
               {{ steps.impl_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
@@ -706,10 +745,10 @@ steps:
                     coverage), add a specific fix task to tasks.md with clear
                     acceptance criteria. Print the list of added tasks.
 
-          - id: impl_post_gate_cp
+          - id: impl_reset_traceability_counter
             type: shell
             command: >
-              bash scripts/post-gate-checkpoint.sh
+              bash scripts/state-engine.sh cadence-reset traceability_counter
               "{{ steps.impl_check_remaining.output.feature_dir }}"
 
       - id: impl_module_verify

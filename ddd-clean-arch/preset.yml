@@ -284,3 +284,11 @@ auto_approve:
     - review-tdd
     - review-plan-revision-gate
     - review-speckit-review
+
+# ── Auto-revise when revision threshold is exceeded ───────────────
+# Instead of silently auto-approving, triggers speckit.retrospect
+# to assess whether remaining tasks are worth pursuing.
+# max_auto_revise: 1 per session — after that, human approval required.
+auto_revise:
+  enabled: true
+  max_auto_revise: 1

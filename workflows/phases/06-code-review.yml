@@ -57,29 +57,22 @@ steps:
           [ ] All maintainability items: PASS
           [ ] All accessibility items: PASS, N/A
           [ ] REVIEW_REPORT.md produced
-          {% if steps.cr_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. You MUST revise.
+          {% if steps.cr_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.cr_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
           {% endif %}
 
           Approve to continue to final verify.
           Revise to send the checklist back for fixes.
         options: [approve, revise, abort]
         on_revise:
-          - id: cr_record
+          - id: cr_revise_chain
             type: shell
             command: >
-              bash scripts/record-and-trim.sh code_review_round
+              bash scripts/review-revise-chain.sh
+              code_review_round
               "{{ steps.cr_round_iteration.output.count || 1 }}"
-          - id: cr_validate_fixes
-            type: shell
-            command: >
-              bash scripts/validate-fix-tasks.sh
               "{{ steps.impl_check_remaining.output.feature_dir }}"
-          - id: cr_backup_fixes
-            type: shell
-            command: >
-              bash scripts/backup-tasks.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" "code-review"
           - id: cr_plan_fixes
             type: prompt
             integration: claude

@@ -214,7 +214,9 @@ steps:
     condition: "true"
     max_iterations: 3
     steps:
-      - id: pl_review
+
+      # ── Pass 1: Content Review (plan.md §1–§16) ──────────────────
+      - id: pl_review_content
         type: prompt
         command: speckit.plan
         integration: claude
@@ -226,20 +228,11 @@ steps:
 
             Use targeted reading per the spec-sections mapping
             (templates/spec-sections.md). Read only plan.md sections
-            relevant to the items being verified. Do not read plan.md end-to-end.
+            relevant to the items being verified.
 
-            For SECTION 1 (plan.md §1-§16): read each section referenced
-            by the checklist items you are verifying.
-            For SECTION 2 (companion files):
-              Read api-contract.yaml only for endpoints referenced in §8
-              Read data-model.sql only for tables referenced in §12
-            For SECTION 3 (DevEx files):
-              Read CLAUDE.md and scripts/ci-local.sh in full
-              Read .specify/memory/conventions.md in full
-
-            Run the CONSOLIDATED REVIEW CHECKLIST below. For each section,
-            verify all items. Report PASS/FAIL/N/A per item.
-            SECTION 4 (Design Quality) is new (I5 fix) — run all 5 dimensions.
+            Run SECTION 1: plan.md §1–§16 content review.
+            For each item: verify and report PASS/FAIL/N/A.
+            For any FAIL: fix the issue immediately in plan.md.
 
             ═══════════════════════════════════════════════════════════════
             SECTION 1: plan.md §1–§16
@@ -256,6 +249,55 @@ steps:
             [§14] local_dev_setup runnable in under 15 min?
             [§15] 10 domain-specific failure scenarios with detection/response/recovery?
             [§16] Exactly 10 constraints, specific to this codebase with consequence?
+
+            Print a summary of all items. End with: "Plan content review complete."
+
+      - id: pl_review_content_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh plan {{ steps.pl_review_round_iteration.output.count || 1 }}"
+
+      - id: pl_review_content_gate
+        type: gate
+        message: |
+          ━━ PLAN REVIEW PASS 1/3: Content (Revision {{ steps.pl_review_round_iteration.output.count || 1 }}/3) ━━
+
+          Review plan.md §1–§16 content above.
+          Approve to proceed to companion file review.
+          Revise to send plan.md back for fixes.
+          {% if steps.pl_review_content_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.pl_review_content_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
+          {% endif %}
+        options: [approve, revise, abort]
+        on_revise:
+          - id: pl_record_content
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh plan_review_revision
+              "{{ steps.pl_review_round_iteration.output.count || 1 }}"
+          - goto: pl_review_content
+        on_abort:
+          - id: pl_cleanup_abort_review
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "plan_review"
+          - goto: abort
+
+      # ── Pass 2: Companion Files Review ───────────────────────────
+      - id: pl_review_companion
+        type: prompt
+        command: speckit.plan
+        integration: claude
+        input:
+          args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Run SECTION 2 (companion files) and SECTION 3 (DevEx files) review.
+            For each item: verify and report PASS/FAIL/N/A.
+            For any FAIL: fix the issue immediately in the relevant file.
 
             ═══════════════════════════════════════════════════════════════
             SECTION 2: Companion files
@@ -281,8 +323,57 @@ steps:
             [ci-local.sh] §9: secret_scanning.ci_gate is yes? .gitleaks.toml referenced?
             [conventions.md] Naming patterns filled in for this stack?
 
+            Print a summary of all items. End with: "Companion and DevEx review complete."
+
+      - id: pl_review_companion_threshold
+        type: shell
+        command: "bash scripts/gate-threshold.sh plan {{ steps.pl_review_round_iteration.output.count || 1 }}"
+
+      - id: pl_review_companion_gate
+        type: gate
+        message: |
+          ━━ PLAN REVIEW PASS 2/3: Companion Files (Revision {{ steps.pl_review_round_iteration.output.count || 1 }}/3) ━━
+
+          Review companion files and DevEx files above.
+          Approve to proceed to design quality review.
+          Revise to send files back for fixes.
+          {% if steps.pl_review_companion_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.pl_review_companion_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
+          {% endif %}
+        options: [approve, revise, abort]
+        on_revise:
+          - id: pl_record_companion
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh plan_review_revision
+              "{{ steps.pl_review_round_iteration.output.count || 1 }}"
+          - goto: pl_review_companion
+        on_abort:
+          - id: pl_cleanup_abort_review
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "$(bash scripts/find-first-feature.sh)"
+              "plan_review"
+          - goto: abort
+
+      # ── Pass 3: Design Quality + Failure Modes ───────────────────
+      - id: pl_review_quality
+        type: prompt
+        command: speckit.plan
+        integration: claude
+        input:
+          args: >
+            REVISION CONTEXT: If .specify/specs/[feature]/revision_history.md exists,
+            read it. Do not repeat fixes that were already tried and rejected.
+
+            Run SECTION 4 (Design Quality) and SECTION 5 (Failure Mode Compliance) review.
+            For each item: verify and report PASS/FAIL/N/A.
+            For any FAIL: fix the issue immediately.
+
             ═══════════════════════════════════════════════════════════════
-            SECTION 4: Design Quality (I5 — merged from design_review_round)
+            SECTION 4: Design Quality
             ═══════════════════════════════════════════════════════════════
             [Ubiquitous Language] Do all class/method/event names match §2?
             [Invariant Enforcement] Are aggregate invariants enforced at construction?
@@ -291,34 +382,51 @@ steps:
             [Readability] Can a new developer understand the architecture in <30 min?
             Report any violations with file:line references.
             For blocking findings: fix immediately.
+
             ═══════════════════════════════════════════════════════════════
+            SECTION 5: Failure Mode Compliance
+            ═══════════════════════════════════════════════════════════════
+            Read docs/failure-modes.md. For each of the 10 failure modes:
+            Does the plan address this failure mode? Is there a mitigation or
+            prevention measure? If not: flag as FAIL and add mitigation to plan.md.
+            [1] Silent Spec Drift: spec-code delta detection, fix_needed loop
+            [2] Test Fixing to Match Broken Implementation: TDD red phase evidence, diagnostic classifier
+            [3] Parallel Batch File Conflicts: batch consistency check, verify-batch-consistency.sh
+            [4] Stagnation Loop: check-stagnation.sh, revision-only detection, troubleshoot/abort
+            [5] Check Runner Script Crash: continue_on_error on check steps, error-memory.sh
+            [6] Checkpoint Corruption: recovery-engine.sh, atomic writes (mktemp+mv), checkpoint verification
+            [7] False Confidence from Passing Checks: non-deterministic checks (speckit.check), adversarial audit
+            [8] Auto-Approve Without Visibility: check-gate-preconditions.sh summary, AUTO_APPROVE gating
+            [9] Shell Script Silent Failure: set -euo pipefail on all scripts, errexit/pipefail
+            [10] Context Window Overflow: context rotation, prompt-context.sh, bundle size limits
+            Report: PASS/FAIL per failure mode with mitigation reference.
 
-            For any FAIL: fix the issue immediately. Do not proceed until all
-            items are PASS. Print a summary of all sections at the end.
-            End with: "Consolidated plan review complete. All sections PASS."
+            Print a summary of all items. End with: "Design quality and failure mode review complete."
 
-      - id: pl_review_threshold
+      - id: pl_review_quality_threshold
         type: shell
         command: "bash scripts/gate-threshold.sh plan {{ steps.pl_review_round_iteration.output.count || 1 }}"
 
-      - id: pl_review_gate
+      - id: pl_review_quality_gate
         type: gate
         message: |
-          ━━ PLAN REVIEW REVISION {{ steps.pl_review_round_iteration.output.count || 1 }}/3 ━━
+          ━━ PLAN REVIEW PASS 3/3: Design Quality (Revision {{ steps.pl_review_round_iteration.output.count || 1 }}/3) ━━
 
-          Review all 4 sections. Approve to continue implementation.
-          Revise to send back for changes ({{ steps.pl_review_round_iteration.output.count || 1 }}/3 used).
-          {% if steps.pl_review_threshold.output.AUTO_APPROVE == 'true' %}
-          **Revision threshold exceeded**. Approving on next iteration.
+          Review design quality and failure mode compliance above.
+          All 3 passes must approve to proceed to implementation.
+          Revise to send plan back for fixes.
+          {% if steps.pl_review_quality_threshold.output.AUTO_REVISE == 'true' %}
+          **Revision threshold exceeded**. {{ steps.pl_review_quality_threshold.output.AUTO_REVISE_REASON }}
+          **Action**: Select "revise" to run retrospect on remaining tasks.
           {% endif %}
         options: [approve, revise, abort]
         on_revise:
-          - id: pl_record
+          - id: pl_record_quality
             type: shell
             command: >
               bash scripts/record-and-trim.sh plan_review_revision
               "{{ steps.pl_review_round_iteration.output.count || 1 }}"
-          - goto: pl_review
+          - goto: pl_review_quality
         on_abort:
           - id: pl_cleanup_abort_review
             type: shell

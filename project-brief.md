@@ -38,6 +38,14 @@ medium — moderate project (30-80 tasks), single team
 complex — large project (80+ tasks), multiple teams, high availability required
 (defaults to medium if not specified)
 
+## Risk profile
+[low | medium | high | critical]
+low — single bounded context, no distributed transactions, minimal external deps
+medium — 2-3 bounded contexts, some cross-context communication
+high — distributed transactions, multiple external dependencies, complex data flow
+critical — regulated data (PII/financial/healthcare), multi-region deployment, compliance requirements (SOC2/HIPAA/GDPR)
+(defaults to low if not specified)
+
 ## Project Profile
 [full | standard | minimal]
 I1: Check profile for filtering quality checks.

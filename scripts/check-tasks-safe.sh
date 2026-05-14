@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Wrapper for check-tasks.sh that handles failures gracefully.
-# Prefers .workflow-state.json (structured checkpoint) for fast parsing.
-# Falls back to .tasks-state.json (legacy JSON), then check-tasks.sh output.
+# Prefers state.json (unified state engine), then .workflow-state.json,
+# then .tasks-state.json (legacy JSON), then check-tasks.sh output.
 #
-# If both fail, outputs TASKS_PARSE_ERROR=1 so the workflow can detect
+# If all fail, outputs TASKS_PARSE_ERROR=1 so the workflow can detect
 # the condition instead of silently proceeding with wrong state.
 #
 # Usage: bash scripts/check-tasks-safe.sh
@@ -17,15 +17,18 @@ FEATURE_DIR="${FEATURE_DIR:-$(bash scripts/find-first-feature.sh 2>/dev/null || 
 FEATURE_DIR="${FEATURE_DIR:-}"
 
 TASKS_PARSE_ERROR=0
-OUTPUT=""
 
-# ── Helper: parse JSON field robustly ──────────────────────────
-# Tries python3 first (most reliable), then jq, then falls back to grep/sed.
+# ── Helpers ──────────────────────────────────────────────────────
+
+# Validate numeric: return value if digits-only, else default
+ensure_numeric() {
+  local val="$1" default="$2"
+  if [[ "$val" =~ ^[0-9]+$ ]]; then echo "$val"; else echo "$default"; fi
+}
+
+# Parse a JSON field: python3 > jq > grep fallback
 parse_json_field() {
-  local key="$1"
-  local file="$2"
-  local result=""
-
+  local key="$1" file="$2" result=""
   if command -v python3 &>/dev/null; then
     result=$(python3 -c "
 import json, sys
@@ -44,293 +47,211 @@ except Exception:
   elif command -v jq &>/dev/null; then
     result=$(jq -r ".$key // empty" "$file" 2>/dev/null) || true
   fi
-
   if [ -z "$result" ]; then
-    # Fallback: grep/sed (may match keys inside string values)
     result=$(grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | sed 's/[",]//g' | tr -d '[:space:]' || true)
   fi
-
   echo "$result" || true
 }
 
-parse_json_bool() {
-  local key="$1"
-  local file="$2"
-  local result
-  result=$(parse_json_field "$key" "$file")
-  case "$result" in
-    true|True|TRUE|1) echo "true" ;;
-    false|False|FALSE|0) echo "false" ;;
-    *) echo "$result" ;;
-  esac
-}
+# ── normalize_state: parse any supported JSON format ────────────
+# Reads a single JSON file and outputs a normalized key=value block:
+#   _N_DONE, _N_IN_PROG, _N_ABANDONED, _N_TOTAL, _N_TODO,
+#   _N_IN_PROGRESS_ALL, _N_COMPLEXITY, _N_RETRO_INTERVAL, _N_NEXT_DUE
+# Returns 0 on success, 1 on failure.
+normalize_state() {
+  local json_file="$1"
 
-# ── Helper: validate numeric value ──────────────────────────────
-ensure_numeric() {
-  local val="$1" default="$2"
-  if [[ "$val" =~ ^[0-9]+$ ]]; then
-    echo "$val"
-  else
-    echo "$default"
+  # Count task statuses from JSON
+  local done_count in_prog abandoned
+  done_count=$(jq '[.tasks // {} | to_entries[] | select(.value.status == "DONE")] | length' "$json_file" 2>/dev/null || echo 0)
+  in_prog=$(jq '[.tasks // {} | to_entries[] | select(.value.status == "IN_PROGRESS")] | length' "$json_file" 2>/dev/null || echo 0)
+  abandoned=$(jq '[.tasks // {} | to_entries[] | select(.value.status == "ABANDONED")] | length' "$json_file" 2>/dev/null || echo 0)
+
+  done_count=$(ensure_numeric "$done_count" 0)
+  in_prog=$(ensure_numeric "$in_prog" 0)
+  abandoned=$(ensure_numeric "$abandoned" 0)
+
+  local total=$(( done_count + in_prog + abandoned ))
+  local todo=$(( total - done_count ))
+  [ "$todo" -lt 0 ] 2>/dev/null && todo=0
+
+  # Extract IN_PROGRESS task IDs
+  local in_progress_all=""
+  if [ "$in_prog" -gt 0 ] 2>/dev/null; then
+    in_progress_all=$(jq -r '[.tasks // {} | to_entries[] | select(.value.status == "IN_PROGRESS") | .key] | join(",")' "$json_file" 2>/dev/null || true)
   fi
+
+  # Read metadata with fallback defaults
+  local complexity="medium" retro_interval=10 next_due=5
+  local cj ij nj
+  cj=$(parse_json_field "complexity" "$json_file")
+  [ -n "$cj" ] && complexity="$cj"
+  ij=$(parse_json_field "interval" "$json_file")
+  [ -n "$ij" ] && retro_interval=$(ensure_numeric "$ij" 10)
+  nj=$(parse_json_field "next_due" "$json_file")
+  [ -n "$nj" ] && next_due=$(ensure_numeric "$nj" 5)
+
+  # Export normalized values
+  _N_DONE=$done_count
+  _N_IN_PROG=$in_prog
+  _N_ABANDONED=$abandoned
+  _N_TOTAL=$total
+  _N_TODO=$todo
+  _N_IN_PROGRESS_ALL="$in_progress_all"
+  _N_COMPLEXITY="$complexity"
+  _N_RETRO_INTERVAL=$retro_interval
+  _N_NEXT_DUE=$next_due
 }
 
-# ── Attempt 0: Read state.json (unified state engine) ──────────
+# ── normalize_legacy: parse .tasks-state.json format ────────────
+# Different schema: top-level { done, todo, abandoned, total, ... }
+normalize_legacy() {
+  local json_file="$1"
+
+  local done_count todo_count abandoned total
+  done_count=$(parse_json_field "done" "$json_file")
+  todo_count=$(parse_json_field "todo" "$json_file")
+  abandoned=$(parse_json_field "abandoned" "$json_file")
+  total=$(parse_json_field "total" "$json_file")
+
+  done_count=$(ensure_numeric "${done_count:-0}" 0)
+  todo_count=$(ensure_numeric "${todo_count:-0}" 0)
+  abandoned=$(ensure_numeric "${abandoned:-0}" 0)
+  total=$(ensure_numeric "${total:-0}" 0)
+
+  local complexity retro_interval retro_trigger in_progress_raw
+  complexity=$(parse_json_field "complexity" "$json_file")
+  complexity="${complexity:-medium}"
+  retro_interval=$(parse_json_field "retro_interval" "$json_file")
+  retro_interval=$(ensure_numeric "${retro_interval:-10}" 10)
+  retro_trigger=$(parse_json_field "retro_trigger" "$json_file")
+  case "$retro_trigger" in
+    true|True|TRUE|1) retro_trigger="true" ;; *) retro_trigger="false" ;;
+  esac
+
+  in_progress_raw=$(parse_json_field "in_progress" "$json_file")
+  local in_progress_all="" in_progress=""
+  if [ -n "$in_progress_raw" ] && [ "$in_progress_raw" != "[]" ]; then
+    in_progress_all=$(echo "$in_progress_raw" | sed 's/^\[//;s/\]$//' | tr -d '"' | tr -d ' ')
+    in_progress=$(echo "$in_progress_all" | cut -d',' -f1)
+  fi
+
+  # Compute derived fields
+  local in_prog_count=0
+  [ -n "$in_progress_all" ] && in_prog_count=1
+  local actual_total=$(( done_count + in_prog_count + abandoned ))
+  local actual_todo=$(( actual_total - done_count ))
+  [ "$actual_todo" -lt 0 ] 2>/dev/null && actual_todo=0
+
+  local next_due=5
+  local retro_trigger_final="false"
+  if [ "$done_count" -ge "$next_due" ] 2>/dev/null; then
+    local remainder=$(( (done_count - next_due) % retro_interval ))
+    [ "$remainder" -eq 0 ] && retro_trigger_final="true"
+  fi
+
+  # Export normalized values
+  _N_DONE=$done_count
+  _N_IN_PROG=$in_prog_count
+  _N_ABANDONED=$abandoned
+  _N_TOTAL=$actual_total
+  _N_TODO=$actual_todo
+  _N_IN_PROGRESS_ALL="$in_progress_all"
+  _N_COMPLEXITY="$complexity"
+  _N_RETRO_INTERVAL=$retro_interval
+  _N_NEXT_DUE=$next_due
+}
+
+# ── compute_output: build final key=value from normalized state ─
+compute_output() {
+  local feature_dir="$1"
+
+  local in_progress="${_N_IN_PROGRESS_ALL:-}"
+  [ -n "$in_progress" ] && in_progress=$(echo "$in_progress" | cut -d',' -f1)
+
+  local has_todo="false"
+  if [ "$_N_TODO" -gt 0 ] 2>/dev/null || [ -n "${_N_IN_PROGRESS_ALL:-}" ]; then
+    has_todo="true"
+  fi
+
+  local retro_trigger="false"
+  if [ "$_N_DONE" -ge "$_N_NEXT_DUE" ] 2>/dev/null; then
+    local remainder=$(( (_N_DONE - _N_NEXT_DUE) % _N_RETRO_INTERVAL ))
+    [ "$remainder" -eq 0 ] && retro_trigger="true"
+  fi
+
+  OUTPUT="has_todo=${has_todo}
+done_count=${_N_DONE}
+todo_count=${_N_TODO}
+in_progress=${in_progress}
+in_progress_all=${_N_IN_PROGRESS_ALL:-}
+abandoned_count=${_N_ABANDONED}
+total_tasks=${_N_TOTAL}
+complexity=${_N_COMPLEXITY}
+retro_interval=${_N_RETRO_INTERVAL}
+first_retro_threshold=${_N_NEXT_DUE}
+retro_trigger=${retro_trigger}
+feature_dir=${feature_dir}
+todo_task_id=
+todo_task_type="
+}
+
+# ── Attempt 0: state.json (unified state engine) ────────────────
 if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/state.json" ]; then
-  JSON_FILE="$FEATURE_DIR/state.json"
-  # Validate: must contain version and tasks fields
-  if jq -e 'has("version") and has("tasks")' "$JSON_FILE" >/dev/null 2>&1; then
-    # Count task statuses from state.json using jq
-    _done=$(jq '[.tasks | to_entries[] | select(.value.status == "DONE")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
-    _in_prog=$(jq '[.tasks | to_entries[] | select(.value.status == "IN_PROGRESS")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
-    _abandoned=$(jq '[.tasks | to_entries[] | select(.value.status == "ABANDONED")] | length' "$JSON_FILE" 2>/dev/null || echo 0)
-    _done=$(ensure_numeric "$_done" 0)
-    _in_prog=$(ensure_numeric "$_in_prog" 0)
-    _abandoned=$(ensure_numeric "$_abandoned" 0)
-    _done=${_done:-0}
-    _in_prog=${_in_prog:-0}
-    _abandoned=${_abandoned:-0}
-    _total=$(( _done + _in_prog + _abandoned ))
-    _todo=$(( _total - _done ))
-    _todo=${_todo:-0}
-    [ "$_todo" -lt 0 ] 2>/dev/null && _todo=0
+  if jq -e 'has("version") and has("tasks")' "$FEATURE_DIR/state.json" >/dev/null 2>&1; then
+    normalize_state "$FEATURE_DIR/state.json"
 
-    # Extract IN_PROGRESS task IDs
-    IN_PROGRESS_ALL=""
-    if [ "$_in_prog" -gt 0 ] 2>/dev/null; then
-      IN_PROGRESS_ALL=$(jq -r '[.tasks | to_entries[] | select(.value.status == "IN_PROGRESS") | .key] | join(",")' "$JSON_FILE" 2>/dev/null || true)
-    fi
-    IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
-
-    # Read metadata
-    _complexity="medium"
-    _retro_interval=10
-    _next_due=5
-    # Check if state.json has top-level complexity/interval (legacy .workflow-state.json compat)
-    _cj=$(parse_json_field "complexity" "$JSON_FILE")
-    if [ -n "$_cj" ]; then
-      _complexity="$_cj"
-    fi
-    _ij=$(parse_json_field "interval" "$JSON_FILE")
-    if [ -n "$_ij" ]; then
-      _retro_interval=$(ensure_numeric "$_ij" 10)
-    fi
-    _nj=$(parse_json_field "next_due" "$JSON_FILE")
-    if [ -n "$_nj" ]; then
-      _next_due=$(ensure_numeric "$_nj" 5)
-    fi
-    _done_count_check=${_done}
-
-    # ── Stale state validation: cross-check against tasks.md ──
+    # Stale state validation: cross-check against tasks.md
     _layer1_valid=true
     if [ -f "$FEATURE_DIR/tasks.md" ]; then
       _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
-      _diff=$((_done - _actual_done))
+      _diff=$((_N_DONE - _actual_done))
       [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
-      if [ "$_diff" -gt 1 ]; then
-        _layer1_valid=false
-      fi
+      [ "$_diff" -gt 1 ] && _layer1_valid=false
     fi
 
     if [ "$_layer1_valid" = true ]; then
-      _retro_trigger="false"
-      if [ "$_done_count_check" -ge "$_next_due" ] 2>/dev/null; then
-        _remainder=$(( (_done_count_check - _next_due) % _retro_interval ))
-        if [ "$_remainder" -eq 0 ]; then
-          _retro_trigger="true"
-        fi
-      fi
-
-      if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
-        HAS_TODO="true"
-      else
-        HAS_TODO="false"
-      fi
-
-      OUTPUT="has_todo=${HAS_TODO}
-done_count=${_done}
-todo_count=${_todo}
-in_progress=${IN_PROGRESS}
-in_progress_all=${IN_PROGRESS_ALL}
-abandoned_count=${_abandoned}
-total_tasks=${_total}
-complexity=${_complexity}
-retro_interval=${_retro_interval}
-first_retro_threshold=${_next_due}
-retro_trigger=${_retro_trigger}
-feature_dir=${FEATURE_DIR}
-todo_task_id=
-todo_task_type="
+      compute_output "$FEATURE_DIR"
     fi
   fi
 fi
 
-# ── Attempt 1: Read .workflow-state.json (structured checkpoint) ──
-if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
-  JSON_FILE="$FEATURE_DIR/.workflow-state.json"
-  # Validate: must contain task entries with status field
-  if grep -q '"status"' "$JSON_FILE" 2>/dev/null; then
-    # Count task statuses from checkpoint
-    _done=$(grep -c '"status"[[:space:]]*:[[:space:]]*"DONE"' "$JSON_FILE" 2>/dev/null || true)
-    _in_prog=$(grep -c '"status"[[:space:]]*:[[:space:]]*"IN_PROGRESS"' "$JSON_FILE" 2>/dev/null || true)
-    _abandoned=$(grep -c '"status"[[:space:]]*:[[:space:]]*"ABANDONED"' "$JSON_FILE" 2>/dev/null || true)
-    _done=$(ensure_numeric "$_done" 0)
-    _in_prog=$(ensure_numeric "$_in_prog" 0)
-    _abandoned=$(ensure_numeric "$_abandoned" 0)
-    _done=${_done:-0}
-    _in_prog=${_in_prog:-0}
-    _abandoned=${_abandoned:-0}
-    _total=$(( _done + _in_prog + _abandoned ))
-    _todo=$(( _total - _done ))
-    _todo=${_todo:-0}
-    [ "$_todo" -lt 0 ] 2>/dev/null && _todo=0
+# ── Attempt 1: .workflow-state.json (structured checkpoint) ─────
+if [ -z "$OUTPUT" ] && [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
+  if grep -q '"status"' "$FEATURE_DIR/.workflow-state.json" 2>/dev/null; then
+    normalize_state "$FEATURE_DIR/.workflow-state.json"
 
-    # Extract IN_PROGRESS task IDs
-    IN_PROGRESS_ALL=""
-    if [ "$_in_prog" -gt 0 ] 2>/dev/null; then
-      IN_PROGRESS_ALL=$(awk '
-        /"TASK-[0-9]+"/ {
-          match($0, /"TASK-[0-9]+"/)
-          tid = substr($0, RSTART+1, RLENGTH-2)
-        }
-        /"status"[[:space:]]*:[[:space:]]*"IN_PROGRESS"/ {
-          if (tid != "") printf "%s,", tid
-          tid = ""
-        }
-      ' "$JSON_FILE" 2>/dev/null || true)
-      IN_PROGRESS_ALL=$(echo "$IN_PROGRESS_ALL" | sed 's/,$//')
-    fi
-    IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
-
-    # Read metadata
-    _complexity=$(parse_json_field "complexity" "$JSON_FILE")
-    _complexity=${_complexity:-medium}
-    _retro_interval=$(parse_json_field "interval" "$JSON_FILE")
-    _retro_interval=$(ensure_numeric "${_retro_interval:-10}" 10)
-    _next_due=$(parse_json_field "next_due" "$JSON_FILE")
-    _next_due=$(ensure_numeric "${_next_due:-5}" 5)
-    _done_count_check=${_done}
-
-    # ── Stale state validation: cross-check against tasks.md ──
+    # Stale state validation
     _layer1_valid=true
-    if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/tasks.md" ]; then
-      # Count actual DONE tasks in tasks.md
+    if [ -f "$FEATURE_DIR/tasks.md" ]; then
       _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
-      # If JSON done count differs from tasks.md by more than 1, skip layer 1
-      _diff=$((_done - _actual_done))
+      _diff=$((_N_DONE - _actual_done))
       [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
-      if [ "$_diff" -gt 1 ]; then
-        _layer1_valid=false
-      fi
+      [ "$_diff" -gt 1 ] && _layer1_valid=false
     fi
 
     if [ "$_layer1_valid" = true ]; then
-      # Determine retro_trigger using modulo formula (same as check-tasks.sh)
-      _retro_trigger="false"
-      if [ "$_done_count_check" -ge "$_next_due" ] 2>/dev/null; then
-        _remainder=$(( (_done_count_check - _next_due) % _retro_interval ))
-        if [ "$_remainder" -eq 0 ]; then
-          _retro_trigger="true"
-        fi
-      fi
-
-      # Determine has_todo
-      if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
-        HAS_TODO="true"
-      else
-        HAS_TODO="false"
-      fi
-
-      OUTPUT="has_todo=${HAS_TODO}
-done_count=${_done}
-todo_count=${_todo}
-in_progress=${IN_PROGRESS}
-in_progress_all=${IN_PROGRESS_ALL}
-abandoned_count=${_abandoned}
-total_tasks=${_total}
-complexity=${_complexity}
-retro_interval=${_retro_interval}
-first_retro_threshold=${_next_due}
-retro_trigger=${_retro_trigger}
-feature_dir=${FEATURE_DIR}
-todo_task_id=
-todo_task_type="
+      compute_output "$FEATURE_DIR"
     fi
-    # If _layer1_valid is false, fall through to layer 2/3
   fi
 fi
 
-# ── Attempt 2: Read legacy .tasks-state.json ────────────────────
+# ── Attempt 2: .tasks-state.json (legacy JSON) ──────────────────
 if [ -z "$OUTPUT" ] && [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.tasks-state.json" ]; then
-  JSON_FILE="$FEATURE_DIR/.tasks-state.json"
-  if grep -q '"done"' "$JSON_FILE" 2>/dev/null && \
-     grep -q '"todo"' "$JSON_FILE" 2>/dev/null && \
-     grep -q '"total"' "$JSON_FILE" 2>/dev/null; then
-
-    parse_json_array() {
-      local key="$1"
-      local file="$2"
-      grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | tr -d '[:space:]' || true
-    }
-
-    _done=$(parse_json_field "done" "$JSON_FILE")
-    _todo=$(parse_json_field "todo" "$JSON_FILE")
-    _abandoned=$(parse_json_field "abandoned" "$JSON_FILE")
-    _total=$(parse_json_field "total" "$JSON_FILE")
-    _complexity=$(parse_json_field "complexity" "$JSON_FILE")
-    _retro_interval=$(parse_json_field "retro_interval" "$JSON_FILE")
-    _done=$(ensure_numeric "${_done:-0}" 0)
-    _todo=$(ensure_numeric "${_todo:-0}" 0)
-    _abandoned=$(ensure_numeric "${_abandoned:-0}" 0)
-    _total=$(ensure_numeric "${_total:-0}" 0)
-    _retro_interval=$(ensure_numeric "${_retro_interval:-10}" 10)
-    _retro_trigger=$(parse_json_bool "retro_trigger" "$JSON_FILE")
-    _in_progress_raw=$(parse_json_array "in_progress" "$JSON_FILE")
-
-    _done=${_done:-0}
-    _todo=${_todo:-0}
-    _abandoned=${_abandoned:-0}
-    _total=${_total:-0}
-    _complexity=${_complexity:-medium}
-    _retro_interval=${_retro_interval:-10}
-    _retro_trigger=${_retro_trigger:-false}
-
-    IN_PROGRESS=""
-    IN_PROGRESS_ALL=""
-    if [ -n "$_in_progress_raw" ] && [ "$_in_progress_raw" != "[]" ]; then
-      IN_PROGRESS_ALL=$(echo "$_in_progress_raw" | sed 's/^\[//;s/\]$//' | tr -d '"' | tr -d ' ' || true)
-      IN_PROGRESS=$(echo "$IN_PROGRESS_ALL" | cut -d',' -f1)
-    fi
-
-    if [ "$_todo" -gt 0 ] 2>/dev/null || [ -n "$IN_PROGRESS" ]; then
-      HAS_TODO="true"
-    else
-      HAS_TODO="false"
-    fi
-
-    OUTPUT="has_todo=${HAS_TODO}
-done_count=${_done}
-todo_count=${_todo}
-in_progress=${IN_PROGRESS}
-in_progress_all=${IN_PROGRESS_ALL}
-abandoned_count=${_abandoned}
-total_tasks=${_total}
-complexity=${_complexity}
-retro_interval=${_retro_interval}
-first_retro_threshold=5
-retro_trigger=${_retro_trigger}
-feature_dir=${FEATURE_DIR}
-todo_task_id=
-todo_task_type="
+  if grep -q '"done"' "$FEATURE_DIR/.tasks-state.json" 2>/dev/null && \
+     grep -q '"todo"' "$FEATURE_DIR/.tasks-state.json" 2>/dev/null && \
+     grep -q '"total"' "$FEATURE_DIR/.tasks-state.json" 2>/dev/null; then
+    normalize_legacy "$FEATURE_DIR/.tasks-state.json"
+    compute_output "$FEATURE_DIR"
   fi
 fi
 
-# ── Attempt 3: Fall back to source check-tasks.sh ───────────────
+# ── Attempt 3: Fall back to check-tasks.sh ──────────────────────
 if [ -z "$OUTPUT" ]; then
   OUTPUT=$(bash scripts/check-tasks.sh 2>/dev/null) || true
 fi
 
-# ── Attempt 4: If all failed, signal error with safe defaults ───
+# ── Attempt 4: Error with safe defaults ─────────────────────────
 if [ -z "$OUTPUT" ]; then
   TASKS_PARSE_ERROR=1
   echo "TASKS_PARSE_ERROR=1"
@@ -356,6 +277,19 @@ todo_task_id=
 todo_task_type=
 DEFAULTS
   exit 0
+fi
+
+# Adjust retro_interval based on risk_profile (from project-brief.md)
+if [ -n "$FEATURE_DIR" ] && [ -f "${FEATURE_DIR}/project-brief.md" ]; then
+  RISK_PROFILE=$(grep -A1 '^## Risk profile' "${FEATURE_DIR}/project-brief.md" 2>/dev/null | grep -oE '(low|medium|high|critical)' | head -1 || true)
+  if [ "$RISK_PROFILE" = "high" ] || [ "$RISK_PROFILE" = "critical" ]; then
+    OLD_INTERVAL=$(echo "$OUTPUT" | grep '^retro_interval=' | head -1 | cut -d= -f2)
+    if [ -n "$OLD_INTERVAL" ] && [ "$OLD_INTERVAL" -gt 0 ] 2>/dev/null; then
+      NEW_INTERVAL=$(( (OLD_INTERVAL + 1) / 2 ))
+      OUTPUT=$(echo "$OUTPUT" | sed "s/^retro_interval=${OLD_INTERVAL}$/retro_interval=${NEW_INTERVAL}/")
+    fi
+  fi
+  unset RISK_PROFILE
 fi
 
 echo "$OUTPUT"
