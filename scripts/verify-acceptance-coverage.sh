@@ -16,10 +16,69 @@
 set -euo pipefail
 
 FEATURE_DIR="${1:-$(bash scripts/find-first-feature.sh)}"
+TASK_ID="${2:-}"
 TASKS_FILE="$FEATURE_DIR/tasks.md"
 
-if [ ! -f "$TASKS_FILE" ]; then
-  echo "SKIP: No tasks.md found at $TASKS_FILE"
+# ── Task-specific TDD evidence mode ──────────────────────────────
+# When TASK_ID is provided, check for TDD evidence (red/green phase)
+# for that specific task. This is used by the acceptance gate to
+# verify behavioral evidence before auto-approving.
+if [ -n "$TASK_ID" ] && [ "$TASK_ID" != "unknown" ]; then
+  ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
+  TDD_EVIDENCE="false"
+
+  # Check for batch_tasks.txt (proves write-test ran before implement)
+  HAS_BATCH=false
+  if [ -f "${ARTIFACTS_DIR}/batch_tasks.txt" ]; then
+    if grep -q "$TASK_ID" "${ARTIFACTS_DIR}/batch_tasks.txt" 2>/dev/null; then
+      HAS_BATCH=true
+    fi
+  fi
+
+  # Check for test output artifacts (proves tests were run)
+  HAS_TEST_OUTPUT=false
+  if ls "${ARTIFACTS_DIR}/test-output-"* 2>/dev/null | grep -q "$TASK_ID" 2>/dev/null; then
+    HAS_TEST_OUTPUT=true
+  fi
+  # Also check run-new-tests.sh output
+  if [ -f "${ARTIFACTS_DIR}/run-new-tests-output.txt" ]; then
+    if grep -q "$TASK_ID" "${ARTIFACTS_DIR}/run-new-tests-output.txt" 2>/dev/null; then
+      HAS_TEST_OUTPUT=true
+    fi
+  fi
+
+  # Check for check-results for this task's checks
+  HAS_CHECK_RESULTS=false
+  if [ -d "${ARTIFACTS_DIR}/check-results" ]; then
+    local_result_files=$(ls "${ARTIFACTS_DIR}/check-results/"*.result 2>/dev/null | wc -l || echo 0)
+    [ "$local_result_files" -gt 0 ] && HAS_CHECK_RESULTS=true
+  fi
+
+  # Check for error-memory entries (proves correction loop ran)
+  HAS_ERROR_MEMORY=false
+  if [ -f "${ARTIFACTS_DIR}/error-memory.json" ]; then
+    if grep -q "$TASK_ID" "${ARTIFACTS_DIR}/error-memory.json" 2>/dev/null; then
+      HAS_ERROR_MEMORY=true
+    fi
+  fi
+
+  # Also check state.json for check_results on this task
+  if [ -f "${FEATURE_DIR}/state.json" ]; then
+    if jq -e ".tasks[\"$TASK_ID\"].check_results // empty" "${FEATURE_DIR}/state.json" >/dev/null 2>&1; then
+      HAS_CHECK_RESULTS=true
+    fi
+  fi
+
+  # TDD evidence requires: batch/tasks tracked + tests run + checks produced
+  if [ "$HAS_BATCH" = true ] && [ "$HAS_TEST_OUTPUT" = true ] && [ "$HAS_CHECK_RESULTS" = true ]; then
+    TDD_EVIDENCE="true"
+  fi
+
+  echo "TDD_EVIDENCE=$TDD_EVIDENCE"
+  echo "  has_batch_tasks=$HAS_BATCH"
+  echo "  has_test_output=$HAS_TEST_OUTPUT"
+  echo "  has_check_results=$HAS_CHECK_RESULTS"
+  echo "  has_error_memory=$HAS_ERROR_MEMORY"
   exit 0
 fi
 

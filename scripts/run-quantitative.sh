@@ -256,13 +256,18 @@ parse_coverage_percentage() {
   echo "${pct:-0}"
 }
 
-# ── Helper: run a command and return exit code ──────────────────
+# ── Helper: run a command with timeout and return exit code ───────
 run_cmd() {
   local cmd="$1"
   local outfile="$2"
+  local timeout_secs="${3:-300}"
   local exit_code=0
-  # Use bash -c instead of eval to avoid executing in current shell context.
-  ( bash -c "$cmd" ) > "$outfile" 2>&1 || exit_code=$?
+  # Use timeout to prevent hanging builds (default 5 min)
+  ( timeout "$timeout_secs" bash -c "$cmd" ) > "$outfile" 2>&1 || exit_code=$?
+  # Exit code 124 = timeout
+  if [ "$exit_code" -eq 124 ]; then
+    echo "WARNING: Command timed out after ${timeout_secs}s: $cmd" >&2
+  fi
   echo "$exit_code"
 }
 
@@ -367,7 +372,7 @@ BUILD_OUTPUT=$(mktemp /tmp/quant-build-XXXXXX.txt)
 trap 'rm -f "$BUILD_OUTPUT"' EXIT
 
 if [ -n "$BUILD_CMD" ]; then
-  BUILDEXIT=$(run_cmd "$BUILD_CMD" "$BUILD_OUTPUT")
+  BUILDEXIT=$(run_cmd "$BUILD_CMD" "$BUILD_OUTPUT" 600)
   if [ "$BUILDEXIT" -ne 0 ]; then
     BUILD_OK=false
     FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -384,7 +389,7 @@ TYPE_OUTPUT=$(mktemp /tmp/quant-type-XXXXXX.txt)
 trap 'rm -f "$BUILD_OUTPUT" "$TYPE_OUTPUT"' EXIT
 
 if [ -n "$TYPE_CMD" ]; then
-  TYPEEXIT=$(run_cmd "$TYPE_CMD" "$TYPE_OUTPUT")
+  TYPEEXIT=$(run_cmd "$TYPE_CMD" "$TYPE_OUTPUT" 300)
   if [ "$TYPEEXIT" -ne 0 ]; then
     TYPE_OK=false
     FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -397,7 +402,7 @@ trap 'rm -f "$BUILD_OUTPUT" "$TYPE_OUTPUT" "$COV_OUTPUT"' EXIT
 
 COV_ACTUAL=""
 if [ -n "$COV_CMD" ]; then
-  COV_EXIT=$(run_cmd "$COV_CMD" "$COV_OUTPUT")
+  COV_EXIT=$(run_cmd "$COV_CMD" "$COV_OUTPUT" 600)
   if [ "$COV_EXIT" -ne 0 ]; then
     # Coverage tool failed — try to still parse percentage
     COV_ACTUAL=$(parse_coverage_percentage "$(head -50 "$COV_OUTPUT")" "$COV_TOOL" 2>/dev/null || echo "0")

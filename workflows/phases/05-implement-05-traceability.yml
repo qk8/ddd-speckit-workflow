@@ -1,0 +1,46 @@
+# ── PHASE 5 SUB-PHASE: TRACEABILITY ─────────────────────────────
+# Extracted from 05-implement.yml (lines 733-789)
+# Periodic traceability re-check against spec, with gap-fix loop.
+
+steps:
+
+  - id: impl_check_traceability
+    type: if
+    condition: >
+      {{ steps.impl_check_traceability_due.output.TRACEABILITY_DUE == 'true' }}
+    then:
+      - id: impl_traceability_recheck
+        type: shell
+        command: >
+          bash scripts/traceability-check.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_traceability_gate
+        type: gate
+        message: |
+          Periodic traceability re-check (every {{ steps.impl_check_traceability_due.output.TRACEABILITY_INTERVAL || 15 }} tasks):
+          {% if steps.impl_traceability_recheck.output.TRACEABLE == 'false' %}
+          **GAPS DETECTED** ({{ steps.impl_traceability_recheck.output.TRACE_GAP_COUNT || 0 }} gap(s)):
+          {{ steps.impl_traceability_recheck.output.TRACE_GAPS || "See stderr above." }}
+          Implementation has drifted from spec. Fix tasks.md or spec to close gaps.
+          {% else %}
+          All tasks still traceable to spec. No drift detected.
+          {% endif %}
+        options: [approve, revise]
+        on_revise:
+          - id: impl_add_trace_fixes
+            type: prompt
+            integration: claude
+            input:
+              args: >
+                Read tasks.md and the traceability check output above.
+                For each gap (missing spec reference, missing plan section
+                coverage), add a specific fix task to tasks.md with clear
+                acceptance criteria. Print the list of added tasks.
+
+      - id: impl_reset_traceability_counter
+        type: shell
+        command: >
+          bash scripts/state-engine.sh cadence-reset traceability_counter
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+

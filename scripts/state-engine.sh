@@ -625,20 +625,6 @@ do_migrate() {
   # 4. Parse .artifacts/created-files/*.files → tasks.*.files_modified
   if ls "$FEATURE_DIR/.artifacts/created-files/"*.files &>/dev/null; then
     echo "MIGRATE: Parsing created files..."
-    local tmp
-    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
-    jq '
-      . as $state |
-      (
-        ["'"$FEATURE_DIR"'/artifacts/created-files/"*.files"] | map(
-          . as $pattern |
-          $pattern | explode |
-          # We use a simpler approach: read each file
-          .
-        )
-      ) |
-      $state
-    ' "$STATE_FILE" > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE" || true
 
     # Simpler approach: bash loop
     for files_file in "$FEATURE_DIR/.artifacts/created-files/"*.files; do
@@ -647,12 +633,12 @@ do_migrate() {
       local files_list
       files_list=$(cat "$files_file" 2>/dev/null || echo "")
       if [ -n "$files_list" ]; then
-        local tmp2
-        tmp2=$(mktemp "${STATE_FILE}.XXXXXX")
+        local tmp
+        tmp=$(mktemp "${STATE_FILE}.XXXXXX")
         jq --arg tid "$tid" \
           --argjson files "[$(echo "$files_list" | tr '\n' ',' | sed 's/,$//; s/[^,]$/&"/; s/^/"')" \
           '.tasks[$tid].files_modified = $files | .metadata.updated_at = "'"$(now_utc)"'"' \
-          "$STATE_FILE" > "$tmp2" && mv "$tmp2" "$STATE_FILE"
+          "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
       fi
     done
     migrated=true
@@ -757,25 +743,58 @@ do_migrate() {
     migrated=true
   fi
 
-  # 10. Backup old files
+  # 10. Validate migration
+  if [ "$migrated" = true ]; then
+    # Validate that state.json has tasks
+    local task_count
+    task_count=$(jq '.tasks | length' "$STATE_FILE" 2>/dev/null || echo 0)
+    if [ "$task_count" -eq 0 ]; then
+      echo "MIGRATE WARNING: state.json has 0 tasks — migration may have failed"
+      echo "MIGRATION_PARTIAL=true"
+    else
+      echo "MIGRATE: Validated $task_count tasks in state.json"
+    fi
+
+    # Validate stagnation migration
+    local stagnation_consec
+    stagnation_consec=$(jq '.stagnation.consecutive_no_progress // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+    if [ "$stagnation_consec" != "0" ] && [ -f "$FEATURE_DIR/.stagnation_state" ]; then
+      echo "MIGRATE: Stagnation data migrated (consecutive_no_progress=$stagnation_consec)"
+    fi
+  fi
+
+  # 11. Backup and clean up old files
   if [ "$migrated" = true ]; then
     echo "MIGRATE: Backing up old state files..."
-    [ -f "$FEATURE_DIR/tasks.md" ] && cp "$FEATURE_DIR/tasks.md" "$FEATURE_DIR/tasks.md.bak"
-    [ -f "$FEATURE_DIR/.workflow-state.json" ] && cp "$FEATURE_DIR/.workflow-state.json" "$FEATURE_DIR/.workflow-state.json.bak"
-    [ -f "$FEATURE_DIR/.tasks-state.json" ] && cp "$FEATURE_DIR/.tasks-state.json" "$FEATURE_DIR/.tasks-state.json.bak"
-    [ -f "$FEATURE_DIR/.stagnation_state" ] && cp "$FEATURE_DIR/.stagnation_state" "$FEATURE_DIR/.stagnation_state.bak"
-    [ -f "$FEATURE_DIR/.stagnation_state.consec" ] && cp "$FEATURE_DIR/.stagnation_state.consec" "$FEATURE_DIR/.stagnation_state.consec.bak"
-    [ -f "$FEATURE_DIR/.stagnation_state.continue_count" ] && cp "$FEATURE_DIR/.stagnation_state.continue_count" "$FEATURE_DIR/.stagnation_state.continue_count.bak"
-    [ -f "$FEATURE_DIR/.stagnation_state.drift_count" ] && cp "$FEATURE_DIR/.stagnation_state.drift_count" "$FEATURE_DIR/.stagnation_state.drift_count.bak"
-    [ -f "$FEATURE_DIR/.stagnation_total" ] && cp "$FEATURE_DIR/.stagnation_total" "$FEATURE_DIR/.stagnation_total.bak"
-    [ -f "$FEATURE_DIR/revision_history.md" ] && cp "$FEATURE_DIR/revision_history.md" "$FEATURE_DIR/revision_history.md.bak"
-    [ -f "$FEATURE_DIR/workflow_state.json" ] && cp "$FEATURE_DIR/workflow_state.json" "$FEATURE_DIR/workflow_state.json.bak"
+    local backup_partial=false
+    for old_file in \
+      "$FEATURE_DIR/tasks.md" \
+      "$FEATURE_DIR/.workflow-state.json" \
+      "$FEATURE_DIR/.tasks-state.json" \
+      "$FEATURE_DIR/.stagnation_state" \
+      "$FEATURE_DIR/.stagnation_state.consec" \
+      "$FEATURE_DIR/.stagnation_state.continue_count" \
+      "$FEATURE_DIR/.stagnation_state.drift_count" \
+      "$FEATURE_DIR/.stagnation_total" \
+      "$FEATURE_DIR/revision_history.md" \
+      "$FEATURE_DIR/workflow_state.json"; do
+      if [ -f "$old_file" ]; then
+        cp "$old_file" "${old_file}.bak"
+      else
+        backup_partial=true
+      fi
+    done
 
     # Create migration marker
     echo "migrated_at=$(now_utc)" > "$FEATURE_DIR/MIGRATION_DONE"
 
     echo "MIGRATE: Complete — state.json contains all consolidated data"
-    echo "MIGRATE: Old files preserved as .bak — remove manually when confident"
+    if [ "$backup_partial" = true ]; then
+      echo "MIGRATE WARNING: Some old files not found (may have been cleaned up previously)"
+      echo "MIGRATION_PARTIAL=true"
+    else
+      echo "MIGRATE: Old files preserved as .bak — remove manually when confident"
+    fi
   else
     echo "MIGRATE: No old format files found — state.json is already up to date"
   fi

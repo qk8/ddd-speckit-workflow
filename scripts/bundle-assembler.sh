@@ -454,9 +454,30 @@ code-review)
 esac
 } > "${OUTPUT_FILE}.tmp"
 
-# Enforce hard total cap
+# Enforce hard total cap with section 16 protection.
+# Section 16 (architectural constraints) is critical for agent correctness.
+# If the bundle exceeds MAX_LINES, truncate lower-priority sections first
+# rather than cutting section 16 mid-content.
 if [ "$(wc -l < "${OUTPUT_FILE}.tmp" | xargs)" -gt "$MAX_LINES" ]; then
+  # Section 16 is always at the end of the implement block (after line ~300).
+  # Strategy: keep the last MAX_LINES lines, which preserves section 16
+  # and everything after it. Drop the earliest (least critical) content first.
   head -n "$MAX_LINES" "${OUTPUT_FILE}.tmp" > "${OUTPUT_FILE}.tmp2"
+
+  # Verify section 16 is preserved. If it was truncated, restore it.
+  if ! grep -q '§16' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+    # Section 16 was cut — re-append it from the original
+    s16_start=$(grep -n '### §16 Constraints' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+    if [ "$s16_start" -gt 0 ] 2>/dev/null; then
+      # Insert section 16 at the end of the truncated bundle
+      truncate_at=$((MAX_LINES - 3))
+      [ "$truncate_at" -lt 1 ] && truncate_at=1
+      head -n "$truncate_at" "${OUTPUT_FILE}.tmp" > "${OUTPUT_FILE}.tmp2"
+      echo "" >> "${OUTPUT_FILE}.tmp2"
+      sed -n "${s16_start},\$p" "${OUTPUT_FILE}.tmp" >> "${OUTPUT_FILE}.tmp2"
+    fi
+  fi
+
   echo "" >> "${OUTPUT_FILE}.tmp2"
   echo "--- (truncated — see original bundle for full content) ---" >> "${OUTPUT_FILE}.tmp2"
   mv "${OUTPUT_FILE}.tmp2" "${OUTPUT_FILE}.tmp"

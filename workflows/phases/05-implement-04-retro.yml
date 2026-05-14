@@ -1,0 +1,131 @@
+# ── PHASE 5 SUB-PHASE: RETROSPECTIVE + DRIFT DETECTION ──────────
+# Extracted from 05-implement.yml (lines 609-732)
+# Periodic retrospective on test trends, constraint drift detection,
+# and revision loops for drift fixes.
+
+steps:
+
+  - id: impl_retro_drift
+    type: if
+    condition: "{{ steps.impl_check_remaining.output.retro_trigger == 'true' }}"
+    then:
+      - id: impl_reset_drift_revisions
+        type: shell
+        command: "echo '0' > '{{ steps.impl_check_remaining.output.feature_dir }}/.drift_revisions'"
+
+      - id: impl_test_trend
+        type: shell
+        command: >
+          bash scripts/test-trend-analyzer.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_retrospect
+        type: prompt
+        command: speckit.retrospect
+        integration: claude
+        input:
+          args: >
+            Read .artifacts/test-trend-report.md if available.
+            Use the trend report to assess test suite health.
+            If TREND_HEALTHY=false: flag degradation areas for attention.
+            If no trend report available: proceed with standard retrospective.
+
+      - id: impl_retrospect_review
+        type: gate
+        message: |
+          Review the retrospect report.
+          Approve when all blocking issues are resolved.
+          Revise to send back for more iteration (within implement_loop).
+          Select abort if further iteration is not warranted
+          (will trigger again next implement_loop iteration).
+        options: [approve, revise, abort]
+        on_revise:
+          - id: impl_record_retro
+            type: shell
+            command: >
+              bash scripts/record-and-trim.sh implement_loop
+              "{{ steps.impl_loop_iteration.output.count || 1 }}"
+          - goto: impl_retrospect
+
+      - id: impl_drift_check
+        type: prompt
+        command: speckit.check
+        integration: claude
+        input:
+          args: >
+            Run only check [Z] — Constraint Drift Detection.
+            Compare the implementation just completed against plan.md §16
+            (Architectural constraints). plan.md §16 is the source of truth.
+            CLAUDE.md is advisory and may paraphrase constraints — DO NOT
+            rely on CLAUDE.md for constraint checking. Read plan.md directly.
+            Report PASS/FAIL/N/A for each constraint.
+            For any FAIL: fix the violation immediately.
+            Write a detailed report to .artifacts/drift_check_report.md
+            with each constraint, its result, and file:line references for FAILs.
+
+      - id: impl_drift_result
+        type: shell
+        command: >
+          bash scripts/check-drift.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_drift_revision_check
+        type: shell
+        command: >
+          bash scripts/check-drift-revisions.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+      - id: impl_drift_gate
+        type: gate
+        message: |
+          Drift check: {{ steps.impl_drift_result.output || "skipped (no retro trigger)" }}
+          {% if steps.impl_drift_result.output.DRIFT_DETECTED == 'true' %}
+          **DRIFT DETECTED** ({{ steps.impl_drift_result.output.DRIFT_FAIL_COUNT || 0 }} violation(s)):
+          {{ steps.impl_drift_result.output.DRIFT_FAIL_LINES || "See stderr above." }}
+          Fix the violations above and revise to re-run drift detection.
+          {% if steps.impl_drift_revision_check.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' %}
+          **Drift revision limit reached**. You must abort for manual review.
+          {% endif %}
+          {% endif %}
+        options: [approve, revise, abort]
+        on_revise:
+          - id: impl_record_drift
+            type: shell
+            command: >
+              bash scripts/check-stagnation.sh --record-drift
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: impl_drift_rev_check
+            type: shell
+            command: >
+              bash scripts/check-drift-revisions.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+          - id: impl_drift_rev_limit
+            type: if
+            condition: "{{ steps.impl_drift_rev_check.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' }}"
+            then:
+              - id: impl_drift_exhausted
+                type: gate
+                message: |
+                  Drift fix exhausted 2 revision attempts.
+                  The violations cannot be fixed automatically.
+                  Must abort for manual review.
+                options: [abort]
+                on_abort:
+                  - goto: abort
+            else:
+              - goto: impl_drift_check
+        on_abort:
+          - id: impl_cleanup_drift
+            type: shell
+            command: >
+              bash scripts/cleanup-abandoned-state.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "drift_check"
+          - goto: abort
+
+      - id: impl_post_gate_cp
+        type: shell
+        command: >
+          bash scripts/post-gate-checkpoint.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+

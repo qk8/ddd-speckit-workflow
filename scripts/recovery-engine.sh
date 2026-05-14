@@ -50,26 +50,42 @@ maybe_file() {
 }
 
 # Build a file snapshot JSON (same format as old check-point.sh snapshot)
+# Captures both git-tracked and untracked project files. No artificial cap.
 build_file_snapshot() {
-  local root_dir="$1" max_files="${2:-200}"
+  local root_dir="$1"
   local file_list="" file_count=0
 
-  if [ -d "$root_dir" ]; then
-    while IFS= read -r filepath; do
-      [ "$file_count" -ge "$max_files" ] && break
-      local rel_path="${filepath#${root_dir}/}"
-      case "$rel_path" in
-        .git/*|.artifacts/*|node_modules/*|.next/*|dist/*|build/*|.specify/*) continue ;;
-      esac
-      local hash_val="binary"
-      if file "$filepath" 2>/dev/null | grep -q 'text'; then
-        hash_val=$(sha256sum "$filepath" 2>/dev/null | cut -d' ' -f1 || echo "unreadable")
-      fi
-      [ -n "$file_list" ] && file_list="${file_list},"
-      file_list="${file_list}\"${rel_path}\":\"${hash_val}\""
-      file_count=$((file_count + 1))
-    done < <(find "$root_dir" -type f 2>/dev/null | head -500)
+  if [ ! -d "$root_dir" ]; then
+    printf '{"files":{},"file_count":0}'
+    return
   fi
+
+  # Collect files: git-tracked + untracked project files.
+  # Skip noise directories but include everything under common project dirs.
+  while IFS= read -r filepath; do
+    local rel_path="${filepath#${root_dir}/}"
+    case "$rel_path" in
+      .git/*|.artifacts/*|node_modules/*|.next/*|dist/*|build/*|.specify/*|.claude/.agents/*|.claude/skills/*) continue ;;
+    esac
+    local hash_val="binary"
+    if file "$filepath" 2>/dev/null | grep -q 'text'; then
+      hash_val=$(sha256sum "$filepath" 2>/dev/null | cut -d' ' -f1 || echo "unreadable")
+    fi
+    [ -n "$file_list" ] && file_list="${file_list},"
+    file_list="${file_list}\"${rel_path}\":\"${hash_val}\""
+    file_count=$((file_count + 1))
+  done < <(
+    # Git-tracked files first (highest priority for restore)
+    { git -C "$root_dir" ls-files 2>/dev/null || true; } | while IFS= read -r f; do echo "$root_dir/$f"; done
+    # Then untracked project files (src/, lib/, app/, packages/, etc.)
+    { git -C "$root_dir" ls-files --others --exclude-standard 2>/dev/null || true; } | while IFS= read -r f; do
+      # Only include untracked files that look like project source (not build artifacts)
+      case "$f" in
+        *.o|*.pyc|*.pyo|*.class|*.jar|*.war|*.ear|*.zip|*.tar|*.gz|*.log|*.tmp|*.swp|*.swo|*~) continue ;;
+        *) echo "$root_dir/$f" ;;
+      esac
+    done
+  )
 
   printf '{"files":{%s},"file_count":%d}' "$file_list" "$file_count"
 }
@@ -100,6 +116,13 @@ do_checkpoint() {
   # Save file snapshot if root_dir provided
   if [ -n "$root_dir" ]; then
     build_file_snapshot "$root_dir" > "${cp_dir}/files.json"
+
+    # Check disk space before writing (warn if < 1GB free)
+    local disk_free_kb
+    disk_free_kb=$(df -k "$CHECKPOINT_DIR" 2>/dev/null | tail -1 | awk '{print $4}' || echo 0)
+    if [ "$disk_free_kb" -lt 1048576 ] 2>/dev/null; then
+      echo "WARNING: Low disk space (${disk_free_kb}KB free). Checkpoint may fail." >&2
+    fi
 
     # Git diff
     if [ -d "$root_dir/.git" ]; then
@@ -473,9 +496,18 @@ do_reset_stagnation() {
     ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   fi
 
-  # Legacy: also reset flat files
-  echo "0" > "${FEATURE_DIR}/.stagnation_state" 2>/dev/null || true
-  echo "0" > "${FEATURE_DIR}/.stagnation_state.consec" 2>/dev/null || true
+  # Legacy flat files: clean up (don't create new ones)
+  # If state.json exists, legacy files should be removed to prevent dual-path confusion
+  for legacy_file in \
+    "${FEATURE_DIR}/.stagnation_state" \
+    "${FEATURE_DIR}/.stagnation_state.consec" \
+    "${FEATURE_DIR}/.stagnation_state.continue_count" \
+    "${FEATURE_DIR}/.stagnation_state.drift_count"; do
+    if [ -f "$legacy_file" ]; then
+      echo "CLEANUP: Removing legacy stagnation file: $(basename $legacy_file)" >&2
+      rm -f "$legacy_file"
+    fi
+  done
 
   echo "STAGNANT=false"
   echo "CONTEXT LOADED -- resume from speckit.context"

@@ -85,84 +85,98 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
   exit 0
 fi
 
-# ── Legacy path ──
-STATE_FILE="$FEATURE_DIR/.stagnation_state"
-CONSEC_FILE="$STATE_FILE.consec"
-CONTINUE_FILE="$STATE_FILE.continue_count"
-mkdir -p "$FEATURE_DIR"
+# ── Legacy flat-file path: cleaned up after migration ──
+# After state.json migration, legacy files are backed up as .bak.
+# This path handles pre-migration projects that haven't migrated yet.
+# Once migrated, state.json takes over (see the block above).
+LEGACY_STATE_FILE="$FEATURE_DIR/.stagnation_state"
+LEGACY_CONSEC_FILE="$LEGACY_STATE_FILE.consec"
+LEGACY_CONTINUE_FILE="$LEGACY_STATE_FILE.continue_count"
+LEGACY_DRIFT_FILE="$LEGACY_STATE_FILE.drift_count"
 
-if [ "$RESET_MODE" = true ]; then
-  TMPFILE=$(mktemp)
-  echo "0" > "$TMPFILE"
-  echo "0" >> "$TMPFILE"
-  mv "$TMPFILE" "$STATE_FILE"
-  echo "0" > "$CONSEC_FILE"
-  echo "0" > "$CONTINUE_FILE"
-  echo "STAGNANT=false"
-  echo "CONSECUTIVE_NO_PROGRESS=0"
-  exit 0
-fi
+if [ -f "$LEGACY_STATE_FILE" ] && [ ! -f "$FEATURE_DIR/state.json" ]; then
+  mkdir -p "$FEATURE_DIR"
 
-if [ "$RECORD_DRIFT" = true ]; then
-  DRIFT_FILE="$STATE_FILE.drift_count"
-  DRIFT_COUNT=$(cat "$DRIFT_FILE" 2>/dev/null || echo 0)
-  case "$DRIFT_COUNT" in ''|*[!0-9]*) DRIFT_COUNT=0 ;; esac
-  DRIFT_COUNT=$((DRIFT_COUNT + 1))
-  echo "$DRIFT_COUNT" > "$DRIFT_FILE"
-  echo "DRIFT_VIOLATION_COUNT=$DRIFT_COUNT"
-  echo "STAGNANT=false"
-  echo "CONSECUTIVE_NO_PROGRESS=0"
-  exit 0
-fi
+  if [ "$RESET_MODE" = true ]; then
+    TMPFILE=$(mktemp)
+    echo "0" > "$TMPFILE"
+    echo "0" >> "$TMPFILE"
+    mv "$TMPFILE" "$LEGACY_STATE_FILE"
+    echo "0" > "$LEGACY_CONSEC_FILE"
+    echo "0" > "$LEGACY_CONTINUE_FILE"
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
 
-if [ "$INCREMENT_CONTINUE" = true ]; then
-  CURRENT_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
-  case "$CURRENT_CONTINUES" in ''|*[!0-9]*) CURRENT_CONTINUES=0 ;; esac
-  echo "$((CURRENT_CONTINUES + 1))" > "$CONTINUE_FILE"
-  echo "CONSECUTIVE_CONTINUES=$((CURRENT_CONTINUES + 1))"
-  echo "STAGNANT=false"
-  echo "CONSECUTIVE_NO_PROGRESS=0"
-  exit 0
-fi
+  if [ "$RECORD_DRIFT" = true ]; then
+    DRIFT_COUNT=$(cat "$LEGACY_DRIFT_FILE" 2>/dev/null || echo 0)
+    case "$DRIFT_COUNT" in ''|*[!0-9]*) DRIFT_COUNT=0 ;; esac
+    DRIFT_COUNT=$((DRIFT_COUNT + 1))
+    echo "$DRIFT_COUNT" > "$LEGACY_DRIFT_FILE"
+    echo "DRIFT_VIOLATION_COUNT=$DRIFT_COUNT"
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
 
-PREV_DONE=$(cat "$STATE_FILE" 2>/dev/null || echo "-1")
-case "$PREV_DONE" in ''|*[!0-9-]*) PREV_DONE=-1 ;; esac
-CONSECUTIVE=$(cat "$CONSEC_FILE" 2>/dev/null || echo 0)
-case "$CONSECUTIVE" in ''|*[!0-9]*) CONSECUTIVE=0 ;; esac
+  if [ "$INCREMENT_CONTINUE" = true ]; then
+    CURRENT_CONTINUES=$(cat "$LEGACY_CONTINUE_FILE" 2>/dev/null || echo 0)
+    case "$CURRENT_CONTINUES" in ''|*[!0-9]*) CURRENT_CONTINUES=0 ;; esac
+    echo "$((CURRENT_CONTINUES + 1))" > "$LEGACY_CONTINUE_FILE"
+    echo "CONSECUTIVE_CONTINUES=$((CURRENT_CONTINUES + 1))"
+    echo "STAGNANT=false"
+    echo "CONSECUTIVE_NO_PROGRESS=0"
+    exit 0
+  fi
 
-if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
-  echo "STAGNANT=false"
-  TMPFILE=$(mktemp)
-  echo "$CURRENT_DONE" > "$TMPFILE"
-  mv "$TMPFILE" "$STATE_FILE"
-  echo "0" > "$CONSEC_FILE"
-elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
-  echo "STAGNANT=false"
-  TMPFILE=$(mktemp)
-  echo "$CURRENT_DONE" > "$TMPFILE"
-  mv "$TMPFILE" "$STATE_FILE"
-  echo "0" > "$CONSEC_FILE"
-else
-  NEW_CONSEC=$((CONSECUTIVE + 1))
-  echo "$NEW_CONSEC" > "$CONSEC_FILE"
-  TMPFILE=$(mktemp)
-  echo "$CURRENT_DONE" > "$TMPFILE"
-  mv "$TMPFILE" "$STATE_FILE"
-  if [ "$NEW_CONSEC" -ge 2 ]; then
-    if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
-      echo "REVISION_ONLY=true"
+  PREV_DONE=$(cat "$LEGACY_STATE_FILE" 2>/dev/null || echo "-1")
+  case "$PREV_DONE" in ''|*[!0-9-]*) PREV_DONE=-1 ;; esac
+  CONSECUTIVE=$(cat "$LEGACY_CONSEC_FILE" 2>/dev/null || echo 0)
+  case "$CONSECUTIVE" in ''|*[!0-9]*) CONSECUTIVE=0 ;; esac
+
+  if [ "$CURRENT_DONE" -gt "$PREV_DONE" ]; then
+    echo "STAGNANT=false"
+    TMPFILE=$(mktemp)
+    echo "$CURRENT_DONE" > "$TMPFILE"
+    mv "$TMPFILE" "$LEGACY_STATE_FILE"
+    echo "0" > "$LEGACY_CONSEC_FILE"
+  elif [ "$TOTAL_TASKS" -eq 0 ] || [ "$PREV_DONE" -eq -1 ]; then
+    echo "STAGNANT=false"
+    TMPFILE=$(mktemp)
+    echo "$CURRENT_DONE" > "$TMPFILE"
+    mv "$TMPFILE" "$LEGACY_STATE_FILE"
+    echo "0" > "$LEGACY_CONSEC_FILE"
+  else
+    NEW_CONSEC=$((CONSECUTIVE + 1))
+    echo "$NEW_CONSEC" > "$LEGACY_CONSEC_FILE"
+    TMPFILE=$(mktemp)
+    echo "$CURRENT_DONE" > "$TMPFILE"
+    mv "$TMPFILE" "$LEGACY_STATE_FILE"
+    if [ "$NEW_CONSEC" -ge 2 ]; then
+      if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
+        echo "REVISION_ONLY=true"
+      else
+        echo "REVISION_ONLY=false"
+      fi
+      echo "STAGNANT=true"
+      echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
     else
       echo "REVISION_ONLY=false"
+      echo "STAGNANT=false"
+      echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
     fi
-    echo "STAGNANT=true"
-    echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
-  else
-    echo "REVISION_ONLY=false"
-    echo "STAGNANT=false"
-    echo "CONSECUTIVE_NO_PROGRESS=$NEW_CONSEC"
   fi
+
+  CONSECUTIVE_CONTINUES=$(cat "$LEGACY_CONTINUE_FILE" 2>/dev/null || echo 0)
+  case "$CONSECUTIVE_CONTINUES" in ''|*[!0-9]*) CONSECUTIVE_CONTINUES=0 ;; esac
+  echo "CONSECUTIVE_CONTINUES=$CONSECUTIVE_CONTINUES"
+  exit 0
 fi
 
-CONSECUTIVE_CONTINUES=$(cat "$CONTINUE_FILE" 2>/dev/null || echo 0)
-case "$CONSECUTIVE_CONTINUES" in ''|*[!0-9]*) CONSECUTIVE_CONTINUES=0 ;; esac
-echo "CONSECUTIVE_CONTINUES=$CONSECUTIVE_CONTINUES"
+# If state.json exists but legacy files also exist (post-migration),
+# clean up legacy files to prevent future dual-path confusion.
+if [ -f "$FEATURE_DIR/state.json" ] && [ -f "$LEGACY_STATE_FILE" ]; then
+  echo "CLEANUP: Legacy stagnation files found alongside state.json — removing." >&2
+  rm -f "$LEGACY_STATE_FILE" "$LEGACY_CONSEC_FILE" "$LEGACY_CONTINUE_FILE" "$LEGACY_DRIFT_FILE" 2>/dev/null || true
+fi

@@ -2,7 +2,43 @@
 # Dependency Vulnerability Scan (Check E)
 # Auto-detects the package manager, runs the appropriate vulnerability scanner,
 # and reports PASS/FAIL — verifying no high/critical vulnerabilities.
+# Includes timeout and retry logic for network-dependent scanners.
 set -euo pipefail
+
+# ── Network retry helper ─────────────────────────────────────────
+# Network-dependent tools (npm audit, pip-audit, cargo audit, etc.)
+# may fail due to transient network issues. Retry up to 3 times with
+# exponential backoff before failing.
+run_with_retry() {
+  local cmd="$1"
+  local max_attempts="${2:-3}"
+  local attempt=0
+  local exit_code=1
+  local output=""
+
+  while [ "$attempt" -lt "$max_attempts" ]; do
+    attempt=$((attempt + 1))
+    output=$(timeout 120 bash -c "$cmd" 2>&1) || exit_code=$?
+    if [ "$exit_code" -eq 0 ]; then
+      echo "$output"
+      return 0
+    fi
+    # Exit code 124 = timeout, 126/127 = command not found (don't retry)
+    if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 126 ] || [ "$exit_code" -eq 127 ]; then
+      echo "ERROR: $cmd failed (exit $exit_code) after $attempt attempt(s)" >&2
+      echo "$output"
+      return "$exit_code"
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      local sleep_time=$((2 ** attempt))
+      echo "WARNING: $cmd failed (exit $exit_code), retrying in ${sleep_time}s (attempt $attempt/$max_attempts)" >&2
+      sleep "$sleep_time"
+    fi
+  done
+
+  echo "$output"
+  return "$exit_code"
+}
 
 FEATURE_DIR="${1:-}"
 if [ -z "$FEATURE_DIR" ]; then
@@ -234,8 +270,8 @@ if [ -f "$SCRIPTS_DIR/validate-tests.sh" ]; then
 
   EXIT_CODE="$VALIDATE_EXIT"
 else
-  # Run directly
-  OUTPUT=$(bash -c "$SCANNER_CMD" 2>&1) || EXIT_CODE=$?
+  # Run with retry for network resilience
+  OUTPUT=$(run_with_retry "$SCANNER_CMD" 3) || EXIT_CODE=$?
 fi
 
 # Parse vulnerability count

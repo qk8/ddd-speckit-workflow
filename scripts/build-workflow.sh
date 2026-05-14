@@ -4,8 +4,12 @@
 # Usage: scripts/build-workflow.sh [orchestrator_path] [output_path] [--validate]
 #
 # Reads the orchestrator's imports list, extracts `steps:` sections from
-# each phase file, and produces a single flat YAML suitable for the
-# workflow engine.
+# each phase file (and its auto-discovered sub-phase files), and produces
+# a single flat YAML suitable for the workflow engine.
+#
+# Sub-phase discovery: files matching NN-name-*.yml (excluding the main
+# phase file) in the same directory are processed in alphabetical order
+# after the main phase file.
 #
 # Output: merged YAML to stdout (or to output_path).
 # --validate: Run DAG validation on goto references after merge.
@@ -39,6 +43,36 @@ HEADER=$(sed '/^imports:/,$d' "$ORCHESTRATOR")
 # Extract import paths
 IMPORT_PATHS=$(grep -E '^\s+- ' "$ORCHESTRATOR" | sed 's/^  - //' | grep '\.yml$')
 
+# extract_steps FILE — print indented steps from a YAML file
+extract_steps() {
+  local file="$1"
+  local IN_STEPS=false SKIP_BLANKS=true
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^steps: ]]; then
+      IN_STEPS=true
+      SKIP_BLANKS=true
+      continue
+    fi
+    if $IN_STEPS; then
+      if $SKIP_BLANKS; then
+        if [[ -z "$line" ]]; then
+          continue
+        fi
+        SKIP_BLANKS=false
+      fi
+      if [[ -z "$line" ]]; then
+        echo ""
+        continue
+      fi
+      if [[ "$line" =~ ^[[:space:]] ]]; then
+        echo "  $line"
+      else
+        break
+      fi
+    fi
+  done < "$file"
+}
+
 # Start building output
 {
   echo "$HEADER"
@@ -50,38 +84,20 @@ IMPORT_PATHS=$(grep -E '^\s+- ' "$ORCHESTRATOR" | sed 's/^  - //' | grep '\.yml$
       continue
     fi
 
-    # Extract steps section from phase file
-    # Handles nested indentation within while loops and if blocks
-    IN_STEPS=false
-    SKIP_BLANKS=true
-    while IFS= read -r line; do
-      if [[ "$line" =~ ^steps: ]]; then
-        IN_STEPS=true
-        SKIP_BLANKS=true
-        continue
-      fi
-      if $IN_STEPS; then
-        # Skip leading blank lines right after steps:
-        if $SKIP_BLANKS; then
-          if [[ -z "$line" ]]; then
-            continue
-          fi
-          SKIP_BLANKS=false
-        fi
-        # Blank lines within steps are preserved as-is (with indent added)
-        if [[ -z "$line" ]]; then
-          echo ""
-          continue
-        fi
-        # Lines starting with whitespace are step content — add 2 spaces indent
-        if [[ "$line" =~ ^[[:space:]] ]]; then
-          echo "  $line"
-        else
-          # Non-indented, non-empty line = end of steps section
-          break
-        fi
-      fi
-    done < "$phase_file"
+    # Process main phase file
+    extract_steps "$phase_file"
+
+    # Discover and process sub-phase files (NN-name-*.yml, excluding main)
+    PHASE_DIR=$(dirname "$phase_file")
+    PHASE_BASE=$(basename "$phase_file")
+    PHASE_PREFIX="${PHASE_BASE%.yml}"
+    # Match files like NN-name-sub.yml (prefix followed by -, at least one sub-char, then .yml)
+    for sub_file in "$PHASE_DIR"/${PHASE_PREFIX}-*.yml; do
+      [ -f "$sub_file" ] || continue
+      # Skip the main phase file itself
+      [ "$(basename "$sub_file")" = "$PHASE_BASE" ] && continue
+      extract_steps "$sub_file"
+    done
 
     # Add a comment separator between phases
     echo ""

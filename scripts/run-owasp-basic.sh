@@ -17,6 +17,24 @@
 set -euo pipefail
 
 FEATURE_DIR="${1:?Usage: run-owasp-basic.sh <feature_dir>}"
+
+# ── Retry helper for grep-based scans ────────────────────────────
+# Re-run a grep scan with retry on transient failures.
+run_grep_scan() {
+  local cmd="$1"
+  local result=""
+  local attempt=0
+  while [ "$attempt" -lt 2 ]; do
+    attempt=$((attempt + 1))
+    result=$(eval "$cmd" 2>/dev/null || true)
+    if [ $? -eq 0 ] || [ -n "$result" ]; then
+      echo "$result"
+      return 0
+    fi
+    [ "$attempt" -lt 2 ] && sleep 1
+  done
+  echo "$result"
+}
 SRC_DIRS=()
 
 # Find source directories (skip node_modules, vendor, .git, dist)

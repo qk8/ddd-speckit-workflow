@@ -255,8 +255,21 @@ fi
 if [ -z "$OUTPUT" ]; then
   TASKS_PARSE_ERROR=1
   echo "TASKS_PARSE_ERROR=1"
-  echo "ERROR: Both JSON state files and check-tasks.sh failed — tasks.md may be missing or malformed" >&2
-  echo "       Run: bash scripts/check-tasks.sh (without safe wrapper) to diagnose" >&2
+  {
+    echo "ERROR: All task state parsing methods failed." >&2
+    echo "  Attempted (in order):" >&2
+    echo "    1. state.json (unified state engine) — $(if [ -f "$FEATURE_DIR/state.json" ]; then echo 'found, but missing required fields (version/tasks)'; else echo 'not found'; fi)" >&2
+    echo "    2. .workflow-state.json (checkpoint) — $(if [ -f "$FEATURE_DIR/.workflow-state.json" ]; then echo 'found, but missing status field'; else echo 'not found'; fi)" >&2
+    echo "    3. .tasks-state.json (legacy JSON) — $(if [ -f "$FEATURE_DIR/.tasks-state.json" ]; then echo 'found, but missing done/todo/total fields'; else echo 'not found'; fi)" >&2
+    echo "    4. check-tasks.sh (direct parse) — $(if [ -f "scripts/check-tasks.sh" ]; then echo 'failed to parse tasks.md'; else echo 'script not found'; fi)" >&2
+    echo "" >&2
+    echo "  Possible causes:" >&2
+    echo "    - tasks.md is missing, empty, or has malformed formatting" >&2
+    echo "    - state.json was corrupted or is from an older format" >&2
+    echo "    - FEATURE_DIR is not set correctly" >&2
+    echo "" >&2
+    echo "  Fix: Run 'bash scripts/check-tasks.sh' directly to diagnose." >&2
+  } >&2
   set +e
   source scripts/cadence-defaults.sh
   set -e

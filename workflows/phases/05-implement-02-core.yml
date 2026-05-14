@@ -1,0 +1,135 @@
+# ── PHASE 5 SUB-PHASE: CORE TASK EXECUTION ──────────────────────
+# Extracted from 05-implement.yml
+# Progress logging, traceability counter, write-test → implement → verify → batch-consistency → checkpoint.
+# Note: in-progress/abandoned handling is in the main file (crash recovery).
+
+steps:
+
+  - id: impl_progress
+    type: shell
+    command: >
+      bash scripts/log-iteration-progress.sh
+      "{{ steps.impl_loop_iteration.output.count || 1 }}"
+      "{{ steps.impl_check_remaining.output.done_count }}"
+      "{{ steps.impl_check_remaining.output.total_tasks }}"
+      "{{ steps.impl_check_remaining.output.todo_count }}"
+      "{{ steps.impl_check_remaining.output.in_progress || 'none' }}"
+
+  - id: impl_increment_traceability_counter
+    type: shell
+    command: >
+      bash scripts/state-engine.sh cadence-increment traceability_counter
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: impl_check_traceability_due
+    type: shell
+    command: >
+      bash scripts/traceability-cadence.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: impl_pre_task_validate
+    type: shell
+    command: >
+      bash scripts/pre-task-validate.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: impl_generate_context
+    type: shell
+    command: >
+      bash scripts/prompt-context.sh "{{ steps.impl_check_remaining.output.feature_dir }}"
+      | head -n 500
+      || true
+
+  - id: impl_write_test
+    type: prompt
+    command: speckit.write-test
+    integration: claude
+    input:
+      args: >
+        Discover the current batch: find all TODO tasks whose Depends-on
+        tasks are all DONE. Process each task in the batch sequentially
+        (write tests for TASK-N, then TASK-N+1, etc.). After processing
+        all tasks in the batch, write the batch task list to
+        .artifacts/batch_tasks.txt (format: "TASK-1, TASK-2, ...") and
+        print "Batch complete: [N] tasks done."
+        If no batch can be formed (no TODO tasks with all deps met), stop.
+        Always check Depends-on before starting each task.
+        Use the prompt context at .artifacts/prompts/[task_id]/context.md
+        if available — it contains targeted plan sections for this task.
+
+  - id: impl_execute
+    type: prompt
+    command: speckit.implement
+    integration: claude
+    input:
+      args: >
+        Implement the code to make the tests written by the previous step pass.
+        If .artifacts/batch_tasks.txt exists (batch mode from write-test):
+          implement each task in the batch sequentially.
+          After the batch, remove .artifacts/batch_tasks.txt.
+        Otherwise: implement only the first TODO task.
+        Always check Depends-on before starting.
+
+  - id: impl_verify
+    type: prompt
+    command: speckit.implement-verify
+    integration: claude
+    input:
+      args: >
+        Continue from the just-completed implementation.
+        Run quality checks (STEP 3) and produce the completion report (STEP 4).
+        Do NOT re-implement — only verify and report.
+
+  - id: impl_per_task_drift
+    type: if
+    condition: "{{ steps.impl_check_remaining.output.todo_count | int }} > 0"
+    then:
+      - id: impl_quick_drift
+        type: shell
+        command: >
+          bash scripts/quick-drift-check.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+  - id: impl_post_batch_consistency
+    type: if
+    condition: >
+      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+    then:
+      - id: impl_batch_consistency
+        type: prompt
+        command: speckit.batch-consistency
+        integration: claude
+        input:
+          args: >
+            Run post-batch consistency check.
+            Read the batch task list from .artifacts/batch_tasks.txt.
+            This is lightweight — check only constraint drift and API surface.
+            If .artifacts/batch_tasks.txt does not exist, skip silently.
+
+  - id: impl_merge_check
+    type: if
+    condition: >
+      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+    then:
+      - id: impl_run_merge_check
+        type: shell
+        command: >
+          bash scripts/verify-batch-consistency.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: impl_post_verify_cp
+    type: shell
+    command: >
+      bash scripts/post-verify-checkpoint.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: impl_increment_revision
+    type: shell
+    command: >
+      bash scripts/check-task-revisions.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+      "3"
+

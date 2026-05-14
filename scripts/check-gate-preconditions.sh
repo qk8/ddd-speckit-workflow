@@ -52,6 +52,20 @@ fi
 
 echo "AUTO_APPROVE=$AUTO_APPROVE"
 
+# ── Acceptance gate requires TDD evidence ──────────────────────
+# Acceptance criteria are semantic — a script cannot fully verify
+# behavioral correctness without running the code. The TDD gate
+# (review-tdd) validates red/green evidence which is the closest
+# deterministic proxy for acceptance criteria satisfaction.
+# If the acceptance gate is auto-approved without TDD evidence,
+# the agent can pass all checks while failing the spec.
+ACCEPTANCE_REQUIRES_TDD="false"
+if [ "$GATE_NAME" = "acceptance" ] && [ -f "$PRESET_FILE" ]; then
+  _AA_TDD=$(awk '/^auto_approve:/{found=1; next} found && /tdd_evidence_required:/{print $2; exit}' "$PRESET_FILE" 2>/dev/null || true)
+  [ "$_AA_TDD" = "true" ] && ACCEPTANCE_REQUIRES_TDD="true"
+fi
+echo "ACCEPTANCE_REQUIRES_TDD=$ACCEPTANCE_REQUIRES_TDD"
+
 # ── Check if this gate is non-auto-approvable ──────────────────
 # Some quality gates (TDD integrity, spec compliance) should never
 # be auto-approved even when deterministic checks pass.

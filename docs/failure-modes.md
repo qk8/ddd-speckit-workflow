@@ -103,12 +103,12 @@ Known failure patterns in the Spec Kit workflow and their recovery procedures.
 
 ## 5. Check Runner Script Crash
 
-**Symptom:** `check-runner.sh` exits with a crash instead of PASS/FAIL. No result file is written.
+**Symptom:** `check-runner-v2.sh` exits with a crash instead of PASS/FAIL. No result file is written.
 
 **Root Cause:** A check script has a syntax error, missing dependency, or unexpected output format.
 
 **Detection:**
-- `check-runner.sh` reports "CRASH (no result file)"
+- `check-runner-v2.sh` reports "CRASH (no result file)"
 - `.artifacts/check-results/` directory is empty or missing expected files
 
 **Recovery:**

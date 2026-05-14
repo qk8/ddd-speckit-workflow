@@ -280,6 +280,11 @@ cadence:
 # ── Auto-approve human gates when deterministic checks pass ────────
 auto_approve:
   enabled: true
+  # Acceptance gate requires TDD evidence before auto-approving.
+  # Acceptance criteria are semantic — deterministic checks alone
+  # cannot verify behavioral correctness. The TDD gate validates
+  # red/green evidence which is the closest proxy available.
+  tdd_evidence_required: true
   non_auto_approvable:
     - review-tdd
     - review-plan-revision-gate

@@ -108,7 +108,7 @@ steps:
   - id: fix_needed_round
     type: while
     condition: "true"
-    max_iterations: 2
+    max_iterations: 5
     steps:
       - id: fix_needed_gate
         type: gate
@@ -118,7 +118,7 @@ steps:
           DRIFT DETECTED → fix issues before merging.
             For each issue, decide: fix in code (align to spec) or fix in spec
             (intentional deviation). Add fix tasks to tasks.md if needed.
-          Round {{ steps.fix_needed_round_iteration.output.count || 1 }}/2.
+          Round {{ steps.fix_needed_round_iteration.output.count || 1 }}/5.
         options: [approved-clean, fix-needed, abort]
         on_fix-needed:
           - id: fix_add_tasks
