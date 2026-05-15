@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/find-first-feature.sh
 #        or: FEATURE_DIR=$(scripts/find-first-feature.sh)
 #

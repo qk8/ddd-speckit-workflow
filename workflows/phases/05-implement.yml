@@ -179,6 +179,68 @@ steps:
           "{{ steps.impl_check_remaining.output.done_count }}"
           "{{ steps.impl_check_remaining.output.total_tasks }}"
 
+      # ── Stagnation gate (Fix 6: human gate, not just a shell step) ──
+      # Only appears when STAGNANT=true. When STAGNANT=false, skipped entirely.
+      - id: impl_stagnation_gate
+        type: if
+        condition: "{{ steps.impl_stagnation_check.output.STAGNANT == 'true' }}"
+        then:
+          - id: impl_stagnation_review
+            type: gate
+            message: |
+              ⚠ IMPLEMENTATION STAGNATION DETECTED
+
+              No new tasks completed for {{ steps.impl_stagnation_check.output.CONSECUTIVE_NO_PROGRESS }} consecutive iterations.
+              Tasks may be blocked, flaky, or the spec may be unrealistic.
+              {% if steps.impl_stagnation_check.output.CONSECUTIVE_CONTINUES | int >= 2 %}
+              **Continue option exhausted** ({{ steps.impl_stagnation_check.output.CONSECUTIVE_CONTINUES }} consecutive continues).
+              You must troubleshoot or abort.
+              {% endif %}
+
+              Options:
+                continue — Force-continue (risk wasting iterations).
+                troubleshoot — Run /speckit.status to diagnose, then decide.
+                abort — Cancel the workflow for manual review.
+              {% if steps.impl_stagnation_check.output.REVISION_ONLY == 'true' %}
+              **Revision loop detected** — revising without completing tasks.
+              **Recommended: Select "troubleshoot" or "abort".**
+              Continuing a revision loop wastes iterations.
+              {% endif %}
+            options: [continue, troubleshoot, abort]
+            on_continue:
+              - id: impl_stag_reset
+                type: shell
+                command: >
+                  bash scripts/check-stagnation.sh --reset
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+            on_troubleshoot:
+              - id: impl_status
+                command: speckit.status
+                integration: claude
+              - id: impl_context
+                command: speckit.context
+                integration: claude
+                input:
+                  args: >
+                    Load focused context for the stuck task.
+                    Read tasks.md, identify the IN_PROGRESS or first TODO task.
+                    Read plan.md sections relevant to that task.
+                    Produce a targeted context window: task scope, acceptance
+                    criteria, relevant plan sections, and any error history.
+              - id: impl_resume
+                type: shell
+                command: >
+                  bash scripts/reset-stagnation.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+            on_abort:
+              - id: impl_cleanup_stag
+                type: shell
+                command: >
+                  bash scripts/cleanup-abandoned-state.sh
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "stagnation"
+              - goto: abort
+
       - id: impl_check_in_progress
         type: if
         condition: "{{ steps.impl_check_remaining.output.in_progress != '' }}"

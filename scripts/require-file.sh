@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/require-file.sh
 #        or: bash scripts/require-file.sh <path> <label>
 #

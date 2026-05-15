@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # filter-checks-by-tier.sh — Filter checks by tier and task type
 #
 # Usage:  filter-checks-by-tier.sh <task_type> <tier>

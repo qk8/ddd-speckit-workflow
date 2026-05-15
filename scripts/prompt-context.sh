@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # prompt-context.sh — Find first TODO task and generate prompt context
 #
-# Usage: scripts/prompt-context.sh <feature_dir>
+# Usage: scripts/prompt-context.sh [--max-lines N] <feature_dir>
 #
 # Finds the first task in tasks.md, extracts its ID and type,
 # then runs prompt-factory.sh to generate targeted context.
+# --max-lines N: hard truncation limit for context output (default: 500).
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: prompt-context.sh <feature_dir>}"
+MAX_LINES=500
+if [ "${1:-}" = "--max-lines" ]; then
+  MAX_LINES="${2:?Usage: prompt-context.sh --max-lines N <feature_dir>}"
+  FEATURE_DIR="${3:?Usage: prompt-context.sh --max-lines N <feature_dir>}"
+else
+  FEATURE_DIR="${1:?Usage: prompt-context.sh [--max-lines N] <feature_dir>}"
+fi
 TASKS_FILE="$FEATURE_DIR/tasks.md"
 
 # Find first task heading
@@ -24,4 +31,4 @@ if [ -f "$STATE_FILE" ]; then
 fi
 echo "SPEC_VERSION: ${SPEC_VERSION}"
 
-bash scripts/prompt-factory.sh "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" 2>/dev/null || true
+bash scripts/prompt-factory.sh --max-lines "$MAX_LINES" "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" 2>/dev/null || true

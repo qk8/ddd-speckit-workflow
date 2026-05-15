@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Tests for validate-tasks.sh dependency graph validation.
 # Verifies the test harness works correctly with various task configurations.
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: bash scripts/parse-tasks-field.sh <tasks_file> <field_name>
 # Extracts lines matching "field_name:" from DONE tasks in tasks.md.
 # Output: "## TASK-N | field_name: value" per match.

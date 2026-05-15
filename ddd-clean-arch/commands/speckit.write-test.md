@@ -52,16 +52,20 @@ CHECKPOINT RECOVERY (read .workflow-state.json first):
 PARALLEL MODE (batch independent tasks):
   The workflow YAML passes this instruction via input.args. When you see this
   section, process tasks in batches instead of one at a time:
-  1. Run: bash scripts/validate-tasks.sh --batch-plan
-  2. Read the JSON output for dependency levels (level_0, level_1, etc.)
-  3. Find ALL TODO tasks at the current level whose Depends-on tasks are all DONE.
-  4. Process each level as a batch. Within a batch, process tasks sequentially.
-  5. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
-  6. Continue to the next level. Stop when no more TODO tasks with all dependencies met.
-  7. In batch mode, the completion report covers the entire batch.
-  8. Write the batch task list to .artifacts/batch_tasks.txt:
+  1. Read tasks.md and find ALL TODO tasks whose Depends-on tasks are all DONE.
+     Derive the batch directly from tasks.md — do NOT rely on .artifacts/batch_tasks.txt
+     (that file is written AFTER processing, not before).
+  2. Process each task in the batch sequentially (write tests for TASK-N, then TASK-N+1).
+  3. After all tasks in a batch complete, print: "Batch complete: [N] tasks done."
+  4. Write the batch task list to .artifacts/batch_tasks.txt:
      echo "TASK-N, TASK-M, ..." > .artifacts/batch_tasks.txt
-  9. After writing batch_tasks.txt, continue to the next batch level.
+     This file is read by downstream steps (verify, batch-consistency) — not by write-test itself.
+  5. Continue to the next batch (repeat: find TODO tasks with all deps DONE).
+  6. Stop when no more TODO tasks have all dependencies met.
+  7. In batch mode, the completion report covers the entire batch.
+  If no batch can be formed (no TODO tasks with all deps met):
+    Print: "No batch available — all deps unmet or no TODO tasks remain."
+    Exit cleanly. Do NOT attempt to process tasks with unmet dependencies.
 
 Use targeted spec loading — read only the plan.md sections relevant to
 the next task's Type. Do not read plan.md end to end.

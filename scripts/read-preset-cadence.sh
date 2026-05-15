@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/read-preset-cadence.sh
 #        or: PRESET_SIMPLE=$(bash scripts/read-preset-cadence.sh simple)
 #

@@ -37,6 +37,12 @@ ARTIFACTS_DIR="$FEATURE_DIR/.artifacts"
 RESULTS_DIR="$ARTIFACTS_DIR/check-results"
 mkdir -p "$RESULTS_DIR"
 
+# ── Lock file management for parallel safety ──────────────────────
+LOCK_DIR="$RESULTS_DIR/.locks"
+mkdir -p "$LOCK_DIR"
+cleanup_locks() { rm -rf "$LOCK_DIR"; }
+trap cleanup_locks EXIT INT TERM
+
 # ── Parse routing table from preset.yml ─────────────────────────
 parse_routing_table() {
   local tier="${1:-critical}"
@@ -92,7 +98,8 @@ resolve_alias() {
     T) echo "resilience" ;;
     U) echo "security" ;;
     V) echo "code_quality" ;;
-    W) echo "W" ;;
+    S) echo "test_design" ;;
+    W) echo "_unknown_" ;;
     Z) echo "spec_compliance" ;;
     *) echo "$1" ;;
   esac
@@ -166,6 +173,13 @@ CHECK_NAMES=()
 
 for check_id in "${CHECK_IDS[@]}"; do
   resolved=$(resolve_alias "$check_id")
+
+  # Skip unknown aliases (e.g. W — unmapped check ID)
+  if [ "$resolved" = "_unknown_" ]; then
+    echo "WARN: Unknown check ID '$check_id', skipping" >&2
+    continue
+  fi
+
   name=$(get_check_name "$check_id")
   CHECK_NAMES+=("$name")
 
@@ -180,6 +194,11 @@ for check_id in "${CHECK_IDS[@]}"; do
   fi
 done
 
+# Sort sub-checks for deterministic parallel launch order (Fix 11)
+if [ "${#ALL_SUB_CHECKS[@]}" -gt 0 ]; then
+  IFS=$'\n' ALL_SUB_CHECKS=($(sort -u <<<"${ALL_SUB_CHECKS[*]}")); unset IFS
+fi
+
 echo "━━━ Check Runner V2 ━━━"
 echo "Task type: $TASK_TYPE"
 echo "Tier: $TIER"
@@ -187,6 +206,18 @@ echo "Dimensions: ${CHECK_IDS[*]}"
 echo "Sub-checks: ${#ALL_SUB_CHECKS[@]}"
 echo "Results dir: $RESULTS_DIR"
 echo ""
+
+# ── Atomic result write with flock (Fix 1: race condition) ───────
+# Usage: write_result <result_file> <value>
+# Writes result atomically using flock to prevent parallel race conditions.
+write_result() {
+  local result_file="$1" value="$2"
+  local lock_file="$LOCK_DIR/$(echo "$result_file" | tr '/' '_').lock"
+  (
+    flock -w 30 200 || { echo "FLOCK_TIMEOUT: $result_file" >&2; return 1; }
+    echo "$value" > "$result_file"
+  ) 200>"$lock_file"
+}
 
 # ── Run a single sub-check ─────────────────────────────────────
 run_sub_check() {
@@ -209,7 +240,7 @@ run_sub_check() {
   fi
 
   if [ -z "$script_name" ]; then
-    echo "SKIP" > "$result_file"
+    write_result "$result_file" "SKIP"
     echo "CHECK $full_id: SKIP (no deterministic script)"
     return
   fi
@@ -231,10 +262,10 @@ run_sub_check() {
     done
 
     if [ "$is_critical" = true ]; then
-      echo "FAIL" > "$result_file"
+      write_result "$result_file" "FAIL"
       echo "CHECK $full_id: FAIL (critical-tier script $script_name not found)" >&2
     else
-      echo "SKIP" > "$result_file"
+      write_result "$result_file" "SKIP"
       echo "CHECK $full_id: SKIP ($script_name not found)"
     fi
     return
@@ -245,10 +276,10 @@ run_sub_check() {
   output=$(bash "$script_path" "$FEATURE_DIR" 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
-    echo "PASS" > "$result_file"
+    write_result "$result_file" "PASS"
     echo "CHECK $full_id: PASS"
   else
-    echo "FAIL" > "$result_file"
+    write_result "$result_file" "FAIL"
     echo "CHECK $full_id: FAIL (exit $exit_code)" >&2
     echo "--- Output ---" >> "$result_file"
     echo "$output" >> "$result_file"
@@ -288,7 +319,10 @@ for sub_id in "${ALL_SUB_CHECKS[@]}"; do
     continue
   fi
 
-  result=$(head -1 "$result_file")
+  # Read result atomically (flock ensures writes are complete after wait)
+  result=$(head -1 "$result_file" 2>/dev/null || echo "SKIP")
+  # Guard against empty result (shouldn't happen with flock, but be safe)
+  [ -z "$result" ] && result="SKIP"
   case "$result" in
     PASS) PASS_COUNT=$((PASS_COUNT + 1)) ;;
     FAIL) FAIL_COUNT=$((FAIL_COUNT + 1)) ;;

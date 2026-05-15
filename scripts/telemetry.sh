@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: telemetry.sh <action> [args...]
 # Actions: init, phase_start, phase_end, gate, task_done, stagnation, report
 # Writes to {{feature_dir}}/.specify/state/telemetry.json

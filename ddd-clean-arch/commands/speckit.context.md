@@ -1,13 +1,14 @@
-# ── Issue E: --max-lines flag to prevent context window overflow ──
-# Usage: speckit.context --max-lines 50
-# Hard truncation: the context output will never exceed N lines.
-# If plan.md sections are larger than N, prioritize:
-#   1. Task acceptance criteria (verbatim)
-#   2. Relevant §2 ubiquitous language terms
-#   3. Relevant §4 aggregate definitions (invariants, value objects)
-#   4. Layer rules for this task's type
-#   5. Applicable §16 constraints
-# Everything else is elided with "[truncated — see plan.md for full details]"
+# ── Context window overflow protection (Fix 9) ──────────────────
+# Usage: speckit.context [--max-lines N]
+# Default max-lines: 500. Reduces context when plan.md sections are too large.
+# Priority-based truncation: high-priority sections always included,
+# medium-priority truncated to 200 lines, low-priority elided.
+
+# Parse --max-lines from input.args if provided
+MAX_LINES=500
+if input.args contains "--max-lines "; then
+  MAX_LINES = extract the number after "--max-lines "
+fi
 
 # Load unified context for the next task
 FEATURE_DIR=$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")
@@ -16,8 +17,8 @@ if [ -z "$FEATURE_DIR" ]; then
   exit 0
 fi
 
-# Find next TODO task
-NEXT_TASK=$(bash scripts/prompt-context.sh "$FEATURE_DIR" || echo "")
+# Find next TODO task and generate targeted context with --max-lines
+NEXT_TASK=$(bash scripts/prompt-context.sh --max-lines "$MAX_LINES" "$FEATURE_DIR" || echo "")
 if [ -z "$NEXT_TASK" ]; then
   echo "No unblocked tasks. Run /speckit.status."
   exit 0
@@ -27,8 +28,8 @@ fi
 TASK_ID=$(echo "$NEXT_TASK" | grep -oE 'TASK-[0-9]+' | head -1 || echo "TASK-1")
 TASK_TYPE=$(echo "$NEXT_TASK" | grep -oE 'backend-domain|backend-infra|backend-api|shared|integration|frontend-data|frontend-feature|e2e' | head -1 || echo "backend-domain")
 
-# Generate unified context
-bash scripts/unified-context.sh "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" > /dev/null 2>&1
+# Generate unified context with truncation
+bash scripts/unified-context.sh --max-lines "$MAX_LINES" "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" > /dev/null 2>&1
 
 # Read unified context
 Read .artifacts/unified-context.json.

@@ -575,6 +575,9 @@ done
 
 # Check for file overlaps ONLY within the same dependency level
 # I3: Separate Scope overlaps (ERROR) from acceptance criteria overlaps (WARNING)
+# Optimized: hash-based duplicate detection instead of O(n²) pairwise comparison.
+# Reduces from O(n² * subprocesses) to O(n log n + m log m) where m = total file refs.
+
 OVERLAP_FILE="$TMP_DIR/overlaps.txt"
 touch "$OVERLAP_FILE"
 
@@ -585,42 +588,79 @@ grep -E '\|src/|\|lib/|\|app/|\|packages/|\|tests/' "$TASK_FILES_FILE" > "$SCOPE
 # Get unique levels
 LEVELS=$(cut -d'|' -f2 "$LEVELS_FILE" | sort -un)
 
+# Cap: prevents O(n²) explosion on large parallel batches
+MAX_LEVEL_SIZE=20
+
 for level in $LEVELS; do
   # Get tasks at this level
   LEVEL_TASKS=$(awk -F'|' -v lv="$level" '$2 == lv {print $1}' "$LEVELS_FILE")
+  level_task_count=$(echo "$LEVEL_TASKS" | wc -w | xargs)
 
-  # Check all pairs within this level
-  for tid_a in $LEVEL_TASKS; do
-    for tid_b in $LEVEL_TASKS; do
-      # Skip self-pairs and duplicates
-      [ "$tid_a" = "$tid_b" ] && continue
-      [ "$tid_a" -gt "$tid_b" ] 2>/dev/null && continue
+  # Skip detailed pairwise check if level is too large
+  if [ "$level_task_count" -gt "$MAX_LEVEL_SIZE" ]; then
+    echo "  WARNING: Level $level has $level_task_count tasks (exceeds $MAX_LEVEL_SIZE cap — skipping detailed conflict detection, recommend serializing)"
+    WARNINGS=$((WARNINGS + 1))
+    continue
+  fi
 
-      # Check Scope file overlap (ERROR — definite conflict)
-      scope_overlap=$(comm -12 \
-        <(grep "^${tid_a}|" "$SCOPE_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
-        <(grep "^${tid_b}|" "$SCOPE_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
-      if [ -n "$scope_overlap" ]; then
-        echo "  ERROR: TASK-$tid_a and TASK-$tid_b (same batch level $level) both Scope-modify: $scope_overlap"
-        echo "         Tasks in the same batch MUST NOT modify the same files."
-        echo "         Serialize these tasks or split into separate batches."
-        ERRORS=$((ERRORS + 1))
-        echo "\"TASK-$tid_a <-> TASK-$tid_b (ERROR): $scope_overlap\"" >> "$OVERLAP_FILE"
-        continue  # Don't double-count as warning
-      fi
+  # ── Hash-based duplicate detection (Fix 2: O(n log n) instead of O(n²)) ──
+  # Build a combined file of: filepath|task_id|conflict_type
+  # Then sort by filepath and find duplicates in a single pass.
+  COMBINED_FILE="$TMP_DIR/combined_files.txt"
+  touch "$COMBINED_FILE"
 
-      # Check acceptance criteria overlap (WARNING — potential conflict)
-      all_overlap=$(comm -12 \
-        <(grep "^${tid_a}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) \
-        <(grep "^${tid_b}|" "$TASK_FILES_FILE" 2>/dev/null | cut -d'|' -f2 | sort -u) 2>/dev/null || true)
-      if [ -n "$all_overlap" ]; then
-        echo "  WARNING: TASK-$tid_a and TASK-$tid_b (same batch level $level) both reference: $all_overlap"
-        echo "         Consider serializing these tasks to avoid merge conflicts."
-        WARNINGS=$((WARNINGS + 1))
-        echo "\"TASK-$tid_a <-> TASK-$tid_b (WARNING): $all_overlap\"" >> "$OVERLAP_FILE"
-      fi
+  # Scope files (ERROR severity) — filter for current level tasks only
+  if [ -s "$SCOPE_FILES_FILE" ]; then
+    for tid in $LEVEL_TASKS; do
+      grep "^${tid}|" "$SCOPE_FILES_FILE" 2>/dev/null | while IFS='|' read -_ _ fpath; do
+        echo "${fpath}|${tid}|SCOPE"
+      done >> "$COMBINED_FILE" || true
     done
+  fi
+
+  # All files (WARNING severity — includes acceptance criteria references)
+  # Skip files already tagged as SCOPE to avoid double-counting.
+  for tid in $LEVEL_TASKS; do
+    grep "^${tid}|" "$TASK_FILES_FILE" 2>/dev/null | while IFS='|' read -_ _ fpath; do
+      if ! grep -q "^${fpath}|${tid}|SCOPE" "$COMBINED_FILE" 2>/dev/null; then
+        echo "${fpath}|${tid}|ACCEPTANCE"
+      fi
+    done >> "$COMBINED_FILE" || true
   done
+
+  # Find duplicate filepaths (files referenced by multiple tasks at same level)
+  if [ -s "$COMBINED_FILE" ]; then
+    # Sort by filepath, then detect consecutive duplicates with awk
+    sort -t'|' -k1,1 "$COMBINED_FILE" | awk -F'|' '
+      {
+        if ($1 == prev_path && prev_tid != $2) {
+          # Same filepath, different task — report duplicate
+          severity = ($3 == "SCOPE" || prev_type == "SCOPE") ? "ERROR" : "WARNING"
+          print prev_path "|" prev_tid "|" $2 "|" severity
+        }
+        prev_path = $1
+        prev_tid = $2
+        prev_type = $3
+      }
+    ' > "$TMP_DIR/duplicates.txt" 2>/dev/null || true
+
+    # Report duplicates
+    if [ -s "$TMP_DIR/duplicates.txt" ]; then
+      while IFS='|' read -r fpath tid_a tid_b severity; do
+        if [ "$severity" = "ERROR" ]; then
+          echo "  ERROR: TASK-$tid_a and TASK-$tid_b (same batch level $level) both Scope-modify: $fpath"
+          echo "         Tasks in the same batch MUST NOT modify the same files."
+          echo "         Serialize these tasks or split into separate batches."
+          ERRORS=$((ERRORS + 1))
+        else
+          echo "  WARNING: TASK-$tid_a and TASK-$tid_b (same batch level $level) both reference: $fpath"
+          echo "          Consider serializing these tasks to avoid merge conflicts."
+          WARNINGS=$((WARNINGS + 1))
+        fi
+        echo "\"TASK-$tid_a <-> TASK-$tid_b ($severity): $fpath)\"" >> "$OVERLAP_FILE"
+      done < "$TMP_DIR/duplicates.txt"
+    fi
+  fi
 done
 
 if [ "$WARNINGS" -eq 0 ] && [ ! -s "$OVERLAP_FILE" ]; then

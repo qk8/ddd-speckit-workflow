@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/search-dirs.sh
 #        or: eval "$(scripts/search-dirs.sh)"
 #

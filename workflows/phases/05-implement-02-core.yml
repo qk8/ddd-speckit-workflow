@@ -40,6 +40,48 @@ steps:
       | head -n 500
       || true
 
+  # ── Auto-rollback before implement (Fix 10: mid-task failure recovery) ──
+  # Checks for a prior checkpoint and offers rollback if partial files exist.
+  - id: impl_pre_rollback_check
+    type: shell
+    command: >
+      bash scripts/recovery-engine.sh restore --dry-run
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || echo "ROLLBACK_AVAILABLE=false"
+    continue_on_error: true
+
+  - id: impl_rollback_gate
+    type: if
+    condition: "{{ steps.impl_pre_rollback_check.output.ROLLBACK_AVAILABLE == 'true' }}"
+    then:
+      - id: impl_rollback_review
+        type: gate
+        message: |
+          ⚠ PRIOR CHECKPOINT DETECTED
+
+          A checkpoint exists with file changes from a previous interrupted session.
+          Partial files may exist on disk from the interrupted implementation.
+
+          Options:
+            rollback — Restore files to checkpoint state, then restart the task cleanly.
+            continue — Keep current files and proceed (risk inconsistent state).
+            skip — Mark this checkpoint as handled, do not offer again this session.
+        options: [rollback, continue, skip]
+        on_rollback:
+          - id: impl_do_rollback
+            command: speckit.rollback
+            integration: claude
+            input:
+              args: >
+                Perform checkpoint restore for the current task.
+                Run: bash scripts/recovery-engine.sh restore <feature_dir>
+                Verify the diff shows a clean restore.
+                Report: "Rollback complete — N files restored to checkpoint state."
+        on_skip:
+          - id: impl_mark_skip
+            type: shell
+            command: >
+              echo "SKIP_ROLLBACK=true" > "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/skip-rollback"
+
   - id: impl_write_test
     type: prompt
     command: speckit.write-test

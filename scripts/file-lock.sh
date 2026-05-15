@@ -43,7 +43,6 @@ fi
 
 # Lock acquired — run the command
 # The lock is released when the script exits (fd 200 is closed)
-set -e
 "$@"
 EXIT_CODE=$?
 

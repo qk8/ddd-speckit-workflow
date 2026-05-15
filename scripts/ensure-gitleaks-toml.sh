@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: bash scripts/ensure-gitleaks-toml.sh [repo-root]
 # Ensures .gitleaks.toml exists at repo root.
 # Creates it from gitleaks-base.toml if missing.

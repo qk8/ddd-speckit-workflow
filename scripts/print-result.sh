@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/print-result.sh
 #        or: bash scripts/print-result.sh <errors> <warnings> <error_msg> <fix_msg> <warn_msg> <pass_msg>
 #

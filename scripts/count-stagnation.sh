@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: count-stagnation.sh <feature_dir>
 # Increments stagnation counter, returns total and whether to force abort
 # Delegates to state-engine.sh if state.json exists.

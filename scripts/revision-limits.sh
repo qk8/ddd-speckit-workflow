@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Central revision limits configuration.
 # All retry-limit scripts source this file instead of hardcoding values.
 # This ensures a single source of truth for "how many retries does this task have left?"

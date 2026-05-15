@@ -16,6 +16,14 @@
 
 set -euo pipefail
 
+# ── Check for yq (YAML parser) — use if available for robust parsing ──
+HAS_YQ=false
+if command -v yq &>/dev/null; then
+  HAS_YQ=true
+else
+  echo "WARNING: yq not found — using text-based YAML parser (less robust). Install yq for reliable parsing." >&2
+fi
+
 ORCHESTRATOR="ddd-workflow.yml"
 OUTPUT="/dev/stdout"
 VALIDATE=""
@@ -44,33 +52,41 @@ HEADER=$(sed '/^imports:/,$d' "$ORCHESTRATOR")
 IMPORT_PATHS=$(grep -E '^\s+- ' "$ORCHESTRATOR" | sed 's/^  - //' | grep '\.yml$')
 
 # extract_steps FILE — print indented steps from a YAML file
+# Uses yq if available (robust), falls back to text-based parser.
 extract_steps() {
   local file="$1"
-  local IN_STEPS=false SKIP_BLANKS=true
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^steps: ]]; then
-      IN_STEPS=true
-      SKIP_BLANKS=true
-      continue
-    fi
-    if $IN_STEPS; then
-      if $SKIP_BLANKS; then
-        if [[ -z "$line" ]]; then
-          continue
-        fi
-        SKIP_BLANKS=false
-      fi
-      if [[ -z "$line" ]]; then
-        echo ""
+  if $HAS_YQ; then
+    # yq-based: proper YAML parsing, handles strings containing "steps:", comments, multi-line strings
+    yq '.steps[]' "$file" 2>/dev/null | sed 's/^/  /' || true
+  else
+    # Text-based fallback: require steps: at column 0 (no leading whitespace) to avoid
+    # matching "steps:" inside YAML strings or comments.
+    local IN_STEPS=false SKIP_BLANKS=true
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^steps:[[:space:]]*$ ]] || [[ "$line" == "steps:" ]]; then
+        IN_STEPS=true
+        SKIP_BLANKS=true
         continue
       fi
-      if [[ "$line" =~ ^[[:space:]] ]]; then
-        echo "  $line"
-      else
-        break
+      if $IN_STEPS; then
+        if $SKIP_BLANKS; then
+          if [[ -z "$line" ]]; then
+            continue
+          fi
+          SKIP_BLANKS=false
+        fi
+        if [[ -z "$line" ]]; then
+          echo ""
+          continue
+        fi
+        if [[ "$line" =~ ^[[:space:]] ]]; then
+          echo "  $line"
+        else
+          break
+        fi
       fi
-    fi
-  done < "$file"
+    done < "$file"
+  fi
 }
 
 # Start building output

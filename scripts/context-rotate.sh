@@ -76,6 +76,11 @@ jq '.history = (.history[-10:]) | .metadata.updated_at = (now | todate)' "$STATE
 if [ -d "$BUNDLE_DIR" ]; then
   cd "$BUNDLE_DIR"
   ls -1t implement-*.md 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+
+  # (Fix 9) Also prune plan context bundles — keep only high-priority sections
+  # Plan bundles are stored as implement-*.plan.md or context-plan-*.md
+  ls -1t context-plan-*.md 2>/dev/null | tail -n +4 | xargs rm -f 2>/dev/null || true
+
   cd - > /dev/null
 fi
 

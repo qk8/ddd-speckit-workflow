@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: gate-threshold.sh <gate_type> <current_revision>
 # Returns whether to show the revision option, auto-revise, or auto-approve
 # When threshold is exceeded: returns AUTO_REVISE=true (triggers retrospect)

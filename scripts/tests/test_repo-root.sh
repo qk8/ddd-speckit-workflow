@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Tests for scripts/repo-root.sh
 # Usage: . scripts/tests/test_repo-root.sh
 

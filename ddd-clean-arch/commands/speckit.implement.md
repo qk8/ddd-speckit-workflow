@@ -36,6 +36,31 @@ Before selecting which task to implement, follow the task selection protocol:
 
 Print: "Selected TASK-[N] — [title] (Type: [type])"
 
+─────────────────────────────────────────
+STEP 0.5 — CHECK FOR PARTIAL FILES FROM INTERRUPTED RUN
+─────────────────────────────────────────
+(Fix 10: mid-task failure recovery)
+Check if any files from a previous interrupted run exist on disk:
+  FEATURE_DIR="$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")"
+  if [ -f "$FEATURE_DIR/.artifacts/skip-rollback" ]; then
+    echo "ROLLBACK_SKIPPED: previous session chose to skip rollback"
+  elif [ -f "$FEATURE_DIR/.artifacts/checkpoint.json" ]; then
+    echo "CHECKPOINT_FOUND: partial files may exist from interrupted session"
+    # Check if any Scope.Creates files already exist on disk
+    for f in [list of Scope.Creates files]; do
+      if [ -f "$FEATURE_DIR/$f" ]; then
+        echo "PARTIAL_FILE: $f exists — may be from interrupted run"
+      fi
+    done
+  fi
+
+If partial files are found:
+  1. Print: "PARTIAL FILES DETECTED — consider /speckit.rollback to restore clean state"
+  2. DO NOT proceed with implementation until the user confirms:
+     "Proceed with partial files" or "Rollback first"
+  3. If user chooses to proceed: continue with implementation, but note
+     which files are partial and may need review.
+
 ━━ KNOWN PATTERNS (from error memory) ━━━━━━━━━━━━━━━━━━━━━━━━━
 Run: bash scripts/error-memory.sh read "$(bash scripts/find-first-feature.sh)"
 This prints any known correction patterns, abandoned task reasons,

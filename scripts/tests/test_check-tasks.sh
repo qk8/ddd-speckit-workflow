@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Tests for check-tasks.sh parsing logic
 # Uses a temporary feature directory to avoid polluting real state.
 

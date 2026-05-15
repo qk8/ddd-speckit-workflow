@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Shared file type list for grep --include options.
 # Source this file: source scripts/filetypes.sh
 # Usage: grep -rl $FILETYPES_PATTERNS <pattern> <dirs...>

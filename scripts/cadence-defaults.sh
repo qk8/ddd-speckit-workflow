@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Shared cadence defaults — mirror of preset.yml cadence section.
 # Source this file: source scripts/cadence-defaults.sh
 #

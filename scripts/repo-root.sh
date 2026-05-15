@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Usage: source scripts/repo-root.sh
 #        or: REPO_ROOT=$(scripts/repo-root.sh)
 #
