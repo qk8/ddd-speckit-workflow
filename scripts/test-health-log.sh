@@ -97,6 +97,22 @@ if [ -n "$TEST_RUNNER" ]; then
     TEST_OUTPUT2=$(bash -c "$TEST_RUNNER" 2>&1 || true)
     if [ "$TEST_OUTPUT" != "$TEST_OUTPUT2" ]; then
       FLAKY_COUNT=1
+      # ── Automated quarantine ──
+      FLAKY_LIST="$ARTIFACTS_DIR/flaky-tests.txt"
+      mkdir -p "$ARTIFACTS_DIR"
+      QUARANTINE_TS=$(now_utc)
+      # Add all discovered test files to quarantine list (deduplicated)
+      if [ -n "$TEST_FILES" ]; then
+        while IFS= read -r tf; do
+          [ -f "$tf" ] || continue
+          rel_path=$(echo "$tf" | sed "s|^${FEATURE_DIR}/||")
+          # Add if not already in the list
+          if [ ! -f "$FLAKY_LIST" ] || ! grep -qxF "$rel_path" "$FLAKY_LIST" 2>/dev/null; then
+            echo "$rel_path" >> "$FLAKY_LIST"
+          fi
+        done <<< "$TEST_FILES"
+      fi
+      echo "QUARANTINE: Flaky test detected at ${QUARANTINE_TS}. Test files added to $FLAKY_LIST"
     fi
   fi
 fi
@@ -227,7 +243,13 @@ fi
 
 # Alert: flaky test
 if [ "$FLAKY_COUNT" -gt 0 ]; then
-  ALERTS="${ALERTS}ALERT: ${FLAKY_COUNT} flaky test(s) detected
+  FLAKY_LIST="$ARTIFACTS_DIR/flaky-tests.txt"
+  QUARANTINE_INFO=""
+  if [ -f "$FLAKY_LIST" ]; then
+    local_count=$(wc -l < "$FLAKY_LIST" 2>/dev/null || echo 0)
+    QUARANTINE_INFO=" [${local_count} test files quarantined in $FLAKY_LIST]"
+  fi
+  ALERTS="${ALERTS}ALERT: ${FLAKY_COUNT} flaky test(s) detected${QUARANTINE_INFO}
 "
 fi
 

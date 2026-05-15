@@ -2,10 +2,10 @@
 # error-memory.sh — Structured error memory for cross-task learning
 #
 # Usage:
-#   bash error-memory.sh read <feature_dir>              # Read error memory preamble
-#   bash error-memory.sh update <feature_dir> <task_id> <error_type> <description> <fix_pattern>
-#   bash error-memory.sh clear <feature_dir>             # Clear error memory
-#   bash error-memory.sh summary <feature_dir>           # Print summary
+#   bash error-memory.sh read <feature_dir>                          # Read error memory preamble
+#   bash error-memory.sh update <feature_dir> <task_id> <error_type> <description> <fix_pattern> [evidence]
+#   bash error-memory.sh clear <feature_dir>                         # Clear error memory
+#   bash error-memory.sh summary <feature_dir>                       # Print summary
 #
 # Stores structured learnings in .artifacts/error-memory.json
 # Schema (bash 3.2 compatible, no jq dependency):
@@ -13,7 +13,7 @@
 #     "version": 1,
 #     "updated": "2026-01-01T00:00:00Z",
 #     "corrections": [
-#       {"task": "TASK-3", "type": "mocking", "description": "...", "fix": "...", "count": 2, "confidence": 0.8}
+#       {"task": "TASK-3", "type": "mocking", "description": "...", "fix": "...", "evidence": "...", "count": 2, "confidence": 0.8}
 #     ],
 #     "abandoned_tasks": [
 #       {"task": "TASK-5", "reason": "...", "date": "2026-01-01"}
@@ -27,13 +27,12 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: bash error-memory.sh <read|update|clear|summary> <feature_dir> [args...]}"
-ACTION="${2:-read}"
+ACTION="${1:-update}"
+FEATURE_DIR="${2:-}"
 
-# Derive feature_dir from first arg if it's a path
-if [ "$ACTION" = "read" ] || [ "$ACTION" = "update" ] || [ "$ACTION" = "clear" ] || [ "$ACTION" = "summary" ]; then
-  FEATURE_DIR="$1"
-  ACTION="${2:-read}"
+if [ -z "$FEATURE_DIR" ]; then
+  echo "Usage: bash error-memory.sh <read|update|clear|summary> <feature_dir> [args...]"
+  exit 1
 fi
 
 MEMORY_FILE="$FEATURE_DIR/.artifacts/error-memory.json"
@@ -70,7 +69,11 @@ do_read() {
   local has_corrections=false
   if grep -q '"corrections"' "$MEMORY_FILE" 2>/dev/null; then
     local correction_count
-    correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || echo 0)
+    correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || true)
+    correction_count=${correction_count:-0}
+    if ! echo "$correction_count" | grep -qE '^[0-9]+$'; then
+      correction_count=0
+    fi
     if [ "$correction_count" -gt 0 ]; then
       has_corrections=true
       echo "# Known Correction Patterns (from recent tasks)"
@@ -95,8 +98,17 @@ do_read() {
           gsub(/.*"fix"[[:space:]]*:[[:space:]]*"/, "")
           gsub(/".*/, "")
           fix = $0
+        }
+        /"evidence"/ {
+          gsub(/.*"evidence"[[:space:]]*:[[:space:]]*"/, "")
+          gsub(/".*/, "")
+          evidence = $0
+        }
+        /"confidence"/ {
           print "  TASK-" task ": " type " — " desc
           print "    Fix: " fix
+          if (evidence != "") print "    Evidence: " evidence
+          evidence = ""
         }
       ' "$MEMORY_FILE" 2>/dev/null | tail -10
     fi
@@ -113,6 +125,7 @@ do_update() {
   local error_type="${4:-unknown}"
   local description="${5:-}"
   local fix_pattern="${6:-}"
+  local evidence="${7:-}"
 
   init_memory
 
@@ -121,8 +134,13 @@ do_update() {
 
   # Count existing entries of this type
   local existing_count=0
-  if echo "$error_type" != "unknown" && [ -n "$description" ]; then
-    existing_count=$(grep -c "\"task\".*\"$task_id\"" "$MEMORY_FILE" 2>/dev/null || echo 0)
+  if [ "$error_type" != "unknown" ] && [ -n "$description" ]; then
+    existing_count=$(grep -c "\"task\".*\"$task_id\"" "$MEMORY_FILE" 2>/dev/null || true)
+    existing_count=${existing_count:-0}
+    # Ensure it's a number
+    if ! echo "$existing_count" | grep -qE '^[0-9]+$'; then
+      existing_count=0
+    fi
   fi
 
   # Simple append approach (bash 3.2 compatible, no jq)
@@ -135,8 +153,28 @@ do_update() {
 
   # If corrections array is empty, add first entry
   if ! grep -q '"task"' "$tmp_file" 2>/dev/null; then
-    # Add first correction entry
-    sed -i 's/"corrections": \[\]/"corrections": [\n    {\n      "task": "'"$task_id"'",\n      "type": "'"$error_type"'",\n      "description": "'"$description"'",\n      "fix": "'"$fix_pattern"'",\n      "count": 1,\n      "confidence": 0.5\n    }]/' "$tmp_file" 2>/dev/null || true
+    # Write the first entry directly to avoid sed escaping issues
+    {
+      echo '{'
+      echo '  "version": 1,'
+      echo '  "updated": "",'
+      echo '  "corrections": ['
+      echo '    {'
+      echo "      \"task\": \"$task_id\","
+      echo "      \"type\": \"$error_type\","
+      echo "      \"description\": \"$description\","
+      echo "      \"fix\": \"$fix_pattern\","
+      if [ -n "$evidence" ]; then
+        echo "      \"evidence\": \"$evidence\","
+      fi
+      echo '      "count": 1,'
+      echo '      "confidence": 0.5'
+      echo '    }'
+      echo '  ],'
+      echo '  "abandoned_tasks": [],'
+      echo '  "drift_patterns": []'
+      echo '}'
+    } > "$tmp_file"
   fi
 
   mv "$tmp_file" "$MEMORY_FILE"
@@ -160,9 +198,15 @@ do_summary() {
   local abandoned_count=0
   local drift_count=0
 
-  correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || echo 0)
-  abandoned_count=$(grep -c '"reason"' "$MEMORY_FILE" 2>/dev/null || echo 0)
-  drift_count=$(grep -c '"pattern"' "$MEMORY_FILE" 2>/dev/null || echo 0)
+  correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || true)
+  correction_count=${correction_count:-0}
+  echo "$correction_count" | grep -qE '^[0-9]+$' || correction_count=0
+  abandoned_count=$(grep -c '"reason"' "$MEMORY_FILE" 2>/dev/null || true)
+  abandoned_count=${abandoned_count:-0}
+  echo "$abandoned_count" | grep -qE '^[0-9]+$' || abandoned_count=0
+  drift_count=$(grep -c '"pattern"' "$MEMORY_FILE" 2>/dev/null || true)
+  drift_count=${drift_count:-0}
+  echo "$drift_count" | grep -qE '^[0-9]+$' || drift_count=0
 
   echo "Error Memory Summary:"
   echo "  Corrections: $correction_count"
@@ -178,7 +222,7 @@ case "$ACTION" in
     do_read
     ;;
   update)
-    do_update "$FEATURE_DIR" "$ACTION" "${3:-}" "${4:-}" "${5:-}" "${6:-}"
+    do_update "$FEATURE_DIR" "$ACTION" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
     ;;
   clear)
     do_clear

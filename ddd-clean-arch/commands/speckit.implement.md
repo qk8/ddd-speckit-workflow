@@ -82,15 +82,19 @@ Then RUN THE FULL REGRESSION SUITE:
   bash scripts/validate-tests.sh "[regression_command.all from plan.md §13]" "pass"
   Read the output. If TEST_RESULT is "fail":
     - Zero new failures allowed
-    - STOP, diagnose root cause from $TEST_OUTPUT_FILE, fix, re-run
+    - STOP. Run diagnostic classifier on regression output:
+      bash scripts/diagnostic-classifier.sh \
+        "$(bash scripts/find-first-feature.sh)" \
+        "[task_type]" \
+        "$(cat $TEST_OUTPUT_FILE)" \
+        "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
+    - Do NOT self-diagnose regression failures — use the classifier output.
+    - Fix, re-run
 
 INLINE CORRECTION LOOP (if tests fail)
-  MAX_CORRECTION_ITERATIONS = 3. If tests still fail after 3 correction attempts:
-    STOP. Print: "ESCALATION: 3 correction iterations exhausted without passing tests."
-    Print: "Review $TEST_OUTPUT_FILE. Mark task for human review."
-    Mark task for human review in tasks.md (add note: requires human review).
-    Proceed to next task.
-  Track each correction attempt. Increment before each fix.
+  MAX_CORRECTION_ITERATIONS = 3 per test failure check.
+  GLOBAL_CORRECTION_CAP = 10 total correction attempts across all checks for a task.
+  Track global count in state.json: bash scripts/state-engine.sh get "$FEATURE_DIR" corrections.global_total
 
   BEFORE classifying the failure, run the independent diagnostic:
     bash scripts/diagnostic-classifier.sh \
@@ -98,9 +102,26 @@ INLINE CORRECTION LOOP (if tests fail)
       "[task_type]" \
       "$(cat $TEST_OUTPUT_FILE)" \
       "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
-  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION.
+  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION, MIXED_FAULTS.
   Pass this evidence to the LLM classification — do NOT self-classify without it.
   Read guides/correction-loop.md (triage → integrity audit → 3 attempts → escalation).
+
+  3c. ROLLBACK SNAPSHOT PER ATTEMPT:
+    Before each correction attempt:
+      1. Record current state of all modified files:
+         git diff --name-only | while read f; do
+           mkdir -p ".artifacts/correction-snapshots/attempt-${CORRECTION_NUM}"
+           cp "$f" ".artifacts/correction-snapshots/attempt-${CORRECTION_NUM}/" 2>/dev/null || true
+         done
+      2. After the fix, if tests still fail:
+         - If this attempt improved results (fewer failures): keep changes
+         - If this attempt made things worse or same: restore from snapshot
+             rm -rf .artifacts/correction-snapshots/attempt-${CORRECTION_NUM}
+
+  3d. GLOBAL CAP CHECK:
+    After each correction attempt, increment global counter.
+    If global_total >= 10: STOP. Print: "ESCALATION: Global correction cap (10) reached."
+    Mark task for human review. Proceed to next task.
 
   ENFORCED ACTION FROM DIAGNOSTIC (NON-NEGOTIABLE):
   If REQUIRED_ACTION=FIX_TEST:
@@ -113,12 +134,19 @@ INLINE CORRECTION LOOP (if tests fail)
     STOP. Do not attempt further corrections.
     Print: "ESCALATION: Diagnostic confidence too low for automated resolution."
     Print: "Evidence: $EVIDENCE"
+    If MIXED_FAULTS=true: Print: "Mixed faults detected (TEST_FAULT + IMPL_ERROR) — human review required."
     Mark task for human review in tasks.md (add note: requires human review).
     Proceed to next task.
 
   If REQUIRED_ACTION=FIX_IMPL:
     Proceed with implementation fixes only. Do NOT modify test files.
     The diagnostic has identified this as a genuine implementation error.
+
+  If REQUIRED_ACTION=FIX_ENV:
+    Fix the environment configuration ONLY (install missing dependencies,
+    fix test runner config, update environment variables).
+    Do NOT modify application code or test files.
+    After fix, re-run validate-tests.sh to verify.
 
   If REQUIRED_ACTION=RETRY:
     You may attempt either test or implementation fixes, but use the

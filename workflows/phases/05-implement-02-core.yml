@@ -57,6 +57,14 @@ steps:
         Use the prompt context at .artifacts/prompts/[task_id]/context.md
         if available — it contains targeted plan sections for this task.
 
+  - id: impl_test_review
+    type: shell
+    command: >
+      bash scripts/verify-test-spec-alignment.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_check_remaining.output.todo_task_id || '' }}"
+    continue_on_error: true
+
   - id: impl_execute
     type: prompt
     command: speckit.implement

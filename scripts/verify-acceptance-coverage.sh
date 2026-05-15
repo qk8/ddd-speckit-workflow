@@ -207,6 +207,9 @@ check_coverage() {
     keywords="$keywords $behaviors"
   fi
 
+  # Assertion patterns to verify (language-specific)
+  local assertion_patterns='expect\(|assert\(|assertEquals|assertTrue|assertEqual|toBe|toEqual|assertThat|Assertions\.|Assert\.'
+
   # Search test files for keyword matches
   local match_count=0
   local total_keywords=0
@@ -218,13 +221,29 @@ check_coverage() {
       [ -z "$tf" ] && continue
       if grep -q "$kw" "$tf" 2>/dev/null; then
         match_count=$((match_count + 1))
+        # Verify: check that an assertion pattern exists near the keyword
+        local line_num
+        line_num=$(grep -n "$kw" "$tf" 2>/dev/null | head -1 | cut -d: -f1 || true)
+        if [ -n "$line_num" ]; then
+          local start=$((line_num > 10 ? line_num - 10 : 1))
+          local end=$((line_num + 10))
+          local window
+          window=$(sed -n "${start},${end}p" "$tf" 2>/dev/null || true)
+          if echo "$window" | grep -qE "$assertion_patterns" 2>/dev/null; then
+            : # Keyword + assertion found — this is a real test
+          else
+            : # Keyword found but no assertion nearby — weak coverage
+            match_count=$((match_count - 1))
+            break
+          fi
+        fi
         break
       fi
     done
   done
 
   # Decision logic:
-  # - All keywords matched → PASS
+  # - All keywords matched with assertions → PASS
   # - Some keywords matched → NEEDS_REVIEW
   # - No keywords matched → MISSING
   # - No keywords extracted → NEEDS_REVIEW (conservative)

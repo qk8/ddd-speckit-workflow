@@ -93,7 +93,9 @@ PER-CHECK ITERATION CAP:
   Deterministic checks (check-runner.sh): up to 2 fix attempts.
   Batched Claude checks: up to 2 fix attempts.
   The correction loop (STEP 2) gets up to 3 attempts per test failure.
-  There is NO global cap — each check is independent.
+  GLOBAL CAP: Max 10 total correction attempts across ALL checks for a task.
+  Track via: bash scripts/state-engine.sh get "$FEATURE_DIR" corrections.global_total
+  If global cap reached: stop and escalate to human review.
 
   If the SAME check fails 3 consecutive times:
     1. Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
@@ -261,12 +263,24 @@ TASK_ID="[current task ID, e.g. TASK-3]"
 
 # If any corrections were made during the inline correction loop,
 # record them in error memory for future tasks to learn from.
-# The diagnostic classifier output (if available) has the classification:
+# The diagnostic classifier output (if available) has the classification
+# AND specific evidence for targeted learning.
+
 if [ -f "$TEST_OUTPUT_FILE" ]; then
-  # Check if the diagnostic was run
-  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "CLASSIFICATION:" | head -1 | sed 's/.*CLASSIFICATION: //' || true)
+  # Extract classification and specific evidence from diagnostic output
+  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^CLASSIFICATION=" | head -1 | sed 's/CLASSIFICATION=//' || true)
+  DIAG_EVIDENCE=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^EVIDENCE=" | head -1 | sed 's/EVIDENCE=//' || true)
+
   if [ -n "$DIAG_CLASS" ]; then
-    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "$DIAG_CLASS" "Test failure during implementation" "Review diagnostic output and apply fix pattern" 2>/dev/null || true
+    # Store both classification and specific evidence
+    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "$DIAG_CLASS" "${DIAG_EVIDENCE:-Test failure during implementation}" "Review diagnostic output and apply fix pattern" "${DIAG_EVIDENCE:-}" 2>/dev/null || true
+  fi
+
+  # Extract IMPL_FAULT_COUNT for error memory
+  DIAG_IMPL_COUNT=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^IMPL_FAULT_COUNT=" | head -1 | sed 's/IMPL_FAULT_COUNT=//' || true)
+  DIAG_MIXED=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^MIXED_FAULTS=" | head -1 | sed 's/MIXED_FAULTS=//' || true)
+  if [ -n "$DIAG_MIXED" ] && [ "$DIAG_MIXED" = "true" ]; then
+    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "mixed_faults" "Mixed TEST_FAULT and IMPL_ERROR detected — requires human review" "Cross-fault diagnosis needed" "" 2>/dev/null || true
   fi
 fi
 
