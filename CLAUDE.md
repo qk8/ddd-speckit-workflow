@@ -1,1 +1,0 @@
-Never use parallel agents or parallel tool calls. Work sequentially only. One task at a time.
