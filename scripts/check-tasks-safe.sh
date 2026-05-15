@@ -48,7 +48,8 @@ except Exception:
     result=$(jq -r ".$key // empty" "$file" 2>/dev/null) || true
   fi
   if [ -z "$result" ]; then
-    result=$(grep "\"${key}\"" "$file" 2>/dev/null | sed 's/.*"'"${key}"'":[[:space:]]*//' | sed 's/[",]//g' | tr -d '[:space:]' || true)
+    # Match exact key (not partial: "done" must not match "done_count")
+    result=$(grep -E "\"${key}\"[[:space:]]*:" "$file" 2>/dev/null | head -1 | sed 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*//' | sed 's/[",]//g' | tr -d '[:space:]' || true)
   fi
   echo "$result" || true
 }
@@ -274,7 +275,7 @@ if [ -z "$OUTPUT" ]; then
   source scripts/cadence-defaults.sh
   set -e
   cat <<DEFAULTS
-has_todo=true
+has_todo=false
 done_count=0
 todo_count=0
 in_progress=

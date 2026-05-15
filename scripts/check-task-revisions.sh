@@ -24,7 +24,13 @@ if [ "${1:-}" = "--dry-run" ]; then
 fi
 
 FEATURE_DIR="${1:?Usage: check-task-revisions.sh <feature_dir> <task_id> [max_revisions]}"
-MAX_REVISIONS="${4:-3}"
+
+# Source central config; override with CLI arg if provided.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/revision-limits.sh"
+if [ "${4:-}" != "" ]; then
+  MAX_REVISIONS="${4}"
+fi
 
 # Extract task ID from tasks.md if --auto mode (must happen before mkdir)
 if [ "${FEATURE_DIR:-}" = "--auto" ]; then

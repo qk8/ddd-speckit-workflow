@@ -249,7 +249,10 @@ TEST_FILE="[path from Test file field]"
 mkdir -p "$FEATURE_DIR/.artifacts"
 
 # Write checkpoint using check-point.sh helper (bash 3.2 compatible)
-bash scripts/check-point.sh write "$FEATURE_DIR" task_done "$TASK_ID" "$TASK_TYPE" "$BUILT" "$TEST_FILE" 2>/dev/null || true
+bash scripts/check-point.sh write "$FEATURE_DIR" task_done "$TASK_ID" "$TASK_TYPE" "$BUILT" "$TEST_FILE" 2>/dev/null || {
+    echo "WARNING: Checkpoint write failed for $TASK_ID — state may not persist across sessions." >&2
+    echo "Continuing anyway — tasks.md is the source of truth." >&2
+  }
 
 echo "Checkpoint updated: $TASK_ID marked DONE in .workflow-state.json"
 
@@ -268,8 +271,8 @@ TASK_ID="[current task ID, e.g. TASK-3]"
 
 if [ -f "$TEST_OUTPUT_FILE" ]; then
   # Extract classification and specific evidence from diagnostic output
-  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^CLASSIFICATION=" | head -1 | sed 's/CLASSIFICATION=//' || true)
-  DIAG_EVIDENCE=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^EVIDENCE=" | head -1 | sed 's/EVIDENCE=//' || true)
+  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^CLASSIFICATION=" | head -1 | sed 's/CLASSIFICATION=//')
+  DIAG_EVIDENCE=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^EVIDENCE=" | head -1 | sed 's/EVIDENCE=//')
 
   if [ -n "$DIAG_CLASS" ]; then
     # Store both classification and specific evidence
@@ -277,8 +280,8 @@ if [ -f "$TEST_OUTPUT_FILE" ]; then
   fi
 
   # Extract IMPL_FAULT_COUNT for error memory
-  DIAG_IMPL_COUNT=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^IMPL_FAULT_COUNT=" | head -1 | sed 's/IMPL_FAULT_COUNT=//' || true)
-  DIAG_MIXED=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^MIXED_FAULTS=" | head -1 | sed 's/MIXED_FAULTS=//' || true)
+  DIAG_IMPL_COUNT=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^IMPL_FAULT_COUNT=" | head -1 | sed 's/IMPL_FAULT_COUNT=//')
+  DIAG_MIXED=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^MIXED_FAULTS=" | head -1 | sed 's/MIXED_FAULTS=//')
   if [ -n "$DIAG_MIXED" ] && [ "$DIAG_MIXED" = "true" ]; then
     bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "mixed_faults" "Mixed TEST_FAULT and IMPL_ERROR detected — requires human review" "Cross-fault diagnosis needed" "" 2>/dev/null || true
   fi
@@ -287,6 +290,7 @@ fi
 # Record any drift patterns detected during quick drift check
 if [ -f "$FEATURE_DIR/.artifacts/post-implementation-drift.md" ]; then
   DRIFT_ISSUES=$(grep -c "VIOLATION\|DRIFT" "$FEATURE_DIR/.artifacts/post-implementation-drift.md" 2>/dev/null || echo 0)
+  # Note: grep -c returns non-zero when count is 0, hence || echo 0 is safe here
   if [ "$DRIFT_ISSUES" -gt 0 ]; then
     bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "drift" "$DRIFT_ISSUES drift violations detected" "Review plan.md §16 constraints" 2>/dev/null || true
   fi

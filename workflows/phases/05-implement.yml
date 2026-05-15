@@ -6,18 +6,17 @@
 #   05-implement-03-gates.yml      — Acceptance, quality, TDD gates
 #   05-implement-04-retro.yml      — Retrospective + drift detection
 #   05-implement-05-traceability.yml — Periodic traceability re-check
-# Condition: has_todo == true AND revision not exhausted.
-# max_iterations: 100 (computed by compute-loop-limits.sh as max(50, total_tasks * 2))
-# For projects >50 tasks, increase via scripts/compute-loop-limits.sh --floor 50 --multiplier 2 --total_tasks N
+# Condition: has_todo == true.
+# max_iterations: derived from total_tasks * 2 (floored at 50, capped at 200).
+# Revision exhaustion is handled by check-task-revisions.sh in the core sub-phase.
 
 steps:
 
   - id: impl_loop
     type: while
     condition: >
-      {{ steps.impl_check_remaining.output.has_todo == 'true' }} and
-      {{ steps.impl_check_revisions_dry.output.REVISION_EXHAUSTED != 'true' }}
-    max_iterations: 100
+      {{ steps.impl_check_remaining.output.has_todo == 'true' }}
+    max_iterations: "{{ steps.impl_check_remaining.output.total_tasks | int * 2 | max(50) | min(200) }}"
     steps:
 
       - id: impl_check_pause_resume
@@ -87,7 +86,7 @@ steps:
 
       - id: impl_check_cleanup
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} == 25 or {{ steps.impl_loop_iteration.output.count || 1 }} == 40"
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 25 == 0"
         then:
           - id: impl_cleanup
             type: shell
@@ -239,15 +238,6 @@ steps:
                   args: >
                     Read tasks.md. For each ABANDONED task, either delete the
                     task section or reset its status to TODO. Print a summary.
-
-      - id: impl_check_revisions_dry
-        type: shell
-        command: >
-          bash scripts/check-task-revisions.sh
-          --dry-run
-          --auto
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
-          "3"
 
       - id: impl_module_verify
         type: if

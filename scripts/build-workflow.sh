@@ -108,10 +108,40 @@ extract_steps() {
 
 echo "Build complete: $(wc -l < "$OUTPUT") lines → $OUTPUT" >&2
 
-# Optional DAG validation
+# ── Pre-flight goto validation (always runs) ──────────────────────
+# Extract all step IDs and all goto targets from the merged output.
+# Report any goto targets that don't match a defined step ID.
+echo "" >&2
+echo "Running pre-flight goto validation..." >&2
+
+# Collect all step IDs (lines matching "  - id: xxx")
+STEP_IDS=$(grep -E '^\s+- id:' "$OUTPUT" 2>/dev/null | sed 's/.*- id: *//' | sort -u || true)
+
+# Collect all goto targets (lines matching any indentation + goto: xxx)
+GOTO_TARGETS=$(grep -E 'goto:' "$OUTPUT" 2>/dev/null | sed 's/.*goto: *//' | sort -u || true)
+
+GOTO_ERRORS=0
+for target in $GOTO_TARGETS; do
+  # Skip built-in workflow engine keywords
+  [ "$target" = "abort" ] && continue
+  if ! echo "$STEP_IDS" | grep -qx "$target"; then
+    echo "  ERROR: goto references undefined step '$target'" >&2
+    GOTO_ERRORS=$((GOTO_ERRORS + 1))
+  fi
+done
+
+if [ "$GOTO_ERRORS" -gt 0 ]; then
+  echo "  Pre-flight validation found $GOTO_ERRORS broken goto reference(s)." >&2
+  echo "  The workflow will fail at runtime. Fix the goto targets above and rebuild." >&2
+  exit 1
+fi
+
+echo "  Pre-flight validation passed: all goto targets resolve to defined steps." >&2
+
+# Optional full DAG validation
 if [ "$VALIDATE" = "--validate" ]; then
   echo "" >&2
-  echo "Running DAG validation..." >&2
+  echo "Running full DAG validation..." >&2
   bash scripts/validate-workflow-dag.sh || {
     echo "DAG validation failed — aborting build" >&2
     exit 1

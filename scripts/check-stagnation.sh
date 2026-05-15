@@ -27,6 +27,11 @@ else
   TOTAL_TASKS="${3:?}"
 fi
 
+# Source central config (provides compute_stagnation_threshold)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/revision-limits.sh"
+STAGNATION_THRESHOLD=$(compute_stagnation_threshold "${TOTAL_TASKS:-10}")
+
 # ── State engine path ──
 if [ -f "$FEATURE_DIR/state.json" ]; then
   if [ "$RESET_MODE" = true ]; then
@@ -66,7 +71,7 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
     local_new_consec=$((local_consec + 1))
     bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.consecutive_no_progress "$local_new_consec" >/dev/null
     bash scripts/state-engine.sh write "$FEATURE_DIR" stagnation.last_done_count "$CURRENT_DONE" >/dev/null
-    if [ "$local_new_consec" -ge 2 ]; then
+    if [ "$local_new_consec" -ge "$STAGNATION_THRESHOLD" ]; then
       if [ "$CURRENT_DONE" -eq "$local_prev" ] && [ "$local_prev" -ne -1 ]; then
         echo "REVISION_ONLY=true"
       else
@@ -153,7 +158,7 @@ if [ -f "$LEGACY_STATE_FILE" ] && [ ! -f "$FEATURE_DIR/state.json" ]; then
     TMPFILE=$(mktemp)
     echo "$CURRENT_DONE" > "$TMPFILE"
     mv "$TMPFILE" "$LEGACY_STATE_FILE"
-    if [ "$NEW_CONSEC" -ge 2 ]; then
+    if [ "$NEW_CONSEC" -ge "$STAGNATION_THRESHOLD" ]; then
       if [ "$CURRENT_DONE" -eq "$PREV_DONE" ] && [ "$PREV_DONE" -ne -1 ]; then
         echo "REVISION_ONLY=true"
       else

@@ -43,6 +43,11 @@ and drift patterns from recent tasks. Apply these learnings to
 avoid repeating past mistakes on this task.
 If no patterns are printed: no prior learnings — proceed normally.
 
+━━ RETRY BUDGET CHECK ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Run: bash scripts/retries-remaining.sh "$(bash scripts/find-first-feature.sh)" "[task_id]"
+Check how many retries remain for this task across all dimensions.
+If any dimension shows 0 remaining: flag the risk before proceeding.
+
 Rules (non-negotiable):
 - Exact names from plan.md — any deviation is a bug, not a style choice.
 - Never violate a layer rule or §16 constraint. Redesign instead.

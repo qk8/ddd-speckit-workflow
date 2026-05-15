@@ -96,7 +96,7 @@ steps:
         type: shell
         command: >
           bash scripts/quick-drift-check.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
 
   - id: impl_post_batch_consistency
     type: if

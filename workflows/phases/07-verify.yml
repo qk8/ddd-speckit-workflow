@@ -8,21 +8,16 @@ steps:
     command: "bash scripts/check-tasks-safe.sh"
 
   - id: vf_regression_baseline
-    type: if
-    condition: >
-      {{ steps.vf_post_loop_check.output.has_todo == 'false' }}
-    then:
-      - id: vf_run_regression
-        type: shell
-        command: >
-          bash scripts/regression-baseline.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+    type: shell
+    command: >
+      bash scripts/regression-baseline.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
 
-      - id: vf_integration_smoke
-        type: shell
-        command: >
-          bash scripts/integration-smoke.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+  - id: vf_integration_smoke
+    type: shell
+    command: >
+      bash scripts/integration-smoke.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
 
   - id: vf_verify_all
     type: if
@@ -149,6 +144,7 @@ steps:
             type: shell
             command: >
               bash scripts/check-point.sh rollback
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || echo "No checkpoint available — proceeding without rollback"
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+            continue_on_error: true
           - goto: impl_loop
         on_abort: abort

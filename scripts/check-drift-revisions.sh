@@ -11,7 +11,10 @@
 set -euo pipefail
 
 FEATURE_DIR="${1:?Usage: check-drift-revisions.sh <feature_dir>}"
-MAX_DRIFT_REVISIONS=2
+
+# Source central config
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/revision-limits.sh"
 
 STATE_FILE="$FEATURE_DIR/.drift_revisions"
 LOCK_FILE="$STATE_FILE.lock"

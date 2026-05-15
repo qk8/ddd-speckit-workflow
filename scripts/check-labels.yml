@@ -8,6 +8,8 @@
 #     desc:  "<description for What it does column>"
 #
 # The "Applies to" column is auto-derived from preset.yml checks.<ID>.applies_to.
+# Note: Check IDs use a non-sequential scheme (A, BC, D, E...) to leave room
+# for future additions without renumbering. Gaps (B, V, W, X, Y) are reserved.
 
 A:
   label: "Arch tests"
