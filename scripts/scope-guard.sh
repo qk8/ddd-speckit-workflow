@@ -4,16 +4,29 @@
 # Cross-references git diff against tasks.md Scope.Creates/Modifies
 # and other tasks' scope to detect scope creep.
 #
-# Usage: scope-guard.sh <feature_dir> [task_id]
+# Usage: scope-guard.sh <feature_dir> [task_id] [--enforce]
 #
 # Output: SCOPE=WITHIN_SCOPE|MINOR_VIOLATION|MAJOR_VIOLATION
 #         VIOLATION-1=...
-# Always exits 0 (advisory to orchestrator, enforced by command instruction).
+#
+# Exit codes:
+#   0 — within scope (or advisory mode)
+#   1 — minor violation (advisory: 1; enforced: 1)
+#   2 — major violation (advisory: 0; enforced: 2)
+#
+# --enforce: exit non-zero on violations (MAJOR→2, MINOR→1).
+#            Without --enforce, always exits 0 (advisory only).
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id]}"
+FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id] [--enforce]}"
 TASK_ID="${2:-}"
+ENFORCE="${3:-}"
+
+# Parse remaining args for --enforce
+for arg in "$@"; do
+  [ "$arg" = "--enforce" ] && ENFORCE="true"
+done
 
 if [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "SCOPE=WITHIN_SCOPE"
@@ -193,6 +206,15 @@ elif [ "$MINOR_VIOLATIONS" -gt 0 ]; then
   done <<< "$modified_files"
 else
   echo "SCOPE=WITHIN_SCOPE"
+fi
+
+# ── Exit with appropriate code ───────────────────────────────────
+if [ "$ENFORCE" = "true" ]; then
+  if [ "$MAJOR_VIOLATIONS" -gt 0 ]; then
+    exit 2
+  elif [ "$MINOR_VIOLATIONS" -gt 0 ]; then
+    exit 1
+  fi
 fi
 
 exit 0

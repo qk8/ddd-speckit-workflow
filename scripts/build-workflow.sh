@@ -29,11 +29,22 @@ OUTPUT="/dev/stdout"
 VALIDATE=""
 TMP_BUILD=""
 
-# Parse arguments: positional args for orchestrator/output, --validate flag
+MERGE_PRESET_DIR=""
+MERGE_PRESET_NEXT=false
+
+# Parse arguments: positional args for orchestrator/output, --validate flag, --merge-preset <dir>
 POS_ARGS=()
 for arg in "$@"; do
+  if [ "$MERGE_PRESET_NEXT" = true ]; then
+    MERGE_PRESET_DIR="$arg"
+    MERGE_PRESET_NEXT=false
+    continue
+  fi
   case "$arg" in
     --validate) VALIDATE="--validate" ;;
+    --merge-preset)
+      MERGE_PRESET_NEXT=true
+      ;;
     *) POS_ARGS+=("$arg") ;;
   esac
 done
@@ -177,4 +188,40 @@ if [ "$VALIDATE" = "--validate" ]; then
     exit 1
   }
   echo "DAG validation passed." >&2
+fi
+
+# ── Preset merging (optional) ─────────────────────────────────────
+# Merges modular preset section files into a single preset.yml.
+# Usage: build-workflow.sh --merge-preset <preset_directory>
+if [ -n "$MERGE_PRESET_DIR" ]; then
+  PRESET_WRAPPER="$MERGE_PRESET_DIR/preset.yml"
+  if [ ! -f "$PRESET_WRAPPER" ]; then
+    echo "ERROR: Preset wrapper not found: $PRESET_WRAPPER" >&2
+    exit 1
+  fi
+
+  # Read _sections list from the wrapper
+  SECTION_FILES=$(grep -A 20 '^_sections:' "$PRESET_WRAPPER" | grep '^\s*- ' | sed 's/^  - //' || true)
+  if [ -z "$SECTION_FILES" ]; then
+    echo "WARNING: No _sections found in $PRESET_WRAPPER — skipping preset merge" >&2
+  else
+    MERGED=$(mktemp "${PRESET_WRAPPER}.XXXXXX")
+
+    # Write top-level keys (before _sections:)
+    sed '/^_sections:/,$d' "$PRESET_WRAPPER" > "$MERGED"
+
+    # Merge each section file
+    for section in $SECTION_FILES; do
+      SECTION_PATH="$MERGE_PRESET_DIR/$section"
+      if [ -f "$SECTION_PATH" ]; then
+        cat "$SECTION_PATH" >> "$MERGED"
+        echo "" >> "$MERGED"
+      else
+        echo "WARNING: Section file not found: $SECTION_PATH" >&2
+      fi
+    done
+
+    echo "Preset merged: $MERGED ($(wc -l < "$MERGED") lines)" >&2
+    echo "  Sections merged: $(echo $SECTION_FILES | wc -w)" >&2
+  fi
 fi

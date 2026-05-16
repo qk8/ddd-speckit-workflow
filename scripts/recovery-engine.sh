@@ -15,6 +15,7 @@
 #   recovery-engine.sh abort        <feature_dir> [phase]
 #   recovery-engine.sh abandoned    <feature_dir>
 #   recovery-engine.sh reset-stagnation <feature_dir>
+#   recovery-engine.sh fix-cycles-reset <feature_dir>
 #   recovery-engine.sh post-verify <feature_dir>
 #   recovery-engine.sh post-gate  <feature_dir>
 #
@@ -32,7 +33,7 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
-MODE="${1:?Usage: recovery-engine.sh <checkpoint|restore|list|cleanup|pause|resume|abort|abandoned|reset-stagnation|post-verify|post-gate> <feature_dir> [args...]}"
+MODE="${1:?Usage: recovery-engine.sh <checkpoint|restore|list|cleanup|pause|resume|abort|abandoned|reset-stagnation|fix-cycles-reset|post-verify|post-gate> <feature_dir> [args...]}"
 FEATURE_DIR="${2:?Feature directory required}"
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 CHECKPOINT_DIR="${ARTIFACTS_DIR}/checkpoints"
@@ -514,6 +515,12 @@ do_reset_stagnation() {
   echo "CONTEXT LOADED -- resume from speckit.context"
 }
 
+# ── Fix Cycles Reset ────────────────────────────────────────────
+do_fix_cycles_reset() {
+  bash scripts/state-engine.sh fix-cycles-reset "$FEATURE_DIR"
+  echo "FIX_CYCLES: reset — new fix-needed cycle allowed"
+}
+
 # ── Post-verify Checkpoint ──────────────────────────────────────
 do_post_verify() {
   local task_id="" done_count=0 in_progress=""
@@ -564,11 +571,12 @@ case "$MODE" in
   abort)                do_abort "$@" ;;
   abandoned)            do_abandoned ;;
   reset-stagnation)     do_reset_stagnation ;;
+  fix-cycles-reset)     do_fix_cycles_reset ;;
   post-verify)          do_post_verify ;;
   post-gate)            do_post_gate ;;
   *)
     echo "Unknown mode: $MODE" >&2
-    echo "Usage: recovery-engine.sh <checkpoint|restore|list|cleanup|pause|resume|abort|abandoned|reset-stagnation|post-verify|post-gate> <feature_dir> [args...]" >&2
+    echo "Usage: recovery-engine.sh <checkpoint|restore|list|cleanup|pause|resume|abort|abandoned|reset-stagnation|fix-cycles-reset|post-verify|post-gate> <feature_dir> [args...]" >&2
     exit 1
     ;;
 esac

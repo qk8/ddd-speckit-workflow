@@ -214,10 +214,21 @@ steps:
   - id: impl_scope_guard
     type: shell
     command: >
-      bash scripts/scope-guard.sh
+      bash scripts/scope-guard.sh --enforce
       "{{ steps.impl_check_remaining.output.feature_dir }}"
       "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
     continue_on_error: true
+
+  - id: impl_context_compact
+    type: if
+    condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+    then:
+      - id: impl_run_context_compact
+        type: shell
+        command: >
+          bash scripts/context-compact.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+        continue_on_error: true
 
   - id: impl_increment_revision
     type: shell

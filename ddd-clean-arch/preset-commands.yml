@@ -1,0 +1,12 @@
+# Command overrides: replace Spec Kit's default speckit.implement.
+commands:
+  - speckit.implement
+  - speckit.check
+  - speckit.verify
+  - speckit.review
+  - speckit.code-review
+  - speckit.retrospect
+  - speckit.status
+  - speckit.context
+  - speckit.test
+  - speckit.spec-revise

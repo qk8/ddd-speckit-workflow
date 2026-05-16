@@ -20,6 +20,8 @@
 #   state-engine.sh cadence-reset <counter_key>                — reset a cadence counter to 0
 #   state-engine.sh context-increment                          — increment session_age by 1
 #   state-engine.sh context-reset                              — reset session_age to 0
+#   state-engine.sh fix-cycles-increment                       — increment fix_needed outer loop counter
+#   state-engine.sh fix-cycles-reset                           — reset fix_needed outer loop counter to 0
 #
 # State is stored in <feature_dir>/state.json
 # Old format files are preserved as .bak after migration.
@@ -130,6 +132,7 @@ do_init() {
     "fix_needed": 0,
     "per_task": {}
   },
+  "fix_cycles": 0,
   "spec": {
     "version": 1,
     "last_revision_at": null
@@ -149,6 +152,14 @@ do_init() {
     "session_age": 0,
     "reset_threshold": 15
   },
+  "context_summary": {
+    "last_compacted": null,
+    "patterns_count": 0,
+    "corrections_count": 0,
+    "decisions_count": 0,
+    "pruned_checkpoints": 0,
+    "pruned_error_memory": 0
+  },
   "risk_profile": "low",
   "workflow": {
     "skip_commits": false,
@@ -156,10 +167,16 @@ do_init() {
     "last_commit_sha": null
   },
   "token_budget": {
-    "estimated_total": 0,
-    "actual_used": 0,
-    "warning_threshold": 0.8,
-    "critical_threshold": 0.9
+    "actual_input_tokens": 0,
+    "actual_output_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "sessions_count": 0,
+    "projected_total": 0,
+    "avg_tokens_per_task": 0,
+    "risk": "OK",
+    "estimated_cost": "0.00",
+    "projected_cost": "0.00"
   },
   "metadata": {
     "created_at": "$ts",
@@ -439,6 +456,34 @@ do_context_reset() {
     '.context.session_age = 0 | .context.last_snapshot = $ts | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   echo "CONTEXT: session_age reset to 0"
+  state_lock_release
+}
+
+# ── Fix cycles (outer termination for verify→implement loops) ───
+
+do_fix_cycles_increment() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.fix_cycles = (.fix_cycles // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "FIX_CYCLES: incremented to $(jq -r '.fix_cycles' "$STATE_FILE")"
+  state_lock_release
+}
+
+do_fix_cycles_reset() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.fix_cycles = 0 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "FIX_CYCLES: reset to 0"
   state_lock_release
 }
 
@@ -914,11 +959,13 @@ case "$MODE" in
   cadence-reset)    do_cadence_reset "$3" ;;
   context-increment) do_context_increment "${3:-}" ;;
   context-reset)    do_context_reset "${3:-}" ;;
-  task-set)         do_task_set "$3" "$4" "${5:-}" ;;
-  task-incr)        do_task_incr "$3" "$4" ;;
+  task-set)             do_task_set "$3" "$4" "${5:-}" ;;
+  task-incr)            do_task_incr "$3" "$4" ;;
+  fix-cycles-increment) do_fix_cycles_increment ;;
+  fix-cycles-reset)     do_fix_cycles_reset ;;
   *)
     echo "Unknown mode: $MODE" >&2
-    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|context-increment|context-reset|task-set|task-incr> <feature_dir> [args...]" >&2
+    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|context-increment|context-reset|task-set|task-incr|fix-cycles-increment|fix-cycles-reset> <feature_dir> [args...]" >&2
     exit 1
     ;;
 esac

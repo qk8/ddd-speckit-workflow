@@ -22,15 +22,22 @@ elif [ "${1:-}" = "--increment-continue" ]; then
   INCREMENT_CONTINUE=true
   FEATURE_DIR="${2:?Usage: check-stagnation.sh --increment-continue <feature_dir>}"
 else
-  FEATURE_DIR="${1:?Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks>}"
+  FEATURE_DIR="${1:?Usage: check-stagnation.sh <feature_dir> <current_done> <total_tasks> [task_type]}"
   CURRENT_DONE="${2:?}"
   TOTAL_TASKS="${3:?}"
+  TASK_TYPE="${4:-}"
 fi
 
-# Source central config (provides compute_stagnation_threshold)
+# Source central config (provides compute_stagnation_threshold, compute_stagnation_threshold_by_type)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/revision-limits.sh"
-STAGNATION_THRESHOLD=$(compute_stagnation_threshold "${TOTAL_TASKS:-10}")
+
+# Use type-specific threshold if task type is provided
+if [ -n "$TASK_TYPE" ]; then
+  STAGNATION_THRESHOLD=$(compute_stagnation_threshold_by_type "$TASK_TYPE")
+else
+  STAGNATION_THRESHOLD=$(compute_stagnation_threshold "${TOTAL_TASKS:-10}")
+fi
 
 # ── State engine path ──
 if [ -f "$FEATURE_DIR/state.json" ]; then

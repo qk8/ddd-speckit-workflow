@@ -107,16 +107,14 @@ specify workflow resume <run-id>
 | [J] Performance budget | p95 response time / LCP within §10 budget | backend-api, frontend-feature |
 | [K] Contract enforcement | API endpoints match api-contract.yaml | backend-api, shared |
 | [L] Anti-hallucination | Implementation matches plan.md — no spec drift | All |
-| [M] Failure modes | All §15 failure handlers implemented and tested | All |
 | [N] Cross-cutting | Auth, logging, error handling applied consistently | backend-api, shared |
-| [O] Security | OWASP Top 10, auth, input validation, rate limiting | backend-api, backend-infra, frontend-data, frontend-feature |
+| [O] Security | OWASP Top 10, auth, input validation, rate limiting, session/token security | backend-api, backend-infra, frontend-data, frontend-feature |
 | [P] Test quality | Assertions prove acceptance criteria, not stale tests | All |
 | [Q] Resilience | Circuit breakers, retries, graceful degradation | backend-api, backend-infra |
 | [R] Quantitative | Coverage thresholds, type check, lint, build clean | backend-api, shared |
 | [S] Property-based | Invariant preservation, edge case coverage | All |
 | [T] Adversarial | Malformed input, injection, fuzzing | backend-api, shared |
-| [U] Session/token | JWT, refresh tokens, session security | backend-api |
-| [Z] Constraint drift | Implementation against CLAUDE.md §16 constraints | All |
+| [Z] Constraint drift & failure modes | Implementation against CLAUDE.md §16 + §15 failure handlers | All |
 
 ### TDD and regression (check [BC])
 

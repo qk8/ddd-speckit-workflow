@@ -82,9 +82,10 @@ Rules (non-negotiable):
 - Spec conflict found → stop and report. Never resolve unilaterally.
 - After implementation, spec-diff-check.sh will verify spec.md/plan.md were not modified.
   If UNAUTHORIZED changes detected: STOP. Revert spec files and report the conflict.
-- After implementation, scope-guard.sh will verify changes match task scope.
-  If MAJOR_VIOLATION: revert files outside your scope.
-  If MINOR_VIOLATION: document why the change was necessary.
+- After implementation, scope-guard.sh --enforce will verify changes match task scope.
+  Exit code 2 (MAJOR_VIOLATION): abort the current task immediately. Do NOT commit.
+  Exit code 1 (MINOR_VIOLATION): document why the change was necessary, then continue.
+  Exit code 0 (WITHIN_SCOPE): proceed normally.
 - If context-health.sh reports DEGRADED: re-read plan.md §1-3 (architecture) and spec.md.
   Summarize key decisions from your context window before proceeding.
 

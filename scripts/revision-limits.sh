@@ -45,3 +45,23 @@ compute_stagnation_threshold() {
     echo "$t"
   fi
 }
+
+# ── Stagnation threshold by task type ─────────────────────────────
+# Returns type-specific thresholds to reduce false positives for complex tasks.
+# Usage: compute_stagnation_threshold_by_type <task_type>
+# Thresholds: backend-domain=10, backend-api=7, e2e=8, shared=5,
+#             backend-infra=7, frontend-data=6, frontend-feature=7, default=5
+compute_stagnation_threshold_by_type() {
+  local task_type="${1:-default}"
+  case "$task_type" in
+    backend-domain)    echo 10 ;;
+    backend-api)       echo 7 ;;
+    e2e)               echo 8 ;;
+    shared)            echo 5 ;;
+    backend-infra)     echo 7 ;;
+    frontend-data)     echo 6 ;;
+    frontend-feature)  echo 7 ;;
+    spec_revision)     echo 5 ;;
+    *)                 echo 5 ;;
+  esac
+}

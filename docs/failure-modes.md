@@ -238,3 +238,29 @@ Known failure patterns in the Spec Kit workflow and their recovery procedures.
 - Plan sections loaded per-task via `spec-sections.md` mapping
 - `prompt-context.sh` generates targeted context for each task
 - Check profiles (I1) reduce check-related context
+- `context-compact.sh` runs every 10 iterations to prune checkpoints and summarize context
+
+---
+
+## 11. Infinite Abandon-Reset Loop
+
+**Symptom:** Tasks are repeatedly marked ABANDONED, reset to TODO, fail again, and are abandoned again. The implement loop runs many iterations with no progress.
+
+**Root Cause:** A task is fundamentally unimplementable (wrong spec, impossible requirements, missing external dependency). The abandon guard detects the pattern but the reset-to-TODO path allows the same task to be retried indefinitely.
+
+**Detection:**
+- `abandon-guard.sh` reports `LOOP_RISK` or `REQUIRES_DELETION`
+- `count-stagnation.sh` shows high consecutive abandon counts
+- `check-tasks-safe.sh` shows high abandoned_count with low done_count
+
+**Recovery:**
+1. When `abandon-guard.sh` reports `REQUIRES_DELETION`: delete the task from tasks.md
+2. When `abandon-guard.sh` reports `LOOP_RISK`: review the task's spec and acceptance criteria
+3. If the task is valid but blocked: fix the blocking dependency first
+4. If the task is invalid: remove it and update plan.md to reflect the change
+
+**Prevention:**
+- `abandon-guard.sh` detects reset-from-abandon patterns and escalates
+- Fix-needed outer termination (fix_cycles counter, max 3) prevents repeated verify→implement cycles
+- Stagnation gate with human review after N consecutive no-progress iterations
+- Task selection protocol requires verifying dependencies are satisfied before starting

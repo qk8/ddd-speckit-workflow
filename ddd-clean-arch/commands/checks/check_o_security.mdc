@@ -36,5 +36,29 @@ applies_to: [backend-api, backend-infra, frontend-data, frontend-feature]
   8. Error messages: Do error messages NOT reveal internal paths,
      library names, or stack traces to clients?
 
+  ── Session & Token Security (merged from [U]) ──────────────
+  If this task touches authentication, tokens, or sessions, verify additionally:
+
+  9. JWT algorithm enforcement:
+     - alg: none attack → 401 (NEVER succeeds)
+     - HMAC (HS256) token when RS256 expected → 401
+     - Token with modified payload → signature validation catches it
+
+  10. Refresh token rotation:
+      - Consumed refresh token used again → 401 + entire token family invalidated
+      - New access token from rotation is also invalidated
+
+  11. Token leakage:
+      - Search all log output for JWT pattern → zero matches
+      - Token values never appear in logs, error messages, or response bodies
+
+  12. Cookie security (if cookie-based sessions):
+      - Set-Cookie header includes HttpOnly, Secure, SameSite=Strict (or Lax with justification)
+      - No token stored in localStorage
+
+  13. Session fixation:
+      - New session created after authentication → different session ID
+      - Session ID not predictable or guessable
+
   For each item: PASS, FAIL, or N/A.
   If any FAIL: fix it. Do not proceed until all PASS or N/A.

@@ -1,0 +1,15 @@
+# ── Adaptive retrospective cadence ────────────────────────────────
+cadence:
+  retro_interval:
+    simple: 15
+    medium: 10
+    complex: 5
+  first_retro_threshold: 5
+  drift_check_interval:
+    simple: 20
+    medium: 15
+    complex: 10
+  traceability_check_interval:
+    simple: 25
+    medium: 20
+    complex: 15

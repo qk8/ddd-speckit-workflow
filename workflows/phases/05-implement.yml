@@ -7,7 +7,7 @@
 #   05-implement-04-retro.yml      — Retrospective + drift detection
 #   05-implement-05-traceability.yml — Periodic traceability re-check
 # Condition: has_todo == true.
-# max_iterations: derived from total_tasks * 2 (floored at 50, capped at 200).
+# max_iterations: hard cap of 100. Stagnation gate catches real problems after ~5-15 no-progress iterations.
 # Revision exhaustion is handled by check-task-revisions.sh in the core sub-phase.
 
 steps:
@@ -16,7 +16,7 @@ steps:
     type: while
     condition: >
       {{ steps.impl_check_remaining.output.has_todo == 'true' }}
-    max_iterations: "{{ steps.impl_check_remaining.output.total_tasks | int * 2 | max(50) | min(200) }}"
+    max_iterations: 100
     steps:
 
       - id: impl_check_pause_resume
@@ -212,6 +212,7 @@ steps:
           "{{ steps.impl_check_remaining.output.feature_dir }}"
           "{{ steps.impl_check_remaining.output.done_count }}"
           "{{ steps.impl_check_remaining.output.total_tasks }}"
+          "{{ steps.impl_check_remaining.output.todo_task_type }}"
 
       # ── Stagnation gate (Fix 6: human gate, not just a shell step) ──
       # Only appears when STAGNANT=true. When STAGNANT=false, skipped entirely.

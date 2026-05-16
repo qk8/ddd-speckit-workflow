@@ -24,14 +24,13 @@ Non-deterministic checks to run (based on task type routing):
   [G] Error Handling Assertions          - backend-api, frontend-data
   [H] Browser Verification               - frontend-feature, e2e
   [J] Performance Budget                 - backend-api, frontend-feature
-  [M] Failure Mode Coverage              - all
   [N] Cross-Cutting Concern Audit        - backend-api, shared
-  [O] Security Hardening                 - backend-api, backend-infra, frontend-data, frontend-feature
+  [O] Security Hardening                 - backend-api, backend-infra, frontend-data, frontend-feature (includes session/token security)
   [P] Test Quality Review                - all
   [Q] Resilience Testing                 - backend-api, backend-infra
   [S] Property-Based Test Coverage       - all
   [T] Adversarial Input Testing          - backend-api, shared
-  [U] Session & Token Security           - backend-api
+  [Z] Constraint Drift & Failure Mode Coverage - all
 
 Run only the non-deterministic checks applicable to the current task type.
 Do not run checks outside the applicable set.

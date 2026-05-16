@@ -1,3 +1,6 @@
+First run: bash scripts/wf-summary.sh <feature_dir>
+Print the summary output, then continue with the detailed status below.
+
 Read the current feature's tasks.md by scanning .specify/specs/ for the
 feature directory and reading its tasks.md file.
 Also read plan.md §3 and §4 from that same feature directory.

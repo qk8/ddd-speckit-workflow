@@ -1,0 +1,21 @@
+# ── Auto-approve human gates when deterministic checks pass ────────
+# WARNING: Auto-approve is opt-in per project. By default, all gates
+# require human review because deterministic checks alone cannot verify
+# behavioral correctness (acceptance criteria are semantic).
+auto_approve:
+  enabled: true
+  # When enabled, deterministic gates auto-approve when all checks pass.
+  # Safety-critical gates (stagnation, crash recovery) always require human review.
+  non_auto_approvable:
+    - stagnation
+    - parse-error
+    - in-progress-recovery
+    - abandoned-tasks
+
+# ── Auto-revise when revision threshold is exceeded ───────────────
+# Instead of silently auto-approving, triggers speckit.retrospect
+# to assess whether remaining tasks are worth pursuing.
+# max_auto_revise: 1 per session — after that, human approval required.
+auto_revise:
+  enabled: true
+  max_auto_revise: 1

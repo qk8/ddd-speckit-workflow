@@ -1,0 +1,11 @@
+# Template overrides: replace Spec Kit's default templates with ours.
+templates:
+  plan:
+    source: templates/plan-template.md
+    strategy: replace
+  tasks:
+    source: templates/tasks-template.md
+    strategy: replace
+  constitution:
+    source: templates/constitution-template.md
+    strategy: replace

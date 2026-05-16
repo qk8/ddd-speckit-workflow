@@ -55,12 +55,22 @@ steps:
     input:
       args: "full"
 
+  - id: vf_requirement_validation
+    type: shell
+    command: >
+      bash scripts/requirement-validate.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
   - id: vf_review_final
     type: gate
     message: |
-      Review the final verify report.
+      Review the final verify report and requirement validation.
 
-      CLEAN → spec and code are fully aligned. Ready to merge.
+      **Requirement Validation:** Check .artifacts/requirement-validation.md
+      for any requirements with no corresponding implementation evidence.
+
+      CLEAN → spec and code are fully aligned. All requirements have evidence.
+      Ready to merge.
       DRIFT DETECTED → fix issues before merging.
         For each issue, decide: fix in code (align to spec) or fix in spec
         (intentional deviation). Add fix tasks to tasks.md if needed,
@@ -100,6 +110,68 @@ steps:
       bash scripts/backup-tasks.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" "pre-fix-needed"
 
+  - id: vf_track_fix_cycle
+    type: shell
+    command: >
+      bash scripts/state-engine.sh fix-cycles-increment
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+
+  - id: vf_fix_cycle_limit
+    type: if
+    condition: >
+      {{ steps.vf_track_fix_cycle.output | default '' }} != '' or true
+    then:
+      - id: vf_check_fix_cycle_count
+        type: shell
+        command: >
+          bash scripts/state-engine.sh read
+          "{{ steps.impl_check_remaining.output.feature_dir }}" fix_cycles
+      - id: vf_fix_cycle_gate
+        type: if
+        condition: >
+          {{ steps.vf_check_fix_cycle_count.output | int }} >= 3
+        then:
+          - id: vf_fix_cycle_human_gate
+            type: gate
+            message: |
+              ⚠ FIX-NEEDED CYCLE LIMIT REACHED
+
+              This is cycle #{{ steps.vf_check_fix_cycle_count.output }} of the fix-needed loop.
+              The maximum of 3 fix-needed cycles has been reached.
+
+              Repeated fix-needed cycles indicate a deeper spec/plan problem
+              that iterative fixing won't resolve. You must:
+
+              1. Review the spec-code delta report (.artifacts/spec-code-delta.md)
+              2. Determine if the spec needs revision (speckit.spec-revise)
+              3. Or determine if the implementation approach is fundamentally flawed
+
+              Options:
+                revise-spec — Run speckit.spec-revise, then reset fix cycles and retry.
+                abort — Cancel the workflow for manual review of spec vs implementation mismatch.
+
+            options: [revise-spec, abort]
+            on_revise-spec:
+              - id: vf_reset_fix_cycles
+                type: shell
+                command: >
+                  bash scripts/state-engine.sh fix-cycles-reset
+                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+              - id: vf_run_spec_revise
+                command: speckit.spec-revise
+                integration: claude
+                input:
+                  args: >
+                    The fix-needed loop has been exceeded 3 times.
+                    This indicates the spec is fundamentally misaligned with
+                    what the implementation produces.
+
+                    Read the spec-code delta report, identify root causes,
+                    and revise spec.md and plan.md accordingly.
+                    After revision, add new tasks to tasks.md if needed.
+            on_abort:
+              - goto: abort
+
   - id: fix_needed_round
     type: while
     condition: "true"
@@ -115,6 +187,12 @@ steps:
             (intentional deviation). Add fix tasks to tasks.md if needed.
           Round {{ steps.fix_needed_round_iteration.output.count || 1 }}/5.
         options: [approved-clean, fix-needed, abort]
+        on_approved-clean:
+          - id: fix_reset_cycles
+            type: shell
+            command: >
+              bash scripts/state-engine.sh fix-cycles-reset
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
         on_fix-needed:
           - id: fix_add_tasks
             type: prompt

@@ -39,9 +39,6 @@ checks:
   L:
     name: "Anti-Hallucination Check"
     applies_to: all
-  M:
-    name: "Failure Mode Coverage"
-    applies_to: all
   N:
     name: "Cross-Cutting Concern Audit"
     applies_to: [backend-api, shared]
@@ -63,9 +60,6 @@ checks:
   T:
     name: "Adversarial Input Testing"
     applies_to: [backend-api, shared]
-  U:
-    name: "Session & Token Security"
-    applies_to: [backend-api]
   Z:
-    name: "Constraint Drift Detection"
+    name: "Constraint Drift & Failure Mode Coverage"
     applies_to: all
