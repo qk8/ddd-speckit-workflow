@@ -242,3 +242,22 @@ SEMANTIC QUALITY:
     - Helper assertions (setup verification) are acceptable
 
 Print: "TEST COMPLETENESS: [N] positive, [N] negative, [N] semantic issues"
+
+─────────────────────────────────────────
+STEP 1.8 — SPEC-TO-TEST VALIDATION
+─────────────────────────────────────────
+Validate that test assertions match spec acceptance criteria:
+
+Run: bash scripts/spec-to-test-validate.sh <feature_dir> <task_id>
+
+If VALIDATION=PASS: all spec criteria are reflected in test assertions. Proceed.
+If VALIDATION=NEEDS_REVIEW: fix the mismatches listed, then re-run the script.
+Do NOT proceed until VALIDATION=PASS or document why each mismatch is intentional.
+
+Common mismatches this catches:
+  - Test asserts wrong expected value (e.g., expect(5) when spec says 6)
+  - Test missing assertion for a behavioral criterion
+  - Test asserts a different exception type than spec requires
+  - Test missing negative/edge-case assertions
+
+Print: "SPEC-TO-TEST: VALIDATION=[PASS|NEEDS_REVIEW]"

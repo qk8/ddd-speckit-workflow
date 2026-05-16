@@ -27,6 +27,21 @@ If any quality check (STEP 3) or smoke test (STEP 4) fails:
      and mark task IN_PROGRESS with note: "partial_files_remain".
 
 ─────────────────────────────────────────
+STEP 2.6 — DIAGNOSTIC ENFORCEMENT CHECK
+─────────────────────────────────────────
+Before running quality checks, verify no diagnostic enforcement violations:
+
+If .artifacts/diagnostic-enforcement.action exists:
+  Read the REQUIRED_ACTION from the file.
+  If REQUIRED_ACTION=FIX_TEST:
+    You should NOT be modifying implementation files at this stage.
+    The previous step indicated the test is wrong, not the implementation.
+    Revert any implementation changes and fix the test instead.
+  If REQUIRED_ACTION=HUMAN:
+    Stop. Print: "DIAGNOSTIC ENFORCEMENT: HUMAN review required."
+    Do NOT proceed with quality checks.
+
+─────────────────────────────────────────
 STEP 3 — RUN QUALITY CHECKS
 ─────────────────────────────────────────
 Read the current task type from tasks.md.

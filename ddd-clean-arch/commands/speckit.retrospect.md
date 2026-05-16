@@ -77,6 +77,23 @@ For each WEAK_POINT in plan.md §18:
   Key dep lost: any external dependency NOT behind a port?
     VIOLATION: [dependency] not behind a port — replacement expensive.
 
+━━ SECTION 5.5: ABANDONED TASK REVIEW ━━━━
+
+If ABANDONED > 0:
+  Run: bash scripts/abandon-guard.sh "<feature_dir>"
+  Read the output:
+    GUARD=SAFE — normal abandoned task handling.
+    GUARD=LOOP_RISK — task was previously reset from ABANDONED and failed again.
+      DO NOT reset this task to TODO. It must be deleted.
+    GUARD=REQUIRES_DELETION — task has been abandoned multiple times.
+      This task MUST be deleted from tasks.md.
+
+  For each ABANDONED task, review the failure reason from tasks.md or
+  .artifacts/failure-report.md. Determine if the task is:
+    - Unimplementable due to spec gap → add spec clarification task
+    - Redundant due to architecture change → delete
+    - Blocked by another abandoned task → cascade delete
+
 ━━ SECTION 6: TEST SUITE HEALTH ━━━━━━━━
 
 Run arch tests from §20. PASS = layer rules are mechanically enforced.

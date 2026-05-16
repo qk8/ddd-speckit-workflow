@@ -127,6 +127,16 @@ steps:
               bash scripts/scope-audit.sh
               "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
+      - id: impl_check_context_health
+        type: if
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+        then:
+          - id: impl_context_health
+            type: shell
+            command: >
+              bash scripts/context-health.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
       - id: impl_check_parse_error
         type: if
         condition: "{{ steps.impl_check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
@@ -295,11 +305,23 @@ steps:
         type: if
         condition: "{{ steps.impl_check_remaining.output.abandoned_count | int > 0 }}"
         then:
+          - id: impl_abandon_guard
+            type: shell
+            command: >
+              bash scripts/abandon-guard.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}"
+            continue_on_error: true
           - id: impl_warn_abandoned
             type: gate
             message: |
               ⚠ {{ steps.impl_check_remaining.output.abandoned_count }} ABANDONED task(s) found.
               Approve to continue. Revise to clean up abandoned tasks.
+              {% if steps.impl_abandon_guard.output.GUARD == 'LOOP_RISK' %}
+              **WARNING: This task was previously reset from ABANDONED and failed again.**
+              Resetting it again will create an infinite loop. **You must delete this task.**
+              {% elif steps.impl_abandon_guard.output.GUARD == 'REQUIRES_DELETION' %}
+              **This task has been abandoned multiple times. It must be deleted.**
+              {% endif %}
             options: [approve, revise]
             on_revise:
               - id: impl_clean_abandoned

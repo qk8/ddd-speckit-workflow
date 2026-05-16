@@ -18,6 +18,8 @@
 #   state-engine.sh task-incr <feature_dir> <task_id> <key>    — increment a numeric field on a task
 #   state-engine.sh cadence-increment <counter_key>            — increment a cadence counter
 #   state-engine.sh cadence-reset <counter_key>                — reset a cadence counter to 0
+#   state-engine.sh context-increment                          — increment session_age by 1
+#   state-engine.sh context-reset                              — reset session_age to 0
 #
 # State is stored in <feature_dir>/state.json
 # Old format files are preserved as .bak after migration.
@@ -143,7 +145,9 @@ do_init() {
   "context": {
     "generation_count": 0,
     "last_snapshot": null,
-    "rotation_threshold": 10
+    "rotation_threshold": 10,
+    "session_age": 0,
+    "reset_threshold": 15
   },
   "risk_profile": "low",
   "workflow": {
@@ -407,6 +411,34 @@ do_cadence_reset() {
     '.cadence."'"$counter_key"' = 0 | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   echo "CADENCE: ${counter_key} reset to 0"
+  state_lock_release
+}
+
+# ── Context operations (session age tracking) ────────────────────
+
+do_context_increment() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.context.session_age = (.context.session_age // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CONTEXT: session_age incremented to $(jq -r '.context.session_age' "$STATE_FILE")"
+  state_lock_release
+}
+
+do_context_reset() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.context.session_age = 0 | .context.last_snapshot = $ts | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CONTEXT: session_age reset to 0"
   state_lock_release
 }
 
@@ -880,11 +912,13 @@ case "$MODE" in
   spec-increment)   do_spec_increment ;;
   cadence-increment) do_cadence_increment "$3" ;;
   cadence-reset)    do_cadence_reset "$3" ;;
+  context-increment) do_context_increment "${3:-}" ;;
+  context-reset)    do_context_reset "${3:-}" ;;
   task-set)         do_task_set "$3" "$4" "${5:-}" ;;
   task-incr)        do_task_incr "$3" "$4" ;;
   *)
     echo "Unknown mode: $MODE" >&2
-    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|task-set|task-incr> <feature_dir> [args...]" >&2
+    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|context-increment|context-reset|task-set|task-incr> <feature_dir> [args...]" >&2
     exit 1
     ;;
 esac

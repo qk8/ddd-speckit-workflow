@@ -80,6 +80,13 @@ Rules (non-negotiable):
 - Only touch: Scope.Creates, Scope.Modifies, and the test file from the previous step.
 - Never implement any part of another task speculatively.
 - Spec conflict found → stop and report. Never resolve unilaterally.
+- After implementation, spec-diff-check.sh will verify spec.md/plan.md were not modified.
+  If UNAUTHORIZED changes detected: STOP. Revert spec files and report the conflict.
+- After implementation, scope-guard.sh will verify changes match task scope.
+  If MAJOR_VIOLATION: revert files outside your scope.
+  If MINOR_VIOLATION: document why the change was necessary.
+- If context-health.sh reports DEGRADED: re-read plan.md §1-3 (architecture) and spec.md.
+  Summarize key decisions from your context window before proceeding.
 
 ─────────────────────────────────────────
 STEP 1.5 — CROSS-TASK IMPACT CHECK
@@ -107,6 +114,17 @@ If TEST_RESULT is "fail":
   - TEST_FAILED test(s) failed (exit code $TEST_EXIT_CODE)
   - Do NOT proceed. Enter the INLINE CORRECTION LOOP.
   - The full raw output is in: $TEST_OUTPUT_FILE
+
+  BEFORE entering the correction loop, run the diagnostic classifier:
+    bash scripts/diagnostic-classifier.sh \
+      "$(bash scripts/find-first-feature.sh)" \
+      "[task_type]" \
+      "$(cat $TEST_OUTPUT_FILE)" \
+      "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
+  Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION.
+  If REQUIRED_ACTION=FIX_TEST: you MUST fix the test, not the implementation.
+  If REQUIRED_ACTION=HUMAN: STOP. Print evidence and wait for human review.
+  Save diagnostic output to: .artifacts/diagnostic-output.txt
 
 Then RUN THE FULL REGRESSION SUITE:
   bash scripts/validate-tests.sh "[regression_command.all from plan.md §13]" "pass"
@@ -181,6 +199,15 @@ INLINE CORRECTION LOOP (if tests fail)
   If REQUIRED_ACTION=RETRY:
     You may attempt either test or implementation fixes, but use the
     EVIDENCE field to guide your choice. Do not self-classify without evidence.
+
+  ── DIAGNOSTIC ENFORCEMENT CHECK ──
+  After completing the correction loop (whether tests pass or you reached the cap):
+    bash scripts/diagnostic-enforcement.sh --verify "$(bash scripts/find-first-feature.sh)"
+  Read the result:
+    ENFORCEMENT=ENFORCED — no violations, proceed.
+    ENFORCEMENT=VIOLATION_FOUND — you modified files you should not have.
+      Revert the unauthorized changes and re-run the correction loop.
+    ENFORCEMENT=NOT_APPLICABLE — no diagnostic was run, no enforcement needed.
 
 When STEP 2 completes successfully, print:
 "IMPLEMENT-CODE DONE — proceeding to quality checks."
