@@ -105,7 +105,7 @@ do_read() {
           evidence = $0
         }
         /"confidence"/ {
-          print "  TASK-" task ": " type " — " desc
+          print "  " task ": " type " — " desc
           print "    Fix: " fix
           if (evidence != "") print "    Evidence: " evidence
           evidence = ""
@@ -132,58 +132,163 @@ do_update() {
   local ts
   ts=$(get_timestamp)
 
-  # Count existing entries of this type
-  local existing_count=0
+  # Normalize description for deduplication (lowercase, trim whitespace)
+  local norm_desc
+  norm_desc=$(echo "$description" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g;s/^[[:space:]]*//;s/[[:space:]]*$//' 2>/dev/null || echo "$description")
+
+  # Check for duplicate: same error_type + normalized description within existing entries
+  local is_duplicate=false
+  local dup_index=""
   if [ "$error_type" != "unknown" ] && [ -n "$description" ]; then
-    existing_count=$(grep -c "\"task\".*\"$task_id\"" "$MEMORY_FILE" 2>/dev/null || true)
-    existing_count=${existing_count:-0}
-    # Ensure it's a number
-    if ! echo "$existing_count" | grep -qE '^[0-9]+$'; then
-      existing_count=0
+    # Use jq to find matching entries (same type + normalized description)
+    dup_index=$(jq -r --arg et "$error_type" --arg nd "$norm_desc" '
+      .corrections | to_entries | map(
+        select(.value.type == $et) |
+        select((.value.description | ascii_downcase | gsub("[\\s]+"; " ") | ltrimstr(" ") | rtrimstr(" ")) == $nd)
+      ) | map(.key) | first // empty
+    ' "$MEMORY_FILE" 2>/dev/null || true)
+
+    if [ -n "$dup_index" ]; then
+      is_duplicate=true
     fi
   fi
 
-  # Simple append approach (bash 3.2 compatible, no jq)
-  # Read existing content, append new entry
-  local tmp_file
-  tmp_file=$(mktemp)
-
-  # Copy existing content
-  cp "$MEMORY_FILE" "$tmp_file"
-
-  # If corrections array is empty, add first entry
-  if ! grep -q '"task"' "$tmp_file" 2>/dev/null; then
-    # Write the first entry directly to avoid sed escaping issues
-    {
-      echo '{'
-      echo '  "version": 1,'
-      echo '  "updated": "",'
-      echo '  "corrections": ['
-      echo '    {'
-      echo "      \"task\": \"$task_id\","
-      echo "      \"type\": \"$error_type\","
-      echo "      \"description\": \"$description\","
-      echo "      \"fix\": \"$fix_pattern\","
-      if [ -n "$evidence" ]; then
-        echo "      \"evidence\": \"$evidence\","
-      fi
-      echo '      "count": 1,'
-      echo '      "confidence": 0.5'
-      echo '    }'
-      echo '  ],'
-      echo '  "abandoned_tasks": [],'
-      echo '  "drift_patterns": []'
-      echo '}'
-    } > "$tmp_file"
+  if [ "$is_duplicate" = true ]; then
+    # Increment count on existing entry
+    local tmp_file
+    tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+    jq --argjson idx "$dup_index" \
+      '.corrections[$idx].count = (.corrections[$idx].count + 1) | .updated = "'"$ts"'"' \
+      "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+    echo "ERROR-MEMORY: deduplicated entry #$(( $(jq ".corrections[$dup_index].count" "$MEMORY_FILE") )) for $error_type"
+    return 0
   fi
 
-  mv "$tmp_file" "$MEMORY_FILE"
-  sed -i "s/\"updated\": \"\"/\"updated\": \"$ts\"/" "$MEMORY_FILE" 2>/dev/null || true
+  # Build the new correction entry as JSON
+  local new_entry
+  new_entry=$(jq -n \
+    --arg task "$task_id" \
+    --arg type "$error_type" \
+    --arg desc "$description" \
+    --arg fix "$fix_pattern" \
+    --arg conf "0.5" \
+    '{task: $task, type: $type, description: $desc, fix: $fix, count: 1, confidence: ($conf | tonumber)}')
+
+  # If evidence provided, add it
+  if [ -n "$evidence" ]; then
+    new_entry=$(echo "$new_entry" | jq --arg ev "$evidence" '. + {evidence: $ev}')
+  fi
+
+  # Append to corrections array and enforce 10-entry cap
+  local tmp_file
+  tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+  jq --argjson entry "$new_entry" --arg updated "$ts" '
+    .corrections += [$entry] |
+    if (.corrections | length) > 10 then
+      .corrections = .corrections[-10:]
+    else . end |
+    .updated = $updated
+  ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+  echo "ERROR-MEMORY: added correction for $task_id ($error_type)"
+}
+
+# ── Update abandoned tasks ──────────────────────────────────────
+do_update_abandoned() {
+  local task_id="${3:-unknown}"
+  local reason="${4:-}"
+
+  init_memory
+
+  local ts
+  ts=$(get_timestamp)
+
+  # Check for duplicate
+  local dup_index
+  dup_index=$(jq -r --arg tid "$task_id" '
+    .abandoned_tasks | to_entries | map(select(.value.task == $tid)) | map(.key) | first // empty
+  ' "$MEMORY_FILE" 2>/dev/null || true)
+
+  if [ -n "$dup_index" ]; then
+    local tmp_file
+    tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+    jq --argjson idx "$dup_index" --arg reason "$reason" --arg ts "$ts" '
+      .abandoned_tasks[$idx].reason = $reason |
+      .abandoned_tasks[$idx].count = (.abandoned_tasks[$idx].count // 1) + 1 |
+      .updated = $ts
+    ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+    return 0
+  fi
+
+  local new_entry
+  new_entry=$(jq -n --arg task "$task_id" --arg reason "$reason" '{task: $task, reason: $reason, count: 1}')
+
+  local tmp_file
+  tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+  jq --argjson entry "$new_entry" --arg ts "$ts" '
+    .abandoned_tasks += [$entry] |
+    if (.abandoned_tasks | length) > 5 then
+      .abandoned_tasks = .abandoned_tasks[-5:]
+    else . end |
+    .updated = $ts
+  ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+}
+
+# ── Update drift patterns ──────────────────────────────────────
+do_update_drift() {
+  local pattern="${3:-unknown}"
+  local description="${4:-}"
+  local confidence="${5:-0.5}"
+
+  init_memory
+
+  local ts
+  ts=$(get_timestamp)
+
+  # Check for duplicate
+  local dup_index
+  dup_index=$(jq -r --arg pat "$pattern" '
+    .drift_patterns | to_entries | map(select(.value.pattern == $pat)) | map(.key) | first // empty
+  ' "$MEMORY_FILE" 2>/dev/null || true)
+
+  if [ -n "$dup_index" ]; then
+    local tmp_file
+    tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+    jq --argjson idx "$dup_index" --arg desc "$description" --arg conf "$confidence" --arg ts "$ts" '
+      .drift_patterns[$idx].description = $desc |
+      .drift_patterns[$idx].confidence = ($conf | tonumber) |
+      .drift_patterns[$idx].count = (.drift_patterns[$idx].count // 1) + 1 |
+      .updated = $ts
+    ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+    return 0
+  fi
+
+  local new_entry
+  new_entry=$(jq -n --arg pat "$pattern" --arg desc "$description" --arg conf "$confidence" \
+    '{pattern: $pat, description: $desc, confidence: ($conf | tonumber), count: 1}')
+
+  local tmp_file
+  tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+  jq --argjson entry "$new_entry" --arg ts "$ts" '
+    .drift_patterns += [$entry] |
+    if (.drift_patterns | length) > 5 then
+      .drift_patterns = .drift_patterns[-5:]
+    else . end |
+    .updated = $ts
+  ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
 }
 
 # ── Clear: reset error memory ──────────────────────────────────
 do_clear() {
   init_memory
+  local tmp_file
+  tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
+  jq '{
+    version: 1,
+    updated: "",
+    corrections: [],
+    abandoned_tasks: [],
+    drift_patterns: []
+  }' > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
   echo "Error memory cleared."
 }
 

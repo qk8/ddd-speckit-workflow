@@ -78,12 +78,12 @@ RETRO_CALLS=2          # speckit.retrospect + speckit.check
 TRACE_CALLS=1          # traceability-check
 
 # Average correction rounds per task (realistic: 20% of tasks need 1 correction)
-CORRECTION_RATE=0.2
+CORRECTION_RATE=20     # percentage (integer arithmetic)
 CORRECTION_CALLS=1     # 1 extra call per correction
 
 # Total implement loop calls
 IMPLEMENT_LOOP_CALLS=$(( TOTAL_TASKS * (WRITE_TEST_CALLS + IMPLEMENT_CALLS + VERIFY_CALLS + GATE_CALLS) ))
-IMPLEMENT_CORRECTION_CALLS=$(( TOTAL_TASKS * CORRECTION_RATE * CORRECTION_CALLS ))
+IMPLEMENT_CORRECTION_CALLS=$(( TOTAL_TASKS * CORRECTION_RATE / 100 * CORRECTION_CALLS ))
 PERIODIC_ROUNDS=$(( (TOTAL_TASKS - FIRST_RETRO) / RETRO_INTERVAL ))
 if [ "$PERIODIC_ROUNDS" -lt 0 ]; then PERIODIC_ROUNDS=0; fi
 PERIODIC_CALLS=$(( PERIODIC_ROUNDS * (RETRO_CALLS + TRACE_CALLS) ))
@@ -166,7 +166,7 @@ echo "    Total:               \$$TOTAL_COST"
 echo ""
 echo "  ─────────────────────────────────────────"
 echo "  Notes:"
-echo "    - Correction rate: ${CORRECTION_RATE*100}% of tasks need 1 extra call"
+echo "    - Correction rate: ${CORRECTION_RATE}% of tasks need 1 extra call"
 echo "    - Periodic retro every $RETRO_INTERVAL tasks"
 echo "    - First retro after $FIRST_RETRO tasks"
 echo "    - Max 3 code review rounds, ~$CODE_REVIEW_FIX_CALLS fix tasks/round"
@@ -200,6 +200,16 @@ cat > "$ARTIFACTS_DIR/cost-estimate.json" <<EOF
 EOF
 
 echo "Cost estimate saved to $ARTIFACTS_DIR/cost-estimate.json"
+
+# ── Write estimated budget to state.json ────────────────────────
+STATE_FILE="$FEATURE_DIR/state.json"
+if [ -f "$STATE_FILE" ]; then
+  TMP_STATE=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --argjson est "$TOTAL_TOKENS" --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)" \
+    '.token_budget.estimated_total = $est | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$TMP_STATE" && mv "$TMP_STATE" "$STATE_FILE"
+  echo "TOKEN_BUDGET: estimated_total=$TOTAL_TOKENS written to state.json"
+fi
 
 # ── Budget Enforcement ────────────────────────────────────────
 # If MAX_BUDGET is set, compare estimated cost against it.

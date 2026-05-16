@@ -27,7 +27,7 @@ COV_OK=true
 BUILD_CMD=""
 TYPE_CMD=""
 COV_CMD=""
-COV_THRESHOLD=0
+COV_THRESHOLD=70
 FAIL_COUNT=0
 
 # ── Extract a value from plan.md §13 (Testing Strategy) ─────────
@@ -287,7 +287,7 @@ if [ -n "$COV_THRESHOLD_RAW" ]; then
     COV_THRESHOLD=80
   fi
 else
-  COV_THRESHOLD=0
+  COV_THRESHOLD=70
 fi
 
 COV_CMD_RAW=$(extract_testing_value "coverage_command" 2>/dev/null || true)

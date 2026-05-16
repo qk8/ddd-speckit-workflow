@@ -72,6 +72,12 @@ steps:
       bash scripts/check-gate-preconditions.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" "quality"
 
+  - id: impl_check_escalation
+    type: shell
+    command: >
+      bash scripts/check-escalation.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
   - id: impl_review_checks
     type: if
     condition: >
@@ -98,6 +104,10 @@ steps:
           {% if steps.impl_pre_checks.output.GATE_BLOCKED == 'true' %}
           **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_checks.output.FAILING_CHECKS }}
           You MUST revise. Approval is disabled until checks pass.
+          {% endif %}
+          {% if steps.impl_check_escalation.output.ESCALATION == 'REQUIRED' %}
+          **Check escalation:** {{ steps.impl_check_escalation.output.FAILED_CHECKS }}
+          has failed consecutively. Human review required.
           {% endif %}
           {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
           **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}

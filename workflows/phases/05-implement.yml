@@ -32,6 +32,13 @@ steps:
           bash scripts/mcp-health-check.sh all || true
         continue_on_error: true
 
+      - id: impl_check_token_budget
+        type: shell
+        command: >
+          bash scripts/token-budget-check.sh
+          "$(bash scripts/find-first-feature.sh)" || true
+        continue_on_error: true
+
       - id: impl_check_remaining
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
@@ -135,6 +142,16 @@ steps:
             type: shell
             command: >
               bash scripts/context-health.sh
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+      - id: impl_check_coverage
+        type: if
+        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 5 == 0"
+        then:
+          - id: impl_run_quantitative
+            type: shell
+            command: >
+              bash scripts/run-quantitative.sh
               "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
       - id: impl_check_parse_error

@@ -283,13 +283,14 @@ cadence:
 # require human review because deterministic checks alone cannot verify
 # behavioral correctness (acceptance criteria are semantic).
 auto_approve:
-  enabled: false
-  # When enabled, acceptance gate requires TDD evidence before auto-approving.
-  # tdd_evidence_required: true
-  # non_auto_approvable:
-  #   - review-tdd
-  #   - review-plan-revision-gate
-  #   - review-speckit-review
+  enabled: true
+  # When enabled, deterministic gates auto-approve when all checks pass.
+  # Safety-critical gates (stagnation, crash recovery) always require human review.
+  non_auto_approvable:
+    - stagnation
+    - parse-error
+    - in-progress-recovery
+    - abandoned-tasks
 
 # ── Auto-revise when revision threshold is exceeded ───────────────
 # Instead of silently auto-approving, triggers speckit.retrospect
