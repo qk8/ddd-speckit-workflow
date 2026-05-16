@@ -464,8 +464,9 @@ do_abandoned() {
         while IFS= read -r fpath; do
           [ -z "$fpath" ] && continue
           if [ -f "$fpath" ]; then
+            rm -f "$fpath"
             removed=$((removed + 1))
-            echo "  ABANDONED_UNCOMMITTED: ${fpath} (from ${manifest_task})" >> "$report_file"
+            echo "  ABANDONED_REMOVED: ${fpath} (from ${manifest_task})" >> "$report_file"
           fi
         done < "$manifest"
       fi

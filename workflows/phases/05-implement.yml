@@ -1,7 +1,7 @@
 # ── PHASE 5: IMPLEMENT LOOP ─────────────────────────────────────
 # DAG-structured task execution with checks, gates, stagnation detection.
 # Decomposed into sub-phases (auto-discovered by build-workflow.sh):
-#   05-implement-01-stagnation.yml — Stagnation gate
+#   .05-implement-01-stagnation.yml — DEPRECATED (stagnation gate moved inline)
 #   05-implement-02-core.yml       — Core task execution (write-test → implement → verify)
 #   05-implement-03-gates.yml      — Acceptance, quality, TDD gates
 #   05-implement-04-retro.yml      — Retrospective + drift detection
@@ -35,6 +35,13 @@ steps:
       - id: impl_check_remaining
         type: shell
         command: "bash scripts/check-tasks-safe.sh"
+
+      - id: impl_loop_iteration
+        type: shell
+        command: >
+          bash scripts/increment-iteration.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+        continue_on_error: true
 
       - id: impl_snapshot
         type: shell
@@ -183,7 +190,9 @@ steps:
       # Only appears when STAGNANT=true. When STAGNANT=false, skipped entirely.
       - id: impl_stagnation_gate
         type: if
-        condition: "{{ steps.impl_stagnation_check.output.STAGNANT == 'true' }}"
+        condition: >
+          {{ steps.impl_stagnation_check.output.STAGNANT == 'true' }} and
+          {{ steps.impl_check_remaining.output.has_todo == 'true' }}
         then:
           - id: impl_stagnation_review
             type: gate

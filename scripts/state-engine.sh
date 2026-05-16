@@ -40,6 +40,43 @@ now_utc() {
   date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ'
 }
 
+# ── File locking for state.json ──────────────────────────────────
+# Prevents concurrent writers from corrupting state.json.
+# LOCK_FD=201, LOCK_FILE derived from STATE_FILE path.
+# Migration acquires the lock once and sets LOCK_HELD=1 to skip
+# per-write locking for its internal operations.
+
+LOCK_FD=201
+LOCK_HELD=0
+
+_state_lock_init() {
+  STATE_LOCK_FILE="${STATE_FILE%.json}.lock"
+  mkdir -p "$(dirname "$STATE_LOCK_FILE")"
+  exec 201>"$STATE_LOCK_FILE"
+}
+
+# Acquire lock (blocking, 60s timeout). Returns 0 on success, 1 if already held.
+state_lock_acquire() {
+  _state_lock_init
+  if [ "$LOCK_HELD" -eq 1 ]; then
+    return 0
+  fi
+  if flock -w 60 201; then
+    LOCK_HELD=1
+    return 0
+  fi
+  echo "LOCK: Could not acquire state.json lock within 60s" >&2
+  return 1
+}
+
+# Release lock. Safe to call even if not held.
+state_lock_release() {
+  if [ "$LOCK_HELD" -eq 1 ]; then
+    flock -u 201 2>/dev/null || true
+    LOCK_HELD=0
+  fi
+}
+
 atomic_write() {
   local target="$1" content="$2"
   local tmp
@@ -69,6 +106,7 @@ ensure_exists() {
 
 # ── Init ─────────────────────────────────────────────────────────
 do_init() {
+  state_lock_acquire || return 1
   mkdir -p "$FEATURE_DIR"
   local ts
   ts="$(now_utc)"
@@ -128,6 +166,7 @@ do_init() {
 }
 EOF
   echo "INIT: state.json created at $STATE_FILE"
+  state_lock_release
 }
 
 # ── Read ─────────────────────────────────────────────────────────
@@ -143,6 +182,7 @@ do_read() {
 
 # ── Write ────────────────────────────────────────────────────────
 do_write() {
+  state_lock_acquire || return 1
   local key="$1"
   local value="${2:-}"
   [ -z "$key" ] && { echo "Usage: state-engine.sh write <feature_dir> <key> <value>" >&2; exit 1; }
@@ -168,10 +208,12 @@ do_write() {
       'setpath($path; $val) | .metadata.updated_at = $ts' \
       "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   fi
+  state_lock_release
 }
 
 # ── Delete ───────────────────────────────────────────────────────
 do_delete() {
+  state_lock_acquire || return 1
   local key="$1"
   [ -z "$key" ] && { echo "Usage: state-engine.sh delete <feature_dir> <key>" >&2; exit 1; }
   ensure_exists
@@ -183,6 +225,7 @@ do_delete() {
   jq --argjson path "$jq_path_arr" --arg ts "$(now_utc)" \
     'delpath($path) | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
 }
 
 # ── Validate ─────────────────────────────────────────────────────
@@ -247,6 +290,7 @@ do_validate() {
 
 # Set a field on a specific task
 do_task_set() {
+  state_lock_acquire || return 1
   local tid="$1"
   local tkey="$2"
   local tval="${3:-}"
@@ -270,10 +314,12 @@ do_task_set() {
       '.tasks[$tid].'"$tkey"' = $val | .metadata.updated_at = $ts' \
       "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   fi
+  state_lock_release
 }
 
 # Increment a numeric field on a specific task
 do_task_incr() {
+  state_lock_acquire || return 1
   local tid="$1"
   local tkey="$2"
   [ -z "$tid" ] && { echo "Usage: state-engine.sh task-incr <feature_dir> <task_id> <key>" >&2; exit 1; }
@@ -286,11 +332,13 @@ do_task_incr() {
     '.tasks[$tid].'"$tkey"' = ((.tasks[$tid].'"$tkey"' // 0) + 1) | .metadata.updated_at = $ts' \
     --arg tid "$tid" \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
 }
 
 # ── History ──────────────────────────────────────────────────────
 
 do_history_append() {
+  state_lock_acquire || return 1
   local entry="$1"
   [ -z "$entry" ] && { echo "Usage: state-engine.sh history-append <feature_dir> <json_entry>" >&2; exit 1; }
   ensure_exists
@@ -300,9 +348,11 @@ do_history_append() {
   jq --argjson entry "$entry" \
     '.history += [$entry] | .metadata.updated_at = "'"$(now_utc)"'"' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
 }
 
 do_history_prune() {
+  state_lock_acquire || return 1
   local keep="$1"
   [ -z "$keep" ] && { echo "Usage: state-engine.sh history-prune <feature_dir> <keep>" >&2; exit 1; }
   ensure_exists
@@ -312,10 +362,12 @@ do_history_prune() {
   jq --argjson keep "$keep" \
     '.history = (.history[-($keep):]) | .metadata.updated_at = "'"$(now_utc)"'"' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
 }
 
 # ── Spec version increment ───────────────────────────────────────
 do_spec_increment() {
+  state_lock_acquire || return 1
   ensure_exists
 
   local tmp
@@ -324,11 +376,13 @@ do_spec_increment() {
     '.spec.version = (.spec.version + 1) | .spec.last_revision_at = $ts | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   echo "SPEC: version incremented to $(jq -r '.spec.version' "$STATE_FILE")"
+  state_lock_release
 }
 
 # ── Cadence operations ───────────────────────────────────────────
 
 do_cadence_increment() {
+  state_lock_acquire || return 1
   local counter_key="${1:?Usage: state-engine.sh cadence-increment <counter_key>}"
   ensure_exists
 
@@ -338,10 +392,12 @@ do_cadence_increment() {
   jq --arg ts "$(now_utc)" \
     '.cadence."'"$counter_key"' = (.cadence."'"$counter_key"' // 0) + 1 | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
-  echo "CADENCE: ${counter_key} incremented to $(jq -r '.cadence."'"$counter_key"'" "$STATE_FILE")"
+  echo "CADENCE: ${counter_key} incremented to $(jq -r --arg k "$counter_key" '.cadence[$k]' "$STATE_FILE")"
+  state_lock_release
 }
 
 do_cadence_reset() {
+  state_lock_acquire || return 1
   local counter_key="${1:?Usage: state-engine.sh cadence-reset <counter_key>}"
   ensure_exists
 
@@ -351,6 +407,7 @@ do_cadence_reset() {
     '.cadence."'"$counter_key"' = 0 | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   echo "CADENCE: ${counter_key} reset to 0"
+  state_lock_release
 }
 
 # ── Generate tasks.md ────────────────────────────────────────────
@@ -509,7 +566,7 @@ migrate_tasks_md() {
 }
 
 # Accumulator for migration — we build a JSON string
-_MIG_TASKS_JSON="{}"
+_MIG_TASKS_JSONL=""
 
 _save_task() {
   local tid="$1" title="$2" status="$3" task_type="$4" depends="$5"
@@ -528,7 +585,8 @@ _save_task() {
   local dn_json="[]"
   [ -n "$do_not" ] && dn_json=$(echo "$do_not" | tr '|' '\n' | jq -R . | jq -s .)
 
-  _MIG_TASKS_JSON=$(echo "$_MIG_TASKS_JSON" | jq \
+  # Append JSON object to JSONL accumulator (O(1) per task instead of O(N))
+  _MIG_TASKS_JSONL+=$(jq -n \
     --arg tid "$tid" \
     --arg title "$title" \
     --arg status "$status" \
@@ -538,25 +596,29 @@ _save_task() {
     --argjson modifies "$modifies_json" \
     --argjson ac "$ac_json" \
     --argjson dn "$dn_json" \
-    '.[$tid] = {
-      "status": $status,
-      "type": $type,
-      "title": $title,
-      "depends_on": $depends,
-      "scope": { "creates": $creates, "modifies": $modifies },
-      "acceptance_criteria": $ac,
-      "do_not": $dn,
-      "revision_count": 0,
-      "last_changed": "",
-      "files_modified": [],
-      "blocking_reason": null,
-      "check_results": {},
-      "interfaces_produced": [],
-      "interfaces_consumed": []
-    }')
+    '{
+      ($tid): {
+        "status": $status,
+        "type": $type,
+        "title": $title,
+        "depends_on": $depends,
+        "scope": { "creates": $creates, "modifies": $modifies },
+        "acceptance_criteria": $ac,
+        "do_not": $dn,
+        "revision_count": 0,
+        "last_changed": "",
+        "files_modified": [],
+        "blocking_reason": null,
+        "check_results": {},
+        "interfaces_produced": [],
+        "interfaces_consumed": []
+      }
+    }')$'\n'
 }
 
 do_migrate() {
+  state_lock_acquire || return 1
+  LOCK_HELD=1
   # Auto-init if state.json doesn't exist
   if [ ! -f "$STATE_FILE" ]; then
     do_init
@@ -568,15 +630,18 @@ do_migrate() {
   if [ -f "$FEATURE_DIR/tasks.md" ]; then
     echo "MIGRATE: Parsing tasks.md..."
     migrate_tasks_md
-    if [ -n "$_MIG_TASKS_JSON" ] && [ "$_MIG_TASKS_JSON" != "{}" ]; then
+    if [ -n "$_MIG_TASKS_JSONL" ]; then
       local tmp
       tmp=$(mktemp "${STATE_FILE}.XXXXXX")
-      jq --argjson tasks "$_MIG_TASKS_JSON" \
+      # Slurp JSONL into a single JSON object — O(N) instead of O(N^2)
+      local tasks_json
+      tasks_json=$(printf '%s' "$_MIG_TASKS_JSONL" | jq -s 'add // {}')
+      jq --argjson tasks "$tasks_json" \
         '.tasks = $tasks | .metadata.updated_at = "'"$(now_utc)"'"' \
         "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
       migrated=true
     fi
-    _MIG_TASKS_JSON="{}"
+    _MIG_TASKS_JSONL=""
   fi
 
   # 2. Merge .workflow-state.json if exists
@@ -707,7 +772,7 @@ do_migrate() {
     local tmp
     tmp=$(mktemp "${STATE_FILE}.XXXXXX")
     jq --argjson results "$all_results" \
-      '.tasks["TASK-1"].check_results = $results | .metadata.updated_at = "'"$(now_utc)"'"' \
+      '.check_results = $results | .metadata.updated_at = "'"$(now_utc)"'"' \
       "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
     migrated=true
   fi
@@ -798,6 +863,7 @@ do_migrate() {
   else
     echo "MIGRATE: No old format files found — state.json is already up to date"
   fi
+  state_lock_release
 }
 
 # ── Main dispatch ────────────────────────────────────────────────

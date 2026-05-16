@@ -33,6 +33,13 @@ steps:
       bash scripts/pre-task-validate.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}"
 
+  - id: impl_validate_deps
+    type: shell
+    command: >
+      bash scripts/validate-task-deps.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+    continue_on_error: true
+
   - id: impl_generate_context
     type: shell
     command: >
