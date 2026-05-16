@@ -27,6 +27,7 @@ fi
 ORCHESTRATOR="ddd-workflow.yml"
 OUTPUT="/dev/stdout"
 VALIDATE=""
+TMP_BUILD=""
 
 # Parse arguments: positional args for orchestrator/output, --validate flag
 POS_ARGS=()
@@ -39,6 +40,11 @@ done
 
 ORCHESTRATOR="${POS_ARGS[0]:-ddd-workflow.yml}"
 OUTPUT="${POS_ARGS[1]:-/dev/stdout}"
+
+# Use a temp file for the build output to avoid /dev/stdout hang
+# when stdout is redirected (wc -l and grep hang reading from /dev/stdout)
+TMP_BUILD=$(mktemp "${OUTPUT:-/dev/stdout}.XXXXXX" 2>/dev/null || mktemp /tmp/build-workflow-XXXXXX.yml)
+trap 'rm -f "$TMP_BUILD"' EXIT
 
 if [ ! -f "$ORCHESTRATOR" ]; then
   echo "ERROR: Orchestrator not found: $ORCHESTRATOR" >&2
@@ -89,7 +95,7 @@ extract_steps() {
   fi
 }
 
-# Start building output
+# Start building output (write to temp file to avoid /dev/stdout hang)
 {
   echo "$HEADER"
   echo "steps:"
@@ -120,9 +126,17 @@ extract_steps() {
     echo "  # ── End of phase: $(basename "$phase_file") ──"
     echo ""
   done
-} > "$OUTPUT"
+} > "$TMP_BUILD"
 
-echo "Build complete: $(wc -l < "$OUTPUT") lines → $OUTPUT" >&2
+LINE_COUNT=$(wc -l < "$TMP_BUILD")
+echo "Build complete: $LINE_COUNT lines → $OUTPUT" >&2
+
+# Copy temp file to final output (stdout or file)
+if [ "$OUTPUT" = "/dev/stdout" ]; then
+  cat "$TMP_BUILD"
+else
+  cp "$TMP_BUILD" "$OUTPUT"
+fi
 
 # ── Pre-flight goto validation (always runs) ──────────────────────
 # Extract all step IDs and all goto targets from the merged output.
@@ -131,10 +145,10 @@ echo "" >&2
 echo "Running pre-flight goto validation..." >&2
 
 # Collect all step IDs (lines matching "  - id: xxx")
-STEP_IDS=$(grep -E '^\s+- id:' "$OUTPUT" 2>/dev/null | sed 's/.*- id: *//' | sort -u || true)
+STEP_IDS=$(grep -E '^\s+- id:' "$TMP_BUILD" 2>/dev/null | sed 's/.*- id: *//' | sort -u || true)
 
 # Collect all goto targets (lines matching any indentation + goto: xxx)
-GOTO_TARGETS=$(grep -E 'goto:' "$OUTPUT" 2>/dev/null | sed 's/.*goto: *//' | sort -u || true)
+GOTO_TARGETS=$(grep -E 'goto:' "$TMP_BUILD" 2>/dev/null | sed 's/.*goto: *//' | sort -u || true)
 
 GOTO_ERRORS=0
 for target in $GOTO_TARGETS; do
