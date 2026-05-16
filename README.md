@@ -4,53 +4,6 @@ Production-grade software development workflow built on Spec Kit.
 Adds Domain-Driven Design depth, Clean Architecture enforcement,
 browser and API live testing, and quality gates.
 
-## Repository structure
-
-```
-project-brief.md                           ← Fill this in first (single source of truth)
-.gitignore                                 ← Covers .env, build outputs, OS files
-.gitleaks.toml                             ← Secret scan config (created by setup-hooks.sh)
-ddd-workflow.yml                           ← Full workflow definition
-.claude/
-  settings.json                            ← MCP server configuration (Playwright + Chrome DevTools)
-scripts/
-  setup-mcp.sh                             ← One-time MCP + Playwright setup (run once per machine)
-  setup-hooks.sh                           ← One-time pre-commit hook setup (run once per machine)
-  check-tasks.sh                           ← Task progress helper (used by workflow)
-  validate-tasks.sh                        ← Task dependency graph validation (used by workflow)
-  check-naming.sh                          ← Ubiquitous language validation (used by pre-commit hook)
-  validate-api-contract.sh                 ← API contract enforcement (Check [K])
-  ci-local.sh                              ← Run full CI pipeline locally (--fast | --e2e-only)
-  derive-routing.sh                        ← Auto-derive routing table from checks[].applies_to
-  derive-checks-table.sh                   ← Auto-derive README check table from preset.yml
-  validate-routing-table.sh                ← Drift detection: manual vs auto-derived routing
-  check-labels.yml                         ← Short labels & descriptions for check table
-ddd-clean-arch/                            ← Preset
-  preset.yml
-  templates/
-    plan-template.md                       ← 20-section architecture doc template
-    tasks-template.md                      ← Structured backlog format
-    constitution-template.md              ← Layer rules and constraints
-    spec-sections.md                       ← Task type → plan.md section mapping
-    check-report-template.md              ← 21-check completion report table
-    task-state-reference.md              ← Source of truth for task states
-    test-instructions/                   ← Lazy-loaded per-task TYPE branches
-  commands/
-    speckit.implement.md                   ← Build override (task plan + test writing + handoff to checks)
-    speckit.check.md                       ← 21 quality checks via routing table
-  guides/
-    correction-loop.md                     ← Test failure triage and correction protocol
-    dev-server-failure-protocol.md         ← Dev server startup failure SOP
-    flaky-test-protocol.md                 ← Flaky test detection, quarantine, and fix
-    test-data-strategy.md                  ← Test data isolation approaches
-    api-testing-tool-guide.md              ← API testing tool comparison
-    task-selection.md                      ← IN_PROGRESS / TODO task selection protocol
- templates/
-    command-header.md                      ← Shared opening for quality-gate commands
-    preamble.md                            ← Feature preamble template
-    test-modes/                            ← Lazy-loaded per-test-mode branches
-```
-
 ## Prerequisites
 
 ```bash
