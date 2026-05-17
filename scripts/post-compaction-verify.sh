@@ -24,6 +24,8 @@ check() {
   local name="$1" result="$2"
   if [[ "$result" == PASS* ]]; then
     PASS_COUNT=$((PASS_COUNT + 1))
+  elif [[ "$result" == N/A* ]]; then
+    : # N/A results are neutral, not failures
   else
     FAIL_COUNT=$((FAIL_COUNT + 1))
     FAILURES="${FAILURES}  FAIL: $name — $result\n"
