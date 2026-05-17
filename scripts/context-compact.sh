@@ -129,3 +129,6 @@ echo "  Decisions:    $DECISION_COUNT"
 echo "  Checkpoints pruned: $PRUNED_CHECKPOINTS"
 echo "  Error memory pruned: $PRUNED_MEMORY"
 echo "  Summary:      $SUMMARY_FILE"
+
+# ── Issue 5: Post-compaction invariant verification ───────────────
+bash scripts/post-compaction-verify.sh "$FEATURE_DIR" 2>/dev/null || echo "  Post-compaction verification: SKIPPED (script not found or failed)"

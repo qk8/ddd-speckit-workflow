@@ -1,6 +1,8 @@
-# ── PHASE 5 SUB-PHASE: GATES (Acceptance, Quality, TDD) ─────────
-# Extracted from 05-implement.yml (lines 439-607)
-# Three gates with auto-approve logic and manual review paths.
+# ── PHASE 5 SUB-PHASE: GATES (Unified Acceptance, Quality, TDD) ──
+# Extracted from 05-implement.yml
+# Single unified gate replaces three separate gates (acceptance, quality, TDD).
+# Reduces review overhead from 3 gates per task to 1.
+# Auto-approve when all deterministic checks pass across all dimensions.
 
 steps:
 
@@ -25,47 +27,6 @@ steps:
           bash scripts/verify-acceptance-coverage.sh
           "{{ steps.impl_check_remaining.output.feature_dir }}" "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}" || echo "TDD_EVIDENCE=UNKNOWN"
 
-  - id: impl_review_acceptance
-    type: if
-    condition: >
-      {{ steps.impl_pre_acceptance.output.AUTO_APPROVE == 'true' }} and
-      {{ steps.impl_pre_acceptance.output.GATE_BLOCKED == 'false' }} and
-      {{ steps.impl_pre_acceptance.output.GATE_FORCE_HUMAN == 'false' }} and
-      {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }} and
-      ({{ steps.impl_pre_acceptance.output.ACCEPTANCE_REQUIRES_TDD != 'true' }} or
-       {{ steps.impl_tdd_evidence_check.output.TDD_EVIDENCE == 'true' }})
-    then:
-      - id: impl_accept_auto
-        type: shell
-        command: "echo 'Acceptance gate auto-approved (all deterministic checks passed, TDD evidence verified)'"
-    else:
-      - id: impl_accept_gate
-        type: gate
-        message: |
-          Review acceptance criteria for the last task.
-
-          [ ] All acceptance criteria satisfied (test name + file:line references)?
-          [ ] Test file committed alongside implementation?
-
-          {% if steps.impl_pre_acceptance.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_acceptance.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
-          {% endif %}
-          {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
-          **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
-          **Action**: Select "revise" to run retrospect on remaining tasks.
-          {% endif %}
-        options: [approve, revise]
-        on_revise:
-          - id: impl_lock_accept
-            type: shell
-            command: >
-              bash scripts/lock-task-write.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
-              IN_PROGRESS
-              "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — acceptance criteria not met."
-
   - id: impl_pre_checks
     type: shell
     command: >
@@ -78,87 +39,69 @@ steps:
       bash scripts/check-escalation.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
-  - id: impl_review_checks
-    type: if
-    condition: >
-      {{ steps.impl_pre_checks.output.AUTO_APPROVE == 'true' }} and
-      {{ steps.impl_pre_checks.output.GATE_BLOCKED == 'false' }} and
-      {{ steps.impl_pre_checks.output.GATE_FORCE_HUMAN == 'false' }} and
-      {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }}
-    then:
-      - id: impl_checks_auto
-        type: shell
-        command: "echo 'Quality checks gate auto-approved (all deterministic checks passed)'"
-    else:
-      - id: impl_checks_gate
-        type: gate
-        message: |
-          Review quality check results for the last task.
-
-          [ ] All applicable checks passed (all checks in routing table)?
-          [ ] Check [BC] new tests + regression: zero new failures in existing test suite?
-          [ ] Check [J] performance budget: within §10 budget?
-          [ ] Check [K] contract enforcement: API matches api-contract.yaml?
-          [ ] Spec learnings reviewed — confirmed or rejected each proposed change?
-
-          {% if steps.impl_pre_checks.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_checks.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
-          {% endif %}
-          {% if steps.impl_check_escalation.output.ESCALATION == 'REQUIRED' %}
-          **Check escalation:** {{ steps.impl_check_escalation.output.FAILED_CHECKS }}
-          has failed consecutively. Human review required.
-          {% endif %}
-          {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
-          **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
-          **Action**: Select "revise" to run retrospect on remaining tasks.
-          {% endif %}
-        options: [approve, revise]
-        on_revise:
-          - id: impl_lock_checks
-            type: shell
-            command: >
-              bash scripts/lock-task-write.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
-              IN_PROGRESS
-              "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — quality checks not met."
-
   - id: impl_pre_tdd
     type: shell
     command: >
       bash scripts/check-gate-preconditions.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" "tdd"
 
-  - id: impl_review_tdd
+  - id: impl_review_unified
     type: if
     condition: >
+      {{ steps.impl_pre_acceptance.output.AUTO_APPROVE == 'true' }} and
+      {{ steps.impl_pre_acceptance.output.GATE_BLOCKED == 'false' }} and
+      {{ steps.impl_pre_acceptance.output.GATE_FORCE_HUMAN == 'false' }} and
+      {{ steps.impl_pre_checks.output.AUTO_APPROVE == 'true' }} and
+      {{ steps.impl_pre_checks.output.GATE_BLOCKED == 'false' }} and
+      {{ steps.impl_pre_checks.output.GATE_FORCE_HUMAN == 'false' }} and
       {{ steps.impl_pre_tdd.output.AUTO_APPROVE == 'true' }} and
       {{ steps.impl_pre_tdd.output.GATE_BLOCKED == 'false' }} and
       {{ steps.impl_pre_tdd.output.GATE_FORCE_HUMAN == 'false' }} and
-      {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }}
+      {{ steps.impl_threshold.output.AUTO_REVISE != 'true' }} and
+      ({{ steps.impl_pre_acceptance.output.ACCEPTANCE_REQUIRES_TDD != 'true' }} or
+       {{ steps.impl_tdd_evidence_check.output.TDD_EVIDENCE == 'true' }})
     then:
-      - id: impl_tdd_auto
+      - id: impl_unified_auto
         type: shell
-        command: "echo 'TDD gate auto-approved (all deterministic checks passed)'"
+        command: "echo 'Unified gate auto-approved (acceptance, quality, and TDD checks all passed)'"
     else:
-      - id: impl_tdd_gate
+      - id: impl_unified_gate
         type: gate
         message: |
-          Review TDD integrity for the last task.
+          ━━ UNIFIED REVIEW GATE ━━
 
-          [ ] Test audit: STEP 1.5 report produced with name→criteria mapping?
-          [ ] Test audit: no trivial assertions or over-masking found?
+          ═══ ACCEPTANCE CRITERIA ═══
+          [ ] All acceptance criteria satisfied (test name + file:line references)?
+          [ ] Test file committed alongside implementation?
+          {% if steps.impl_pre_acceptance.output.GATE_BLOCKED == 'true' %}
+          **BLOCKED** — Failing checks: {{ steps.impl_pre_acceptance.output.FAILING_CHECKS }}
+          {% endif %}
+
+          ═══ QUALITY CHECKS ═══
+          [ ] All applicable checks passed (all checks in routing table)?
+          [ ] Check [BC] new tests + regression: zero new failures?
+          [ ] Check [J] performance budget: within §10 budget?
+          [ ] Check [K] contract enforcement: API matches api-contract.yaml?
+          {% if steps.impl_pre_checks.output.GATE_BLOCKED == 'true' %}
+          **BLOCKED** — Failing checks: {{ steps.impl_pre_checks.output.FAILING_CHECKS }}
+          {% endif %}
+          {% if steps.impl_check_escalation.output.ESCALATION == 'REQUIRED' %}
+          **Escalation:** {{ steps.impl_check_escalation.output.FAILED_CHECKS }}
+          has failed consecutively. Human review required.
+          {% endif %}
+
+          ═══ TDD INTEGRITY ═══
+          [ ] Test audit: name→criteria mapping produced?
+          [ ] Test audit: no trivial assertions or over-masking?
           [ ] Test correctness: each test name proves its acceptance criterion?
           [ ] Test correctness: [BC] new tests PASS with correct assertions?
           [ ] Test correctness: factory/fixture used for test data isolation?
           [ ] Red phase: failure evidence captured before implementation?
-          [ ] Hardening: catastrophic scenarios addressed for highest_risk_paths?
-
+          [ ] Hardening: catastrophic scenarios addressed?
           {% if steps.impl_pre_tdd.output.GATE_BLOCKED == 'true' %}
-          **BLOCKED** — Failing deterministic checks: {{ steps.impl_pre_tdd.output.FAILING_CHECKS }}
-          You MUST revise. Approval is disabled until checks pass.
+          **BLOCKED** — Failing checks: {{ steps.impl_pre_tdd.output.FAILING_CHECKS }}
           {% endif %}
+
           {% if steps.impl_threshold.output.AUTO_REVISE == 'true' %}
           **Revision threshold exceeded**. {{ steps.impl_threshold.output.AUTO_REVISE_REASON }}
           **Action**: Select "revise" to run retrospect on remaining tasks.
@@ -166,21 +109,20 @@ steps:
 
           Approve to continue to the next task.
           Revise to send the task back for fixes.
-          Pause to save state and stop (resume with: bash scripts/resume-workflow.sh)
+          Stop to save state and pause (resume with: bash scripts/resume-workflow.sh)
         options: [approve, revise, stop]
         on_stop:
           type: shell
           command: >
             bash scripts/save-pause-state.sh
             "{{ steps.impl_check_remaining.output.feature_dir }}"
-            "review-tdd"
+            "review-unified"
         on_revise:
-          - id: impl_lock_tdd
+          - id: impl_lock_unified
             type: shell
             command: >
               bash scripts/lock-task-write.sh
               "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
               IN_PROGRESS
               "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-              "Task sent back for revision — TDD integrity issues."
-
+              "Task sent back for revision — acceptance, quality, or TDD issues not met."

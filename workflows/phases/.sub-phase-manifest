@@ -1,0 +1,9 @@
+# Sub-phase manifest for build-workflow.sh
+# One sub-phase file per line, in execution order.
+# If this file exists, build-workflow.sh uses it instead of glob discovery.
+# Lines starting with # are comments and are ignored.
+
+05-implement-02-core.yml
+05-implement-03-gates.yml
+05-implement-04-retro.yml
+05-implement-05-traceability.yml

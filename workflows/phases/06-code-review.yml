@@ -1,20 +1,44 @@
 # ── PHASE 6: CODE REVIEW ────────────────────────────────────────
-# Adversarial hardening + bounded code review loop.
+# Adversarial hardening (split into data integrity + resilience)
+# + bounded code review loop.
+#
+# Fix (Issue 8): Split 4 catastrophic scenarios into two focused steps
+# to reduce LLM context overload in a single prompt.
 
 steps:
 
-  - id: cr_adversarial
+  # ── Data integrity scenarios ────────────────────────────────────
+  - id: cr_data_integrity
     command: speckit.code-review
     integration: claude
     input:
       args: >
-        Run the catastrophic scenario hardening review:
+        Run data integrity catastrophic scenario hardening review:
         Read plan.md §15 highest_risk_paths.
-        For each path, simulate: database drop mid-transaction, idempotency key
-        eviction, client retry storm (5x in 100ms), downstream 503 halfway through.
-        Verify or fix: ACID compliance, idempotency, exponential backoff with jitter,
-        graceful degradation.
-        Write findings to .artifacts/hardening-report.md.
+        For each path, simulate:
+          1. Database drop mid-transaction — verify ACID compliance,
+             transaction rollback behavior, and data consistency.
+          2. Idempotency key eviction — verify that retrying a completed
+             operation does not cause duplicate side effects.
+        Verify or fix: ACID compliance, idempotency guarantees.
+        Write findings to .artifacts/hardening-report-data.md.
+
+  # ── Resilience scenarios ────────────────────────────────────────
+  - id: cr_resilience
+    command: speckit.code-review
+    integration: claude
+    input:
+      args: >
+        Run resilience catastrophic scenario hardening review:
+        Read plan.md §15 highest_risk_paths.
+        For each path, simulate:
+          1. Client retry storm (5x in 100ms) — verify exponential
+             backoff with jitter, rate limiting, and circuit breaker behavior.
+          2. Downstream 503 halfway through a request — verify graceful
+             degradation, partial failure handling, and user-facing error messages.
+        Verify or fix: exponential backoff with jitter, graceful degradation,
+        circuit breaker patterns.
+        Write findings to .artifacts/hardening-report-resilience.md.
 
   - id: cr_backup
     type: shell

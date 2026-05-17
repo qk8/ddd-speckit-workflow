@@ -31,8 +31,10 @@ TMP_BUILD=""
 
 MERGE_PRESET_DIR=""
 MERGE_PRESET_NEXT=false
+MANIFEST=""
+MANIFEST_NEXT=false
 
-# Parse arguments: positional args for orchestrator/output, --validate flag, --merge-preset <dir>
+# Parse arguments: positional args for orchestrator/output, --validate, --merge-preset, --manifest
 POS_ARGS=()
 for arg in "$@"; do
   if [ "$MERGE_PRESET_NEXT" = true ]; then
@@ -40,10 +42,18 @@ for arg in "$@"; do
     MERGE_PRESET_NEXT=false
     continue
   fi
+  if [ "$MANIFEST_NEXT" = true ]; then
+    MANIFEST="$arg"
+    MANIFEST_NEXT=false
+    continue
+  fi
   case "$arg" in
     --validate) VALIDATE="--validate" ;;
     --merge-preset)
       MERGE_PRESET_NEXT=true
+      ;;
+    --manifest)
+      MANIFEST_NEXT=true
       ;;
     *) POS_ARGS+=("$arg") ;;
   esac
@@ -51,6 +61,14 @@ done
 
 ORCHESTRATOR="${POS_ARGS[0]:-ddd-workflow.yml}"
 OUTPUT="${POS_ARGS[1]:-/dev/stdout}"
+
+# Issue 10: Auto-detect manifest in standard location if not specified
+if [ -z "$MANIFEST" ]; then
+  MANIFEST="workflows/phases/.sub-phase-manifest"
+  if [ ! -f "$MANIFEST" ]; then
+    MANIFEST=""
+  fi
+fi
 
 # Use a temp file for the build output to avoid /dev/stdout hang
 # when stdout is redirected (wc -l and grep hang reading from /dev/stdout)
@@ -120,17 +138,34 @@ extract_steps() {
     # Process main phase file
     extract_steps "$phase_file"
 
-    # Discover and process sub-phase files (NN-name-*.yml, excluding main)
+    # Discover and process sub-phase files
     PHASE_DIR=$(dirname "$phase_file")
     PHASE_BASE=$(basename "$phase_file")
     PHASE_PREFIX="${PHASE_BASE%.yml}"
-    # Match files like NN-name-sub.yml (prefix followed by -, at least one sub-char, then .yml)
-    for sub_file in "$PHASE_DIR"/${PHASE_PREFIX}-*.yml; do
-      [ -f "$sub_file" ] || continue
-      # Skip the main phase file itself
-      [ "$(basename "$sub_file")" = "$PHASE_BASE" ] && continue
-      extract_steps "$sub_file"
-    done
+
+    # Issue 10: Use manifest if provided, otherwise fall back to glob discovery
+    if [ -n "$MANIFEST" ] && [ -f "$MANIFEST" ]; then
+      # Use manifest: one sub-phase file per line, in execution order
+      while IFS= read -r sub_name; do
+        # Skip comments and empty lines
+        [[ "$sub_name" =~ ^#.*$ ]] && continue
+        [ -z "$sub_name" ] && continue
+        sub_file="$PHASE_DIR/$sub_name"
+        [ -f "$sub_file" ] || continue
+        [ "$sub_name" = "$PHASE_BASE" ] && continue
+        extract_steps "$sub_file"
+      done < "$MANIFEST"
+    else
+      # Fallback: glob discovery (with warning)
+      echo "WARNING: No manifest specified — using glob discovery for sub-phases. " \
+        "Create workflows/phases/.sub-phase-manifest for explicit control." >&2
+      for sub_file in "$PHASE_DIR"/${PHASE_PREFIX}-*.yml; do
+        [ -f "$sub_file" ] || continue
+        # Skip the main phase file itself
+        [ "$(basename "$sub_file")" = "$PHASE_BASE" ] && continue
+        extract_steps "$sub_file"
+      done
+    fi
 
     # Add a comment separator between phases
     echo ""

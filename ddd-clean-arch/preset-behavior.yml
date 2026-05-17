@@ -3,7 +3,8 @@
 # require human review because deterministic checks alone cannot verify
 # behavioral correctness (acceptance criteria are semantic).
 auto_approve:
-  enabled: true
+  enabled: false
+  # Enable only for projects where deterministic checks fully cover acceptance criteria.
   # When enabled, deterministic gates auto-approve when all checks pass.
   # Safety-critical gates (stagnation, crash recovery) always require human review.
   non_auto_approvable:

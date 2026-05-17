@@ -4,7 +4,7 @@
 # Cross-references git diff against tasks.md Scope.Creates/Modifies
 # and other tasks' scope to detect scope creep.
 #
-# Usage: scope-guard.sh <feature_dir> [task_id] [--enforce]
+# Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--monorepo <config_path>]
 #
 # Output: SCOPE=WITHIN_SCOPE|MINOR_VIOLATION|MAJOR_VIOLATION
 #         VIOLATION-1=...
@@ -16,17 +16,42 @@
 #
 # --enforce: exit non-zero on violations (MAJOR→2, MINOR→1).
 #            Without --enforce, always exits 0 (advisory only).
+# --monorepo <config_path>: path to a YAML/JSON config listing shared directories.
+#                           Files in shared dirs are marked SHARED instead of UNOWNED.
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id] [--enforce]}"
+FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--monorepo <config>]}"
 TASK_ID="${2:-}"
 ENFORCE="${3:-}"
+MONOREPO_CONFIG="${4:-}"
 
-# Parse remaining args for --enforce
+# Parse remaining args for --enforce and --monorepo
 for arg in "$@"; do
   [ "$arg" = "--enforce" ] && ENFORCE="true"
 done
+
+# ── Load monorepo shared directories ──────────────────────────────
+declare -A shared_dirs
+if [ -n "$MONOREPO_CONFIG" ] && [ -f "$MONOREPO_CONFIG" ]; then
+  # Support YAML (list under 'shared_directories') or JSON
+  if command -v jq &>/dev/null; then
+    while IFS= read -v dir; do
+      [ -z "$dir" ] && continue
+      shared_dirs["$dir"]=1
+    done < <(jq -r '.shared_directories[]? // empty' "$MONOREPO_CONFIG" 2>/dev/null || true)
+  fi
+fi
+
+is_shared_path() {
+  local path="$1"
+  for dir in "${!shared_dirs[@]}"; do
+    case "$path" in
+      "$dir"/*|"$dir") return 0 ;;
+    esac
+  done
+  return 1
+}
 
 if [ ! -f "$FEATURE_DIR/tasks.md" ]; then
   echo "SCOPE=WITHIN_SCOPE"
@@ -134,6 +159,12 @@ while IFS= read -v fpath; do
 
   # Skip non-code files and artifacts
   if echo "$fpath" | grep -qE '^\.artifacts/|^\.git/|\.bak$|\.log$|\.tmp$'; then
+    continue
+  fi
+
+  # Issue 12: Skip shared directories in monorepo mode
+  if [ ${#shared_dirs[@]} -gt 0 ] && is_shared_path "$fpath"; then
+    echo "SHARED: $fpath (in shared directory, skipped)"
     continue
   fi
 

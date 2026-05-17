@@ -3,6 +3,9 @@
 # Prefers state.json (unified state engine), then .workflow-state.json,
 # then .tasks-state.json (legacy JSON), then check-tasks.sh output.
 #
+# 5 fallback levels exist for backward compatibility with legacy flat-file
+# state formats. These will be consolidated in a future cleanup sprint.
+#
 # If all fail, outputs TASKS_PARSE_ERROR=1 so the workflow can detect
 # the condition instead of silently proceeding with wrong state.
 #

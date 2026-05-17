@@ -40,3 +40,23 @@ Each section is tagged with a priority level:
                     §13 e2e_tests (medium)
   e2e             → §13 e2e_tests (high),
                     §8 all endpoints (high)
+
+## Truncation Protocol (Issue 9)
+When a medium-priority section is truncated to 200 lines, the context generator
+MUST append the following marker at the truncation point:
+
+  [TRUNCATED: N lines elided — re-read with --full flag]
+
+Where N is the number of lines omitted. This marker signals to the LLM that
+context is incomplete, allowing it to request a full re-read if critical
+information appears to be missing.
+
+When a low-priority section is elided entirely, replace its content with:
+
+  [SECTION ELIDED: low priority, excluded due to context budget constraints]
+
+### How to Re-read Truncated Sections
+If the LLM detects that a truncated section contains information it needs:
+1. Print: "Context truncated — requesting full re-read of [section name]"
+2. Re-read the section from plan.md without truncation
+3. Note: "[Re-read full: [section name]]" at the top of the re-read content
