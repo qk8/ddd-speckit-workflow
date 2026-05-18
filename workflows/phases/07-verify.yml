@@ -61,13 +61,29 @@ steps:
       bash scripts/requirement-validate.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
+  - id: vf_spec_code_delta
+    type: prompt
+    command: speckit.verify
+    integration: claude
+    input:
+      args: >
+        Produce a spec-code delta report.
+        Compare plan.md and tasks.md against the actual codebase.
+        List any remaining discrepancies not caught by the full verify.
+        Write summary to .artifacts/spec-code-delta.md.
+        Print: "SPEC-CODE DELTA: CLEAN (no remaining discrepancies)"
+        or "SPEC-CODE DELTA: [N] remaining issues found"
+
   - id: vf_review_final
     type: gate
     message: |
-      Review the final verify report and requirement validation.
+      Review the final verify report, requirement validation, and spec-code delta.
 
       **Requirement Validation:** Check .artifacts/requirement-validation.md
       for any requirements with no corresponding implementation evidence.
+
+      **Spec-Code Delta:** Check .artifacts/spec-code-delta.md for remaining
+      discrepancies between plan.md/tasks.md and the actual codebase.
 
       CLEAN → spec and code are fully aligned. All requirements have evidence.
       Ready to merge.
@@ -90,19 +106,6 @@ steps:
         command: >
           bash scripts/record-phase-revision.sh fix_needed_round 1
       - goto: fix_needed_round
-
-  - id: vf_spec_code_delta
-    type: prompt
-    command: speckit.verify
-    integration: claude
-    input:
-      args: >
-        Produce a spec-code delta report.
-        Compare plan.md and tasks.md against the actual codebase.
-        List any remaining discrepancies not caught by the full verify.
-        Write summary to .artifacts/spec-code-delta.md.
-        Print: "SPEC-CODE DELTA: CLEAN (no remaining discrepancies)"
-        or "SPEC-CODE DELTA: [N] remaining issues found"
 
   - id: vf_backup_fix_needed
     type: shell
@@ -226,3 +229,45 @@ steps:
             continue_on_error: true
           - goto: impl_loop
         on_abort: abort
+
+  # ── Post-loop gate: ensures exhausted iterations don't silently proceed ──
+  - id: vf_fix_needed_post_loop
+    type: gate
+    message: |
+      ━━ FIX-NEEDED LOOP COMPLETE ━━
+
+      {%- if steps.fix_needed_round_iteration.output.count | int >= 5 %}
+      **Note**: Max iterations (5) reached. Remaining drift issues were not resolved.
+      {%- endif %}
+
+      Review the final state:
+
+      [ ] .artifacts/spec-code-delta.md reviewed
+      [ ] .artifacts/requirement-validation.md reviewed
+      [ ] No unresolved drift items remain
+
+      [approved-clean] — All issues resolved. Ready to merge.
+      [fix-needed] — Add more fix tasks and retry (reset cycle count).
+      [abort] — Cancel for manual review of spec vs implementation mismatch.
+    options: [approved-clean, fix-needed, abort]
+    on_approved-clean:
+      - id: vf_fix_reset_final
+        type: shell
+        command: >
+          bash scripts/state-engine.sh fix-cycles-reset
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+    on_fix-needed:
+      - id: vf_fix_retry_reset
+        type: shell
+        command: >
+          bash scripts/state-engine.sh fix-cycles-reset
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+      - goto: fix_needed_round
+    on_abort:
+      - id: vf_fix_abort_cleanup
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "fix_needed_post_loop"
+      - goto: abort

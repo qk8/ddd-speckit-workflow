@@ -244,7 +244,6 @@ steps:
       bash scripts/scope-guard.sh --enforce
       "{{ steps.impl_check_remaining.output.feature_dir }}"
       "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-    continue_on_error: true
 
   - id: impl_context_compact
     type: if

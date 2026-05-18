@@ -48,8 +48,8 @@ steps:
 
   - id: cr_round
     type: while
-    condition: "true"
-    max_iterations: 3
+    condition: >
+      {{ steps.cr_round_iteration.output.count || 1 }} <= 3
     steps:
       - id: cr_review
         command: speckit.code-review
@@ -120,3 +120,33 @@ steps:
               "$(bash scripts/find-first-feature.sh)"
               "code_review"
           - goto: abort
+
+  # ── Post-loop gate: ensures exhausted iterations don't silently proceed ──
+  - id: cr_post_loop_gate
+    type: gate
+    message: |
+      ━━ CODE REVIEW COMPLETE ━━
+
+      Review the final state of the code review.
+
+      {%- if steps.cr_round_iteration.output.count | int >= 3 %}
+      **Note**: Max iterations (3) reached. Not all items may have been addressed.
+      {%- endif %}
+
+      [ ] REVIEW_REPORT.md produced and reviewed
+      [ ] Hardening reports present:
+          - .artifacts/hardening-report-data.md
+          - .artifacts/hardening-report-resilience.md
+      [ ] No unresolved FAIL items remain
+
+      Approve to continue to final verify.
+      Abort to cancel for manual review of remaining issues.
+    options: [approve, abort]
+    on_abort:
+      - id: cr_post_abort
+        type: shell
+        command: >
+          bash scripts/cleanup-abandoned-state.sh
+          "$(bash scripts/find-first-feature.sh)"
+          "code_review_post_loop"
+      - goto: abort

@@ -7,7 +7,10 @@
 #   05-implement-04-retro.yml      — Retrospective + drift detection
 #   05-implement-05-traceability.yml — Periodic traceability re-check
 # Condition: has_todo == true.
-# max_iterations: hard cap of 100. Stagnation gate catches real problems after ~5-15 no-progress iterations.
+# max_iterations: hard cap of 100.
+# Derivation: ~10 tasks per batch * ~8 iterations for checks/gates per batch + 20 safety margin.
+# Adjust if total_tasks * (avg_checks_per_batch + 1) approaches this cap.
+# The stagnation gate (line 208) catches real problems after ~5-15 no-progress iterations.
 # Revision exhaustion is handled by check-task-revisions.sh in the core sub-phase.
 
 steps:
