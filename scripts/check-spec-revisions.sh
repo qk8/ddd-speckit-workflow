@@ -10,7 +10,7 @@
 #   SPEC_REVISION_OK=true|false
 #   SPEC_REVISION_EXHAUSTED=true|false
 #
-# Creates: .spec_revision_count (atomic writes via flock)
+# Delegates to spec-revision-counter.sh for unified tracking via state.json.
 #
 # Default max revisions: sourced from revision-limits.sh (default: 3).
 # Spec revisions are more disruptive than task revisions — they reset completed tasks.
@@ -51,78 +51,61 @@ if [ -z "$FEATURE_DIR" ]; then
   exit 0
 fi
 
-# Source central revision limits (default: 3, overrides via env var supported)
-source "$SCRIPTS_DIR/revision-limits.sh"
-# MAX_SPEC_REVISIONS now comes from revision-limits.sh
+# Delegate to unified spec-revision-counter.sh
+if [ "$DRY_RUN" = true ]; then
+  # Read-only mode: just check current state
+  OUTPUT=$(bash "$SCRIPTS_DIR/spec-revision-counter.sh" "$FEATURE_DIR" read 2>/dev/null || echo "SPEC_REVISIONS=0
+OK=true
+EXHAUSTED=false")
+  SPEC_REV=$(echo "$OUTPUT" | grep '^REVISIONS=' | cut -d= -f2)
+  OK=$(echo "$OUTPUT" | grep '^OK=' | cut -d= -f2)
+  EXHAUSTED=$(echo "$OUTPUT" | grep '^EXHAUSTED=' | cut -d= -f2)
+  CASCADE_EXHAUSTED=$(echo "$OUTPUT" | grep '^CASCADE_EXHAUSTED=' | cut -d= -f2 || echo "false")
 
-COUNT_FILE="$FEATURE_DIR/.spec_revision_count"
-CASCADE_FILE="$FEATURE_DIR/.spec_revision_cascade"
-LOCK_FILE="$COUNT_FILE.lock"
-mkdir -p "$FEATURE_DIR"
-
-# Use flock for mutual exclusion around the counter cycle
-exec 200>"$LOCK_FILE"
-flock -x 200
-
-# Read current count (default 0)
-CURRENT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
-case "$CURRENT" in
-  ''|*[!0-9]*) CURRENT=0 ;;
-esac
-
-# Output current state
-echo "SPEC_REVISIONS=$CURRENT"
-echo "SPEC_REVISION_OK=true"
-echo "SPEC_REVISION_EXHAUSTED=false"
-
-# Cascade tracking: spec revision creates new tasks which can also be revised.
-# Prevents compound infinite loops (spec revision → new tasks → more revisions).
-CASCADE_COUNT=0
-if [ -f "$CASCADE_FILE" ]; then
-  CASCADE_COUNT=$(cat "$CASCADE_FILE" 2>/dev/null || echo 0)
-  case "$CASCADE_COUNT" in ''|*[!0-9]*) CASCADE_COUNT=0 ;; esac
+  echo "SPEC_REVISIONS=${SPEC_REV}"
+  if [ "$OK" = "true" ]; then
+    echo "SPEC_REVISION_OK=true"
+    echo "SPEC_REVISION_EXHAUSTED=false"
+  else
+    echo "SPEC_REVISION_OK=false"
+    echo "SPEC_REVISION_EXHAUSTED=true"
+  fi
+  if [ "$CASCADE_EXHAUSTED" = "true" ]; then
+    echo "CASCADE_EXHAUSTED=true"
+    echo "Spec revision cascade limit reached. No further revisions." >&2
+    check_write_result "$FEATURE_DIR" "spec_revisions" "FAIL" "Cascade limit reached"
+    exit 1
+  fi
+  check_write_result "$FEATURE_DIR" "spec_revisions" "PASS"
+  exit 0
 fi
 
-if [ "$CASCADE_COUNT" -ge "$MAX_SPEC_REVISIONS" ]; then
+# Increment mode: delegate to spec-revision-counter.sh
+OUTPUT=$(bash "$SCRIPTS_DIR/spec-revision-counter.sh" "$FEATURE_DIR" increment 2>/dev/null || true)
+SPEC_REV=$(echo "$OUTPUT" | grep '^REVISIONS=' | cut -d= -f2)
+OK=$(echo "$OUTPUT" | grep '^OK=' | cut -d= -f2)
+EXHAUSTED=$(echo "$OUTPUT" | grep '^EXHAUSTED=' | cut -d= -f2)
+CASCADE_EXHAUSTED=$(echo "$OUTPUT" | grep '^CASCADE_EXHAUSTED=' | cut -d= -f2 || echo "false")
+
+echo "SPEC_REVISIONS=${SPEC_REV}"
+if [ "$OK" = "true" ]; then
+  echo "SPEC_REVISION_OK=true"
+  echo "SPEC_REVISION_EXHAUSTED=false"
+else
   echo "SPEC_REVISION_OK=false"
   echo "SPEC_REVISION_EXHAUSTED=true"
+fi
+if [ "${CASCADE_INCREMENT:-0}" = "1" ]; then
+  CAS_OUT=$(bash "$SCRIPTS_DIR/spec-revision-counter.sh" "$FEATURE_DIR" increment --cascade 2>/dev/null || true)
+  CAS_REV=$(echo "$CAS_OUT" | grep '^CASCADE=' | cut -d= -f2)
+  echo "CASCADE_ROUND=${CAS_REV}"
+fi
+if [ "$CASCADE_EXHAUSTED" = "true" ]; then
   echo "CASCADE_EXHAUSTED=true"
-  echo "Spec revision cascade limit reached ($CASCADE_COUNT rounds). No further revisions." >&2
-  flock -u 200
+  echo "Spec revision cascade limit reached. No further revisions." >&2
   check_write_result "$FEATURE_DIR" "spec_revisions" "FAIL" "Cascade limit reached"
   exit 1
 fi
 
-# Check if limit is reached
-if [ "$CURRENT" -ge "$MAX_SPEC_REVISIONS" ]; then
-  echo "SPEC_REVISION_OK=false"
-  echo "SPEC_REVISION_EXHAUSTED=true"
-  echo "Spec has been revised $CURRENT times (max $MAX_SPEC_REVISIONS). Aborting revision loop." >&2
-  flock -u 200
-  check_write_result "$FEATURE_DIR" "spec_revisions" "FAIL" "Exceeded $MAX_SPEC_REVISIONS revisions"
-  exit 1
-fi
-
-# Increment atomically: write to count file (skip in dry-run mode)
-if [ "$DRY_RUN" = false ]; then
-  TMPFILE=$(mktemp)
-  echo "$((CURRENT + 1))" > "$TMPFILE"
-  mv "$TMPFILE" "$COUNT_FILE"
-  echo "SPEC_REVISIONS=$((CURRENT + 1))"
-
-  # Cascade: increment when spec revision creates new tasks.
-  # The orchestrator (05-implement.yml) should call this with CASCADE=1
-  # when a spec revision adds new tasks to tasks.md.
-  if [ "${CASCADE_INCREMENT:-0}" = "1" ]; then
-    CASCTMP=$(mktemp)
-    echo "$((CASCADE_COUNT + 1))" > "$CASCTMP"
-    mv "$CASCTMP" "$CASCADE_FILE"
-    echo "CASCADE_ROUND=$((CASCADE_COUNT + 1))"
-  fi
-else
-  echo "SPEC_REVISIONS=$CURRENT"
-fi
-
-flock -u 200
 check_write_result "$FEATURE_DIR" "spec_revisions" "PASS"
 exit 0

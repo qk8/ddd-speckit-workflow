@@ -394,7 +394,7 @@ do_spec_increment() {
   local tmp
   tmp=$(mktemp "${STATE_FILE}.XXXXXX")
   jq --arg ts "$(now_utc)" \
-    '.spec.version = (.spec.version + 1) | .spec.last_revision_at = $ts | .metadata.updated_at = $ts' \
+    '.spec.version = (.spec.version + 1) | .spec.last_revision_at = $ts | .revisions.spec_total = ((.revisions.spec_total // 0) + 1) | .metadata.updated_at = $ts' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
   echo "SPEC: version incremented to $(jq -r '.spec.version' "$STATE_FILE")"
   state_lock_release

@@ -77,6 +77,32 @@ steps:
           {{ steps.impl_check_remaining.output.todo_task_type == 'spec_revision' }} and
           {{ steps.impl_check_spec_revision_limit.output.SPEC_REVISION_EXHAUSTED != 'true' }}
         then:
+          - id: impl_run_spec_delta
+            type: prompt
+            command: speckit.spec-delta
+            integration: claude
+            input:
+              args: >
+                Produce a spec delta report for the current feature.
+                Run spec-diff-check.sh --check to detect unauthorized changes.
+                Write the report to .artifacts/spec-delta.md.
+          - id: impl_check_delta_recommendation
+            type: if
+            condition: >
+              {{ steps.impl_run_spec_delta.output.recommendation | default '' }} contains 'fix-spec'
+            then:
+              - id: impl_run_spec_fix
+                type: prompt
+                command: speckit.spec-fix
+                integration: claude
+                input:
+                  args: >
+                    Read .artifacts/spec-delta.md.
+                    For each UNAUTHORIZED change where code is correct,
+                    create fix-spec tasks: update plan.md and spec.md sections,
+                    reset affected DONE tasks to TODO,
+                    log authorized changes via spec-authorized-changes.sh,
+                    and reset cascade counters via spec-revision-counter.sh reset --cascade.
           - id: impl_run_spec_revise
             type: prompt
             command: speckit.spec-revise

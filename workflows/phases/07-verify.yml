@@ -172,6 +172,26 @@ steps:
                 command: >
                   bash scripts/state-engine.sh fix-cycles-reset
                   "{{ steps.impl_check_remaining.output.feature_dir }}"
+              - id: vf_run_spec_delta
+                command: speckit.spec-delta
+                integration: claude
+                input:
+                  args: >
+                    Produce a spec delta report for the current feature.
+                    The fix-needed loop has been exceeded 3 times.
+                    Detect unauthorized spec changes, analyze cascade impact,
+                    and write report to .artifacts/spec-delta.md.
+              - id: vf_run_spec_fix
+                command: speckit.spec-fix
+                integration: claude
+                input:
+                  args: >
+                    Read .artifacts/spec-delta.md.
+                    For each UNAUTHORIZED change where code is correct,
+                    create fix-spec tasks: update plan.md and spec.md sections,
+                    reset affected DONE tasks to TODO,
+                    log authorized changes via spec-authorized-changes.sh,
+                    and reset cascade counters via spec-revision-counter.sh reset --cascade.
               - id: vf_run_spec_revise
                 command: speckit.spec-revise
                 integration: claude
