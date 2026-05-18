@@ -50,7 +50,7 @@ fi
 
 if [ -z "$REGRESSION_CMD" ]; then
   echo "REGRESSION_BASELINE: No regression command found in plan.md §13"
-  echo "REGRESSION_BASELINE: Skipping — no test runner detected."
+  echo "REGRESSION_BASELINE: ERROR — no test runner detected."
   cat > "$BASELINE_FILE" <<'EOF'
 {
   "status": "SKIPPED",
@@ -63,7 +63,9 @@ if [ -z "$REGRESSION_CMD" ]; then
   "skipped": 0
 }
 EOF
-  exit 0
+  echo "REGRESSION_BASELINE: ABORT — regression testing cannot run without a test command."
+  echo "REGRESSION_BASELINE: Add regression_command to plan.md §13, or install a test runner."
+  exit 1
 fi
 
 echo "REGRESSION_BASELINE: Running full regression suite"

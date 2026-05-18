@@ -157,6 +157,39 @@ if [ "$DRY_RUN" = true ]; then
   exit 0
 fi
 
+# ── File-level locking for parallel tasks ─────────────────────────
+# Prevents two tasks in the same batch from writing the same file.
+# Each task claims files it creates/modifies; other tasks in the
+# same level wait or fail if they try to write a claimed file.
+claim_file() {
+  local task_id="$1" filepath="$2"
+  local lock_dir="$ARTIFACTS_DIR/.file-locks"
+  local lock_file="$lock_dir/${filepath//\//_}"
+  mkdir -p "$lock_dir"
+
+  # Try to create the lock file atomically (mkdir is atomic on most fs)
+  if mkdir "$lock_file" 2>/dev/null; then
+    echo "$task_id" > "$lock_file/task"
+    return 0
+  else
+    local owner
+    owner=$(cat "$lock_file/task" 2>/dev/null || echo "unknown")
+    log "  CONFLICT: $filepath already claimed by $task_id (owned by $owner)"
+    return 1
+  fi
+}
+
+release_file() {
+  local task_id="$1" filepath="$2"
+  local lock_dir="$ARTIFACTS_DIR/.file-locks"
+  local lock_file="$lock_dir/${filepath//\//_}"
+  rm -rf "$lock_file" 2>/dev/null || true
+}
+
+cleanup_file_locks() {
+  rm -rf "$ARTIFACTS_DIR/.file-locks" 2>/dev/null || true
+}
+
 # ── Execute a single task (background function) ─────────────────
 execute_task() {
   local task_id="$1"
@@ -339,8 +372,9 @@ while IFS= read -r level_line; do
     fi
   done
 
-  # Clean up result markers
+  # Clean up result markers and file locks
   rm -f "$ARTIFACTS_DIR"/task_*.result 2>/dev/null || true
+  cleanup_file_locks
 
   # Run batch consistency check
   if [ "$LEVEL_FAILED" = false ]; then

@@ -107,7 +107,12 @@ else
   echo "=== LLM QUALITY METRICS ==="
   echo "Session quality score: $SCORE / 100 ($LABEL)"
   echo "Tasks: $COMPLETED_TASKS / $TOTAL_TASKS completed"
-  echo "Total revisions: $TOTAL_REVISIONS (avg: $TOTAL_TASKS; $(( TOTAL_REVISIONS * 100 / (TOTAL_TASKS > 0 ? TOTAL_TASKS : 1) ))% per task)"
+  if [ "$TOTAL_TASKS" -gt 0 ]; then
+    AVG_PCT=$(( TOTAL_REVISIONS * 100 / TOTAL_TASKS ))
+  else
+    AVG_PCT=0
+  fi
+  echo "Total revisions: $TOTAL_REVISIONS (avg: $TOTAL_TASKS; ${AVG_PCT}% per task)"
   echo "Max revisions on single task: $MAX_REVISIONS"
   echo "High-fatigue tasks (3+ revisions): $HIGH_FATIGUE_TASKS"
   echo ""

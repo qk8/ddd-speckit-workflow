@@ -107,7 +107,7 @@ has_assertion_near_keyword() {
     local window
     window=$(sed -n "${start},${end}p" "$tf" 2>/dev/null || true)
 
-    if echo "$window" | grep -qE 'expect\(|assert\(|assertEquals|assertTrue|assertEqual|toBe|toEqual|assertThat|Assertions\.|Assert\.' 2>/dev/null; then
+    if echo "$window" | grep -qE 'expect\(|assert\(|assertEquals|assertTrue|assertEqual|toBe|toEqual|assertThat|Assertions\.|Assert\.|self\.assert|unittest\.assert|require\.|t\.Error|t\.Fatalf|t\.Fatal|check\.Equals|assert\.Equal' 2>/dev/null; then
       return 0
     fi
   done

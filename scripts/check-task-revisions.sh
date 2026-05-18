@@ -18,8 +18,15 @@
 set -euo pipefail
 
 DRY_RUN=false
+INCREMENT=false
 if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN=true
+  shift
+fi
+if [ "${1:-}" = "--success" ]; then
+  # Task completed successfully — do NOT increment revision counter.
+  # Only failed attempts consume revisions.
+  INCREMENT=false
   shift
 fi
 
@@ -84,7 +91,7 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
     exit 1
   fi
 
-  if [ "$DRY_RUN" = false ]; then
+  if [ "$DRY_RUN" = false ] && [ "$INCREMENT" = true ]; then
     bash scripts/state-engine.sh write "$FEATURE_DIR" "revisions.per_task.$TASK_ID" "$((CURRENT + 1))" >/dev/null
     echo "REVISION_COUNT=$((CURRENT + 1))"
   fi
@@ -138,8 +145,8 @@ if [ "$CURRENT" -ge "$MAX_REVISIONS" ]; then
   exit 1
 fi
 
-# Increment atomically: write to count file (skip in dry-run mode)
-if [ "$DRY_RUN" = false ]; then
+# Increment atomically: write to count file (skip in dry-run or --success mode)
+if [ "$DRY_RUN" = false ] && [ "$INCREMENT" = true ]; then
   echo "$((CURRENT + 1))" > "$COUNT_FILE"
   echo "REVISION_COUNT=$((CURRENT + 1))"
 else

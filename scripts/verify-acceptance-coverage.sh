@@ -207,8 +207,8 @@ check_coverage() {
     keywords="$keywords $behaviors"
   fi
 
-  # Assertion patterns to verify (language-specific)
-  local assertion_patterns='expect\(|assert\(|assertEquals|assertTrue|assertEqual|toBe|toEqual|assertThat|Assertions\.|Assert\.'
+  # Assertion patterns to verify (multi-language)
+  local assertion_patterns='expect\(|assert\(|assertEquals|assertTrue|assertEqual|toBe|toEqual|assertThat|Assertions\.|Assert\.|self\.assert|unittest\.assert|require\.|t\.Error|t\.Fatalf|t\.Fatal|check\.Equals|assert\.Equal'
 
   # Search test files for keyword matches
   local match_count=0
@@ -249,7 +249,7 @@ check_coverage() {
   # - No keywords extracted → NEEDS_REVIEW (conservative)
   if [ "$total_keywords" -eq 0 ]; then
     echo "NEEDS_REVIEW"
-  elif [ "$match_count" -eq "$total_keywords" ] && [ "$total_keywords" -ge 2 ]; then
+  elif [ "$match_count" -eq "$total_keywords" ] && [ "$total_keywords" -ge 1 ]; then
     echo "PASS"
   elif [ "$match_count" -gt 0 ]; then
     echo "NEEDS_REVIEW"

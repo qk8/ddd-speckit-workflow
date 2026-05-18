@@ -46,7 +46,7 @@ if [ "$APPEND_MODE" = true ]; then
   echo "{\"timestamp\":\"$TIMESTAMP\",\"input_tokens\":$INPUT_TOKENS,\"output_tokens\":$OUTPUT_TOKENS,\"cache_creation\":$CACHE_CREATION,\"cache_read\":$CACHE_READ}" >> "$TOKEN_LOG"
 fi
 
-# ── Read token log ───────────────────────────────────────────────
+# ── Read token log (re-read after append to include new entry) ───
 TOTAL_INPUT=0
 TOTAL_OUTPUT=0
 TOTAL_CACHE_CREATION=0
@@ -92,9 +92,13 @@ case "$REMAINING_TASKS" in ''|*[!0-9]*) REMAINING_TASKS=0 ;; esac
 
 COMPLETED_TASKS=$((TOTAL_TASKS - REMAINING_TASKS))
 
-# Compute average tokens per completed task (or per session if no task count)
+# Compute average tokens per completed task (or per session if no task count yet)
 if [ "$COMPLETED_TASKS" -gt 0 ]; then
   AVG_PER_TASK=$((TOTAL_ALL / COMPLETED_TASKS))
+elif [ "$SESSION_COUNT" -gt 0 ]; then
+  # No completed tasks yet, but we have token data from sessions.
+  # Use per-session average as a fallback projection basis.
+  AVG_PER_TASK=$((TOTAL_ALL / SESSION_COUNT))
 else
   AVG_PER_TASK=0
 fi

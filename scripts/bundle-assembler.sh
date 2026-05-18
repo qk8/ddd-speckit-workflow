@@ -454,31 +454,68 @@ code-review)
 esac
 } > "${OUTPUT_FILE}.tmp"
 
-# Enforce hard total cap with section 16 protection.
-# Section 16 (architectural constraints) is critical for agent correctness.
+# Enforce hard total cap with critical-section protection.
+# Protected sections (must not be truncated):
+#   - §16 Constraints (architectural constraints)
+#   - Layer Rules (clean architecture enforcement)
+#   - Error Memory (learned corrections from past tasks)
 # If the bundle exceeds MAX_LINES, truncate lower-priority sections first
-# rather than cutting section 16 mid-content.
+# rather than cutting protected sections mid-content.
 if [ "$(wc -l < "${OUTPUT_FILE}.tmp" | xargs)" -gt "$MAX_LINES" ]; then
   # Section 16 is always at the end of the implement block (after line ~300).
   # Strategy: keep the last MAX_LINES lines, which preserves section 16
   # and everything after it. Drop the earliest (least critical) content first.
   head -n "$MAX_LINES" "${OUTPUT_FILE}.tmp" > "${OUTPUT_FILE}.tmp2"
 
-  # Verify section 16 is preserved. If it was truncated, restore it.
+  # Verify all protected sections are preserved.
+  local needs_fix=false
   if ! grep -q '§16' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
-    # Section 16 was cut — re-append it from the original
-    s16_start=$(grep -n '### §16 Constraints' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
-    if [ "$s16_start" -gt 0 ] 2>/dev/null; then
-      # Insert section 16 at the end of the truncated bundle
-      truncate_at=$((MAX_LINES - 3))
-      [ "$truncate_at" -lt 1 ] && truncate_at=1
-      head -n "$truncate_at" "${OUTPUT_FILE}.tmp" > "${OUTPUT_FILE}.tmp2"
-      echo "" >> "${OUTPUT_FILE}.tmp2"
-      sed -n "${s16_start},\$p" "${OUTPUT_FILE}.tmp" >> "${OUTPUT_FILE}.tmp2"
+    needs_fix=true
+  fi
+  if ! grep -q '## Layer Rules' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+    needs_fix=true
+  fi
+  if ! grep -q '## Error Memory' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+    needs_fix=true
+  fi
+
+  if [ "$needs_fix" = true ]; then
+    # Rebuild: keep first N lines, then re-append truncated protected sections
+    truncate_at=$((MAX_LINES - 3))
+    [ "$truncate_at" -lt 1 ] && truncate_at=1
+    head -n "$truncate_at" "${OUTPUT_FILE}.tmp" > "${OUTPUT_FILE}.tmp2"
+    echo "" >> "${OUTPUT_FILE}.tmp2"
+
+    # Re-append §16 if truncated
+    if ! grep -q '§16' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+      s16_start=$(grep -n '### §16 Constraints' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+      if [ "$s16_start" -gt 0 ] 2>/dev/null; then
+        sed -n "${s16_start},\$p" "${OUTPUT_FILE}.tmp" >> "${OUTPUT_FILE}.tmp2"
+        echo "" >> "${OUTPUT_FILE}.tmp2"
+      fi
+    fi
+
+    # Re-append Layer Rules if truncated
+    if ! grep -q '## Layer Rules' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+      lr_start=$(grep -n '## Layer Rules' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+      lr_end=$(grep -n '## Test Instructions' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+      if [ "$lr_start" -gt 0 ] 2>/dev/null && [ "$lr_end" -gt 0 ] 2>/dev/null; then
+        sed -n "${lr_start},${lr_end}p" "${OUTPUT_FILE}.tmp" >> "${OUTPUT_FILE}.tmp2"
+        echo "" >> "${OUTPUT_FILE}.tmp2"
+      fi
+    fi
+
+    # Re-append Error Memory if truncated
+    if ! grep -q '## Error Memory' "${OUTPUT_FILE}.tmp2" 2>/dev/null; then
+      em_start=$(grep -n '## Error Memory' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+      em_end=$(grep -n '## Previous Check Results' "${OUTPUT_FILE}.tmp" | head -1 | cut -d: -f1 || echo 0)
+      if [ "$em_start" -gt 0 ] 2>/dev/null && [ "$em_end" -gt 0 ] 2>/dev/null; then
+        sed -n "${em_start},${em_end}p" "${OUTPUT_FILE}.tmp" >> "${OUTPUT_FILE}.tmp2"
+        echo "" >> "${OUTPUT_FILE}.tmp2"
+      fi
     fi
   fi
 
-  echo "" >> "${OUTPUT_FILE}.tmp2"
   echo "--- (truncated — see original bundle for full content) ---" >> "${OUTPUT_FILE}.tmp2"
   mv "${OUTPUT_FILE}.tmp2" "${OUTPUT_FILE}.tmp"
 fi

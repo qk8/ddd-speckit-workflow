@@ -65,10 +65,14 @@ if [ -d "$CHECKPOINT_DIR" ]; then
   CP_COUNT=$(ls -1 "$CHECKPOINT_DIR" 2>/dev/null | wc -l || echo 0)
   if [ "$CP_COUNT" -gt "$KEEP_CHECKPOINTS" ]; then
     TO_REMOVE=$((CP_COUNT - KEEP_CHECKPOINTS))
-    ls -1 "$CHECKPOINT_DIR" 2>/dev/null | sort | head -n "$TO_REMOVE" | while read -r cp_dir; do
+    # Use a temp file to avoid subshell counter loss from pipe
+    local_tmp=$(mktemp)
+    ls -1 "$CHECKPOINT_DIR" 2>/dev/null | sort | head -n "$TO_REMOVE" > "$local_tmp"
+    while read -r cp_dir; do
       rm -rf "$CHECKPOINT_DIR/$cp_dir"
       PRUNED_CHECKPOINTS=$((PRUNED_CHECKPOINTS + 1))
-    done
+    done < "$local_tmp"
+    rm -f "$local_tmp"
   fi
 fi
 
@@ -80,10 +84,14 @@ if [ -d "$ERROR_MEM_DIR" ]; then
   EM_COUNT=$(ls -1 "$ERROR_MEM_DIR" 2>/dev/null | wc -l || echo 0)
   if [ "$EM_COUNT" -gt "$KEEP_ERROR_MEMORY" ]; then
     TO_REMOVE=$((EM_COUNT - KEEP_ERROR_MEMORY))
-    ls -1 "$ERROR_MEM_DIR" 2>/dev/null | sort | head -n "$TO_REMOVE" | while read -r em_file; do
+    # Use a temp file to avoid subshell counter loss from pipe
+    local_tmp=$(mktemp)
+    ls -1 "$ERROR_MEM_DIR" 2>/dev/null | sort | head -n "$TO_REMOVE" > "$local_tmp"
+    while read -r em_file; do
       rm -f "$ERROR_MEM_DIR/$em_file"
       PRUNED_MEMORY=$((PRUNED_MEMORY + 1))
-    done
+    done < "$local_tmp"
+    rm -f "$local_tmp"
   fi
 fi
 
