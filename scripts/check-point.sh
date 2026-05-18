@@ -85,6 +85,12 @@ if [ "$MODE" = "snapshot" ]; then
   FILE_COUNT=0
   MAX_SNAPSHOT_FILES=200
 
+  # Source from config if available
+  if [ -f "$SCRIPTS_DIR/../ddd-clean-arch/workflow-config.json" ]; then
+    val=$(bash "$SCRIPTS_DIR/workflow-config.sh" context.snapshot_max_files 2>/dev/null || echo "")
+    [ -n "$val" ] && MAX_SNAPSHOT_FILES="$val"
+  fi
+
   if [ -d "$ROOT_DIR" ]; then
     while IFS= read -r filepath; do
       [ "$FILE_COUNT" -ge "$MAX_SNAPSHOT_FILES" ] && break
@@ -99,7 +105,14 @@ if [ "$MODE" = "snapshot" ]; then
       [ -n "$FILE_LIST" ] && FILE_LIST="${FILE_LIST},"
       FILE_LIST="${FILE_LIST}\"${rel_path}\":\"${hash_val}\""
       FILE_COUNT=$((FILE_COUNT + 1))
-    done < <(find "$ROOT_DIR" -type f 2>/dev/null | head -500)
+    done < <(find "$ROOT_DIR" -type f 2>/dev/null | head "$FIND_HEAD_LIMIT")
+
+  # Source max files from config if available (for find limit)
+  FIND_HEAD_LIMIT=500
+  if [ -f "$SCRIPTS_DIR/../ddd-clean-arch/workflow-config.json" ]; then
+    val=$(bash "$SCRIPTS_DIR/workflow-config.sh" other.check_point_max_files 2>/dev/null || echo "")
+    [ -n "$val" ] && FIND_HEAD_LIMIT="$val"
+  fi
   fi
 
   SNAPSHOT_JSON="{\"task_id\":\"${TASK_ID}\",\"snapshot_at\":\"${TS}\",\"root_dir\":\"${ROOT_DIR}\",\"files\":{${FILE_LIST}},\"file_count\":${FILE_COUNT},\"git_diff_file\":\"${SNAP_GIT_FILE}\"}"

@@ -9,6 +9,8 @@ steps:
   - id: cl_round
     type: while
     condition: "true"
+    # max_iterations: 5 (source: ddd-clean-arch/workflow-config.json iteration_limits.clarify_round)
+
     max_iterations: 5
     steps:
       - id: cl_ask

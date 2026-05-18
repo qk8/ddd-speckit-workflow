@@ -14,6 +14,18 @@ FEATURE_DIR="${1:?Usage: track-context-budget.sh <feature_dir> [--json] [--limit
 JSON_OUTPUT=false
 LIMIT_TOKENS=128000  # Default: Claude 8K context (will be overridden by model)
 
+# Source config for default limit if --limit not explicitly provided
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
+if [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.default_limit_tokens 2>/dev/null || echo "")
+  if [ -n "$val" ]; then
+    LIMIT_TOKENS="$val"
+  fi
+fi
+
 shift
 while [ $# -gt 0 ]; do
   case "$1" in

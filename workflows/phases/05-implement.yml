@@ -19,6 +19,8 @@ steps:
     type: while
     condition: >
       {{ steps.impl_check_remaining.output.has_todo == 'true' }}
+    # max_iterations: 100 (source: ddd-clean-arch/workflow-config.json iteration_limits.implement_loop)
+
     max_iterations: 100
     steps:
 

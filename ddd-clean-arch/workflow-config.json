@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "description": "Source of truth for all workflow magic numbers",
+    "note_max_iterations": "YAML max_iterations fields cannot be interpolated at runtime. They must be kept in sync with iteration_limits.* manually. The build script (build-workflow.sh) will validate this in Phase 4.",
+    "access": "scripts/workflow-config.sh <dot.key> [--json]"
+  },
+  "iteration_limits": {
+    "implement_loop": 100,
+    "clarify_round": 5,
+    "tasks_phase": 5,
+    "spec_audit": 3,
+    "plan_review": 3,
+    "verify_fix_needed": 5,
+    "code_review_round": 3
+  },
+  "revision_thresholds": {
+    "clarify": 2,
+    "spec": 3,
+    "plan": 2,
+    "tasks": 3,
+    "implement": 2,
+    "design": 3,
+    "code_review": 2
+  },
+  "cadence": {
+    "cleanup_interval": 25,
+    "llm_quality_interval": 10,
+    "context_health_interval": 10,
+    "periodic_interval": 20,
+    "quantitative_interval": 5,
+    "retro_interval": { "simple": 15, "medium": 10, "complex": 5 },
+    "first_retro_threshold": 5,
+    "drift_check_interval": { "simple": 20, "medium": 15, "complex": 10 },
+    "traceability_check_interval": { "simple": 25, "medium": 20, "complex": 15 }
+  },
+  "stagnation": {
+    "total_abort_force": 3,
+    "revision_limit": 3,
+    "drift_revision_limit": 2
+  },
+  "token_budget": {
+    "cost_per_m_input": 5,
+    "cost_per_m_output": 30,
+    "critical_dollar": 80,
+    "warning_dollar": 50
+  },
+  "context": {
+    "default_limit_tokens": 128000,
+    "claude_md_limit": { "simple": 150, "medium": 200, "complex": 250 },
+    "reset_threshold": 15,
+    "artifact_size_mb": 500,
+    "correction_snapshot_warn": 50,
+    "snapshot_max_files": 200,
+    "keep_checkpoints": 5,
+    "keep_error_memory": 10,
+    "keep_patterns": 5,
+    "keep_decisions": 5
+  },
+  "dag": {
+    "max_parallel": 4,
+    "bundle_max_lines": 200
+  },
+  "other": {
+    "batch_correction_cap": 10,
+    "check_point_max_files": 500
+  }
+}

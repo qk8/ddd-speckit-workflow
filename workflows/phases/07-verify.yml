@@ -190,6 +190,8 @@ steps:
   - id: fix_needed_round
     type: while
     condition: "true"
+
+# max_iterations: 5 (source: ddd-clean-arch/workflow-config.json iteration_limits.verify_fix_needed)
     max_iterations: 5
     steps:
       - id: fix_needed_gate

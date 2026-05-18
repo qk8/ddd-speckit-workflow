@@ -43,6 +43,14 @@ while [ $# -gt 0 ]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
+# Default max-parallel from config (only if not overridden by --max-parallel flag)
+if [ "$MAX_PARALLEL" = "4" ] && [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" dag.max_parallel 2>/dev/null || echo "")
+  [ -n "$val" ] && MAX_PARALLEL="$val"
+fi
 STATE_FILE="$FEATURE_DIR/state.json"
 ARTIFACTS_DIR="$FEATURE_DIR/.artifacts"
 LOG_FILE="$ARTIFACTS_DIR/dag-execution.log"

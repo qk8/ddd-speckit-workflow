@@ -35,15 +35,30 @@ elif [ ! -f "$CLAUDE_MD" ]; then
   exit 0
 fi
 
-# Adaptive limit based on complexity
+# Adaptive limit based on complexity — sourced from ddd-clean-arch/workflow-config.json
 if [ "$ADAPTIVE" = true ] && [ -f "project-brief.md" ]; then
   COMPLEXITY=$(grep -E '^\s*Complexity:' project-brief.md 2>/dev/null | head -1 | sed 's/.*Complexity:\s*//' | tr -d '[:space:]' || echo "medium")
-  case "$COMPLEXITY" in
-    simple)  LIMIT=150 ;;
-    medium)  LIMIT=200 ;;
-    complex) LIMIT=250 ;;
-    *)       LIMIT=150 ;;  # default
-  esac
+
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+  CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
+  DEFAULT_LIMIT=150
+  if [ -f "$CONFIG" ]; then
+    case "$COMPLEXITY" in
+      simple)  LIMIT=$(bash "$SCRIPT_DIR/workflow-config.sh" context.claude_md_limit.simple 2>/dev/null || echo 150) ;;
+      medium)  LIMIT=$(bash "$SCRIPT_DIR/workflow-config.sh" context.claude_md_limit.medium 2>/dev/null || echo 200) ;;
+      complex) LIMIT=$(bash "$SCRIPT_DIR/workflow-config.sh" context.claude_md_limit.complex 2>/dev/null || echo 250) ;;
+      *)       LIMIT="$DEFAULT_LIMIT" ;;
+    esac
+  else
+    case "$COMPLEXITY" in
+      simple)  LIMIT=150 ;;
+      medium)  LIMIT=200 ;;
+      complex) LIMIT=250 ;;
+      *)       LIMIT=150 ;;
+    esac
+  fi
 fi
 
 LINES=$(wc -l < "$CLAUDE_MD" | xargs)

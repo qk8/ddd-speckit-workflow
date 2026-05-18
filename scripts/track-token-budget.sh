@@ -112,11 +112,19 @@ fi
 PROJECTED_TOTAL=$((TOTAL_ALL + PROJECTED_REMAINING))
 
 # ── Cost estimation (approximate Claude API pricing) ────────────
-# Claude Sonnet: $3/M input, $15/M output
-# Claude Opus: $15/M input, $75/M output
-# Using a conservative average: $5/M input, $30/M output
+# Source thresholds from ddd-clean-arch/workflow-config.json
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
 COST_PER_M_INPUT=5
 COST_PER_M_OUTPUT=30
+if [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" token_budget.cost_per_m_input 2>/dev/null || echo "")
+  [ -n "$val" ] && COST_PER_M_INPUT="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" token_budget.cost_per_m_output 2>/dev/null || echo "")
+  [ -n "$val" ] && COST_PER_M_OUTPUT="$val"
+fi
 
 INPUT_COST=$(echo "scale=2; $TOTAL_INPUT * $COST_PER_M_INPUT / 1000000" | bc 2>/dev/null || echo "0.00")
 OUTPUT_COST=$(echo "scale=2; $TOTAL_OUTPUT * $COST_PER_M_OUTPUT / 1000000" | bc 2>/dev/null || echo "0.00")
@@ -125,9 +133,14 @@ TOTAL_COST=$(echo "scale=2; $INPUT_COST + $OUTPUT_COST" | bc 2>/dev/null || echo
 PROJECTED_COST=$(echo "scale=2; $TOTAL_COST + ($PROJECTED_REMAINING * $COST_PER_M_OUTPUT / 1000000)" | bc 2>/dev/null || echo "0.00")
 
 # ── Risk level ───────────────────────────────────────────────────
-# Use percentage of $100 budget as a practical threshold
 CRITICAL_DOLLAR=80
 WARNING_DOLLAR=50
+if [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" token_budget.critical_dollar 2>/dev/null || echo "")
+  [ -n "$val" ] && CRITICAL_DOLLAR="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" token_budget.warning_dollar 2>/dev/null || echo "")
+  [ -n "$val" ] && WARNING_DOLLAR="$val"
+fi
 
 # Approximate dollar usage from total tokens (rough heuristic)
 DOLLAR_USAGE=$(echo "scale=0; ($TOTAL_INPUT + $TOTAL_OUTPUT * 5) * 30 / 1000000" | bc 2>/dev/null || echo 0)

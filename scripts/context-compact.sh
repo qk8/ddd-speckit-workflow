@@ -12,15 +12,37 @@
 set -euo pipefail
 
 FEATURE_DIR="${1:?Usage: context-compact.sh <feature_dir> [--keep-checkpoints N] [--keep-error-memory N]}"
-KEEP_CHECKPOINTS="${2:-5}"
-KEEP_ERROR_MEMORY="${3:-10}"
 
-# Parse optional args
+# Defaults — sourced from ddd-clean-arch/workflow-config.json
+KEEP_CHECKPOINTS=5
+KEEP_ERROR_MEMORY=10
+KEEP_PATTERNS=5
+KEEP_CORRECTIONS=10
+KEEP_DECISIONS=5
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
+if [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.keep_checkpoints 2>/dev/null || echo "")
+  [ -n "$val" ] && KEEP_CHECKPOINTS="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.keep_error_memory 2>/dev/null || echo "")
+  [ -n "$val" ] && KEEP_ERROR_MEMORY="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.keep_patterns 2>/dev/null || echo "")
+  [ -n "$val" ] && KEEP_PATTERNS="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.keep_error_memory 2>/dev/null || echo "")
+  [ -n "$val" ] && KEEP_CORRECTIONS="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.keep_decisions 2>/dev/null || echo "")
+  [ -n "$val" ] && KEEP_DECISIONS="$val"
+fi
+
+# Parse optional args (override config defaults)
 shift
 while [ $# -gt 0 ]; do
   case "$1" in
-    --keep-checkpoints) KEEP_CHECKPOINTS="${2:-5}"; shift 2 ;;
-    --keep-error-memory) KEEP_ERROR_MEMORY="${2:-10}"; shift 2 ;;
+    --keep-checkpoints) KEEP_CHECKPOINTS="${2:-$KEEP_CHECKPOINTS}"; shift 2 ;;
+    --keep-error-memory) KEEP_ERROR_MEMORY="${2:-$KEEP_ERROR_MEMORY}"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -52,9 +74,9 @@ if [ -d "$ARTIFACTS_DIR/error-memory" ]; then
   DECISION_COUNT=$(echo "$ALL_ENTRIES" | jq -r '[.[] | select(.type == "decision")] | length' 2>/dev/null || echo 0)
 
   # Keep only the last N of each type
-  PATTERNS=$(echo "$ALL_ENTRIES" | jq -c '[.[] | select(.type == "pattern")]' 2>/dev/null | jq -c 'if length > 5 then .[-5:] else . end' 2>/dev/null || echo "[]")
-  CORRECTIONS=$(echo "$ALL_ENTRIES" | jq -c '[.[] | select(.type == "correction")]' 2>/dev/null | jq -c 'if length > 10 then .[-10:] else . end' 2>/dev/null || echo "[]")
-  DECISIONS=$(echo "$ALL_ENTRIES" | jq -c '[.[] | select(.type == "decision")]' 2>/dev/null | jq -c 'if length > 5 then .[-5:] else . end' 2>/dev/null || echo "[]")
+  PATTERNS=$(echo "$ALL_ENTRIES" | jq -c --argjson keep "$KEEP_PATTERNS" '[.[] | select(.type == "pattern")]' 2>/dev/null | jq -c "if length > \$keep then .[-\$keep:] else . end" 2>/dev/null || echo "[]")
+  CORRECTIONS=$(echo "$ALL_ENTRIES" | jq -c --argjson keep "$KEEP_CORRECTIONS" '[.[] | select(.type == "correction")]' 2>/dev/null | jq -c "if length > \$keep then .[-\$keep:] else . end" 2>/dev/null || echo "[]")
+  DECISIONS=$(echo "$ALL_ENTRIES" | jq -c --argjson keep "$KEEP_DECISIONS" '[.[] | select(.type == "decision")]' 2>/dev/null | jq -c "if length > \$keep then .[-\$keep:] else . end" 2>/dev/null || echo "[]")
 fi
 
 # ── 2. Prune old checkpoint files ─────────────────────────────────

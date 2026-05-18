@@ -16,17 +16,37 @@ set -euo pipefail
 # Override defaults by setting the variable before sourcing:
 #   MAX_REVISIONS=5 source scripts/revision-limits.sh
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
 # ── Per-task revision limit ────────────────────────────────────────
-: "${MAX_REVISIONS:=3}"
+if [ -f "$CONFIG" ]; then
+  : "${MAX_REVISIONS:=$(bash "$SCRIPT_DIR/workflow-config.sh" revision_thresholds.tasks 2>/dev/null || echo 3)}"
+else
+  : "${MAX_REVISIONS:=3}"
+fi
 
 # ── Drift revision limit (per retro cycle, global) ────────────────
-: "${MAX_DRIFT_REVISIONS:=2}"
+if [ -f "$CONFIG" ]; then
+  : "${MAX_DRIFT_REVISIONS:=$(bash "$SCRIPT_DIR/workflow-config.sh" stagnation.drift_revision_limit 2>/dev/null || echo 2)}"
+else
+  : "${MAX_DRIFT_REVISIONS:=2}"
+fi
 
 # ── Spec revision limit (global) ──────────────────────────────────
-: "${MAX_SPEC_REVISIONS:=3}"
+if [ -f "$CONFIG" ]; then
+  : "${MAX_SPEC_REVISIONS:=$(bash "$SCRIPT_DIR/workflow-config.sh" revision_thresholds.spec 2>/dev/null || echo 3)}"
+else
+  : "${MAX_SPEC_REVISIONS:=3}"
+fi
 
 # ── Global correction cap per task ────────────────────────────────
-: "${GLOBAL_CORRECTION_CAP:=10}"
+if [ -f "$CONFIG" ]; then
+  : "${GLOBAL_CORRECTION_CAP:=$(bash "$SCRIPT_DIR/workflow-config.sh" other.batch_correction_cap 2>/dev/null || echo 10)}"
+else
+  : "${GLOBAL_CORRECTION_CAP:=10}"
+fi
 
 # ── Adaptive stagnation threshold ─────────────────────────────────
 # Must be called after TOTAL_TASKS is set.

@@ -24,6 +24,8 @@ steps:
   - id: sp_audit_round
     type: while
     condition: "true"
+
+# max_iterations: 3 (source: ddd-clean-arch/workflow-config.json iteration_limits.spec_audit)
     max_iterations: 3
     steps:
       - id: sp_audit

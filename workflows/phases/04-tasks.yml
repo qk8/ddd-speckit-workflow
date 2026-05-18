@@ -17,6 +17,8 @@ steps:
   - id: ts_phase
     type: while
     condition: "true"
+
+# max_iterations: 5 (source: ddd-clean-arch/workflow-config.json iteration_limits.tasks_phase)
     max_iterations: 5
     steps:
 

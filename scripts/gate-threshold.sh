@@ -4,19 +4,24 @@ set -euo pipefail
 # Returns whether to show the revision option, auto-revise, or auto-approve
 # When threshold is exceeded: returns AUTO_REVISE=true (triggers retrospect)
 # Instead of silently auto-approving.
+# Thresholds sourced from ddd-clean-arch/workflow-config.json revision_thresholds.*
+
 GATE_TYPE="${1:?}"
 REVISIONS="${2:?}"
 
-case "$GATE_TYPE" in
-  clarify)       THRESHOLD=2 ;;
-  spec)          THRESHOLD=1 ;;
-  plan)          THRESHOLD=2 ;;
-  tasks)         THRESHOLD=3 ;;
-  implement)     THRESHOLD=2 ;;
-  design)        THRESHOLD=3 ;;
-  code-review)   THRESHOLD=2 ;;
-  *)             THRESHOLD=3 ;;
-esac
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
+# Default threshold (used when config is missing or key not found)
+THRESHOLD=3
+
+if [ -f "$CONFIG" ]; then
+  CONFIG_VALUE=$(bash "$SCRIPT_DIR/workflow-config.sh" "revision_thresholds.$GATE_TYPE" 2>/dev/null || echo "")
+  if [ -n "$CONFIG_VALUE" ]; then
+    THRESHOLD="$CONFIG_VALUE"
+  fi
+fi
 
 if [ "$REVISIONS" -ge "$THRESHOLD" ]; then
   echo "AUTO_APPROVE=false"

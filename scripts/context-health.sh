@@ -18,9 +18,23 @@ FEATURE_DIR="${1:?Usage: context-health.sh <feature_dir}"
 STATE_FILE="$FEATURE_DIR/state.json"
 ARTIFACTS_DIR="$FEATURE_DIR/.artifacts"
 
-# Default thresholds
+# Default thresholds — sourced from ddd-clean-arch/workflow-config.json
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG="$ROOT_DIR/ddd-clean-arch/workflow-config.json"
+
 DEFAULT_RESET_THRESHOLD=15
 DEFAULT_ARTIFACT_SIZE_THRESHOLD_MB=500
+DEFAULT_CORRECTION_SNAPSHOTS_WARN=50
+
+if [ -f "$CONFIG" ]; then
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.reset_threshold 2>/dev/null || echo "")
+  [ -n "$val" ] && DEFAULT_RESET_THRESHOLD="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.artifact_size_mb 2>/dev/null || echo "")
+  [ -n "$val" ] && DEFAULT_ARTIFACT_SIZE_THRESHOLD_MB="$val"
+  val=$(bash "$SCRIPT_DIR/workflow-config.sh" context.correction_snapshot_warn 2>/dev/null || echo "")
+  [ -n "$val" ] && DEFAULT_CORRECTION_SNAPSHOTS_WARN="$val"
+fi
 
 # ── Read context state from state.json ──────────────────────────
 SESSION_AGE=0
@@ -90,7 +104,7 @@ if [ "$ARTIFACT_SIZE_MB" -ge "$DEFAULT_ARTIFACT_SIZE_THRESHOLD_MB" ]; then
 fi
 
 # Check excessive correction snapshots (indicates many failed corrections)
-if [ "$CORRECTION_SNAPSHOT_COUNT" -ge 50 ]; then
+if [ "$CORRECTION_SNAPSHOT_COUNT" -ge "$DEFAULT_CORRECTION_SNAPSHOTS_WARN" ]; then
   if [ "$HEALTH" = "HEALTHY" ]; then
     HEALTH="DEGRADED"
   fi
