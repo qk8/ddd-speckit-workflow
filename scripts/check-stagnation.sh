@@ -9,6 +9,21 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse --json and --help flags from any position ────────────────
+JSON_MODE=false
+FILTERED_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --json)      JSON_MODE=true ;;
+    --help)      check_help "check-stagnation.sh" "<feature_dir> <current_done> <total_tasks> [--json] [--help] | --reset|--record-drift|--increment-continue <feature_dir>" ;;
+    *)           FILTERED_ARGS+=("$arg") ;;
+  esac
+done
+set -- "${FILTERED_ARGS[@]}"
+
 RESET_MODE=false
 RECORD_DRIFT=false
 INCREMENT_CONTINUE=false
@@ -94,6 +109,9 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
   fi
   local_cc=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.consecutive_continues 2>/dev/null || echo 0)
   echo "CONSECUTIVE_CONTINUES=$local_cc"
+
+  # ── Write .result file ─────────────────────────────────────────────
+  check_write_result "$FEATURE_DIR" "stagnation" "$([ "$STAGNANT" = "true" ] && echo FAIL || echo PASS)"
   exit 0
 fi
 

@@ -8,11 +8,18 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-performance-budget.sh" "<feature_dir> [--help]"
+fi
+
 FEATURE_DIR="${1:?Usage: check-performance-budget.sh <feature_dir>}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
-mkdir -p "$RESULTS_DIR"
 
 echo "PERF BUDGET: Scanning ${FEATURE_DIR}"
 
@@ -32,7 +39,7 @@ fi
 # ── Check if budget is defined ───────────────────────────────────
 if [ -z "$P95_THRESHOLD" ] && [ -z "$P99_THRESHOLD" ] && [ -z "$THROUGHPUT_THRESHOLD" ]; then
   echo "PERF BUDGET: SKIP (no performance budget defined in plan.md)"
-  echo "SKIP" > "${RESULTS_DIR}/performance_performance_budget.result"
+  check_write_result "$FEATURE_DIR" "performance_budget" "SKIP"
   exit 0
 fi
 
@@ -122,16 +129,16 @@ fi
 # ── Report results ───────────────────────────────────────────────
 if [ "$LOAD_TEST_RESULT" = "SKIP" ] && [ "$ANTI_PATTERNS" -eq 0 ]; then
   echo "PERF BUDGET: SKIP (no load testing tools available, no anti-patterns detected)"
-  echo "SKIP" > "${RESULTS_DIR}/performance_performance_budget.result"
+  check_write_result "$FEATURE_DIR" "performance_budget" "SKIP"
   exit 0
 fi
 
 if [ "$ANTI_PATTERNS" -gt 0 ]; then
   echo "PERF BUDGET: FAIL — ${ANTI_PATTERNS} performance anti-pattern(s) detected"
-  echo "FAIL" > "${RESULTS_DIR}/performance_performance_budget.result"
+  check_write_result "$FEATURE_DIR" "performance_budget" "FAIL"
   exit 1
 fi
 
 echo "PERF BUDGET: PASS — no performance anti-patterns detected"
-echo "PASS" > "${RESULTS_DIR}/performance_performance_budget.result"
+check_write_result "$FEATURE_DIR" "performance_budget" "PASS"
 exit 0

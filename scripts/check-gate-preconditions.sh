@@ -12,9 +12,29 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: check-gate-preconditions.sh <feature_dir> <gate_name>}"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+JSON_MODE=false
+GATE_NAME=""
+POSITIONAL=()
+for arg in "$@"; do
+  case "$arg" in
+    --json)      JSON_MODE=true ;;
+    --help)      check_help "check-gate-preconditions.sh" "<feature_dir> <gate_name> [--json] [--help]" ;;
+    *)           POSITIONAL+=("$arg") ;;
+  esac
+done
+set -- "${POSITIONAL[@]}"
+
+FEATURE_DIR="${1:-}"
+if [ -z "$FEATURE_DIR" ]; then
+  FEATURE_DIR=$(check_find_feature_dir "" || true)
+fi
+
 # Input validation: GATE_NAME is required — prevents silent auto-approve on missing arg
-if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+if [ $# -lt 1 ] || [ -z "${2:-}" ]; then
   echo "ERROR: check-gate-preconditions.sh requires <feature_dir> <gate_name>" >&2
   echo "GATE_ERROR=missing_gate_name"
   echo "GATE_FORCE_HUMAN=true"
@@ -33,7 +53,6 @@ log_gate() { echo "$1" >> "$GATE_LOG"; }
 log_gate "=== Gate evaluation: $GATE_NAME at $(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown) ==="
 
 # ── Read auto_approve.enabled from preset.yml ──────────────────
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 PRESET_FILE="$(cd "$SCRIPTS_DIR/../ddd-clean-arch" && pwd)/preset.yml"
 
 AUTO_APPROVE="false"
@@ -150,3 +169,13 @@ if [ "$AUTO_APPROVE" = "true" ] && [ "$GATE_BLOCKED" = "false" ] && [ "$GATE_FOR
 fi
 
 log_gate "=== End gate evaluation ==="
+
+# ── Write .result file ─────────────────────────────────────────────
+if [ -n "$FEATURE_DIR" ]; then
+  if [ "$GATE_BLOCKED" = "true" ]; then
+    check_write_result "$FEATURE_DIR" "gate_preconditions" "FAIL" "$FAILING_CHECKS"
+  else
+    check_write_result "$FEATURE_DIR" "gate_preconditions" "PASS"
+  fi
+fi
+exit 0

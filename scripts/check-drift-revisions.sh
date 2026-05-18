@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Track drift fix revisions per retro cycle.
-# Usage: check-drift-revisions.sh <feature_dir>
+# Usage: check-drift-revisions.sh <feature_dir> [--json] [--help]
 #
 # Outputs:
 #   DRIFT_REVISIONS=N
@@ -10,11 +10,31 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: check-drift-revisions.sh <feature_dir>}"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+source "$SCRIPTS_DIR/revision-limits.sh"
 
-# Source central config
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/revision-limits.sh"
+# ── Parse flags ────────────────────────────────────────────────────
+JSON_MODE=false
+if [ "${1:-}" = "--json" ]; then
+  JSON_MODE=true
+  shift
+fi
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-drift-revisions.sh" "<feature_dir> [--json] [--help]"
+fi
+
+FEATURE_DIR="${1:-}"
+if [ -z "$FEATURE_DIR" ]; then
+  FEATURE_DIR=$(check_find_feature_dir "" || true)
+fi
+FEATURE_DIR="${FEATURE_DIR:-}"
+
+if [ -z "$FEATURE_DIR" ]; then
+  echo "DRIFT_REVISIONS=0"
+  echo "MAX_DRIFT_REVISIONS_EXCEEDED=false"
+  exit 0
+fi
 
 STATE_FILE="$FEATURE_DIR/.drift_revisions"
 LOCK_FILE="$STATE_FILE.lock"
@@ -43,3 +63,11 @@ echo "$((CURRENT + 1))" > "$TMPFILE"
 mv "$TMPFILE" "$STATE_FILE"
 
 flock -u 200
+
+# ── Write .result file ─────────────────────────────────────────────
+if [ "$CURRENT" -ge "$MAX_DRIFT_REVISIONS" ]; then
+  check_write_result "$FEATURE_DIR" "drift_revisions" "FAIL"
+else
+  check_write_result "$FEATURE_DIR" "drift_revisions" "PASS"
+fi
+exit 0

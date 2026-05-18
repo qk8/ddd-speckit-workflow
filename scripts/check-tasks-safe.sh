@@ -15,7 +15,21 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${FEATURE_DIR:-$(bash scripts/find-first-feature.sh 2>/dev/null || true)}"
+# ── Parse flags ────────────────────────────────────────────────────
+JSON_MODE=false
+if [ "${1:-}" = "--json" ]; then
+  JSON_MODE=true
+  shift
+fi
+if [ "${1:-}" = "--help" ]; then
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/check-common.sh"
+  check_help "check-tasks-safe.sh" "[--json] [--help]"
+fi
+
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+FEATURE_DIR=$(check_find_feature_dir "" || true)
 FEATURE_DIR="${FEATURE_DIR:-}"
 
 TASKS_PARSE_ERROR=0
@@ -175,5 +189,19 @@ if [ -n "$FEATURE_DIR" ] && [ -f "${FEATURE_DIR}/project-brief.md" ]; then
   unset RISK_PROFILE
 fi
 
-echo "$OUTPUT"
+# ── Write .result file ─────────────────────────────────────────────
+if [ -n "$FEATURE_DIR" ]; then
+  _status="PASS"
+  [ "$TASKS_PARSE_ERROR" -eq 1 ] && _status="FAIL"
+  check_write_result "$FEATURE_DIR" "tasks_safe" "$_status"
+fi
+
+# ── Output ─────────────────────────────────────────────────────────
+if $JSON_MODE; then
+  has_todo=$(echo "$OUTPUT" | grep '^has_todo=' | cut -d= -f2)
+  todo_count=$(echo "$OUTPUT" | grep '^todo_count=' | cut -d= -f2)
+  check_json_output "tasks_safe" "$_status" "has_todo" "$has_todo" "todo_count" "$todo_count"
+else
+  echo "$OUTPUT"
+fi
 exit 0

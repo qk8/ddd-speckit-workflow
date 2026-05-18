@@ -2,8 +2,7 @@
 
 Run non-deterministic quality checks for the current task.
 
-IMPORTANT: Deterministic checks (A, BC, D, E, F, I, K, L, R, Z, AS, OW, US)
-are already executed by the check-runner.sh script in the workflow.
+**Deterministic checks** (A, BC, D, E, F, I, K, L, R, Z, AS, OW, US) are already executed by the check-runner.sh orchestrator in the workflow.
 DO NOT re-run them. Only run the non-deterministic checks listed below.
 
 This command:
@@ -11,7 +10,8 @@ This command:
 2. Derives the task type (e.g., backend-domain, backend-api)
 3. For each NON-DETERMINISTIC applicable check [X]:
    - Deterministic checks (A, BC, D, E, F, I, K, L, R, Z, AS, OW, US): SKIP.
-     These were already run by check-runner.sh. Do NOT re-execute them.
+     These were already run by `bash scripts/check-runner.sh <feature_dir> <task_type> --tier critical`.
+     Do NOT re-execute them.
    - Non-deterministic checks (G, H, J, M, N, O, P, Q, S, T, U):
      a. Verify the sub-check file exists at commands/checks/check_[X]_[name].mdc
      b. If missing: report "CHECK [X] SKIPPED — sub-check file not found" and continue
@@ -19,6 +19,23 @@ This command:
      d. Read the sub-check file and execute the check instructions
      e. Record PASS/FAIL result
 4. Prints results summary: "CHECK [X] NAME: PASS | FAIL — details"
+
+**Check runner** (deterministic checks):
+```bash
+# Run all critical deterministic checks for a task type
+bash scripts/check-runner.sh <feature_dir> <task_type> --tier critical
+
+# Run all checks (critical + secondary)
+bash scripts/check-runner.sh <feature_dir> <task_type>
+
+# Preview what would run
+bash scripts/check-runner.sh <feature_dir> <task_type> --list
+
+# Run a single check
+bash scripts/check-runner.sh <feature_dir> --check adversarial
+```
+
+Results are written to `<feature_dir>/.artifacts/check-results/<check_id>.result`.
 
 Non-deterministic checks to run (based on task type routing):
   [G] Error Handling Assertions          - backend-api, frontend-data

@@ -28,8 +28,8 @@ STEP 2 — INVESTIGATE LOW-SCORING AREAS
 Based on the dashboard, investigate areas with low scores:
 
 If CHECKS have failures:
-  Run: bash scripts/check-runner.sh "$(bash scripts/find-first-feature.sh)" <task_type>
-  Read the failed check results and fix them.
+  Run: bash scripts/check-runner.sh "$(bash scripts/find-first-feature.sh)" <task_type> --tier critical
+  Read failed results in .artifacts/check-results/<check_id>.result and fix them.
 
 If ERROR_MEMORY has many corrections:
   Run: bash scripts/error-memory.sh summary "$(bash scripts/find-first-feature.sh)"

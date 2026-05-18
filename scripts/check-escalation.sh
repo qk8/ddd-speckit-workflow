@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-escalation.sh — Track check failure history and escalate
 #
-# Usage: bash scripts/check-escalation.sh <feature_dir>
+# Usage: bash scripts/check-escalation.sh <feature_dir> [--json] [--help]
 #
 # Tracks consecutive failures per check ID in state.json at
 # checks_failure_count.<check_id>.
@@ -12,7 +12,30 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: check-escalation.sh <feature_dir>}"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+JSON_MODE=false
+if [ "${1:-}" = "--json" ]; then
+  JSON_MODE=true
+  shift
+fi
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-escalation.sh" "<feature_dir> [--json] [--help]"
+fi
+
+FEATURE_DIR="${1:-}"
+if [ -z "$FEATURE_DIR" ]; then
+  FEATURE_DIR=$(check_find_feature_dir "" || true)
+fi
+FEATURE_DIR="${FEATURE_DIR:-}"
+
+if [ -z "$FEATURE_DIR" ]; then
+  echo "ESCALATION=NONE — no feature directory"
+  exit 0
+fi
+
 RESULTS_DIR="$FEATURE_DIR/.artifacts/check-results"
 STATE_FILE="$FEATURE_DIR/state.json"
 
@@ -64,5 +87,8 @@ echo "ESCALATION=$ESCALATION"
 if [ -n "$FAILED_CHECKS" ]; then
   echo "FAILED_CHECKS: $FAILED_CHECKS"
 fi
+
+# ── Write .result file ─────────────────────────────────────────────
+check_write_result "$FEATURE_DIR" "escalation" "$([ "$ESCALATION" = "REQUIRED" ] && echo FAIL || echo PASS)"
 
 exit 0

@@ -8,11 +8,18 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-resilience.sh" "<feature_dir> [--help]"
+fi
+
 FEATURE_DIR="${1:?Usage: check-resilience.sh <feature_dir>}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
-mkdir -p "$RESULTS_DIR"
 
 echo "RESILIENCE: Scanning ${FEATURE_DIR}"
 
@@ -30,7 +37,7 @@ fi
 
 if [ -z "$LANGUAGE" ]; then
   echo "RESILIENCE: SKIP (no recognized language in ${FEATURE_DIR})"
-  echo "SKIP" > "${RESULTS_DIR}/resilience_resilience_testing.result"
+  check_write_result "$FEATURE_DIR" "resilience" "SKIP"
   exit 0
 fi
 
@@ -61,7 +68,7 @@ esac
 
 if [ -z "$TEST_FILES" ]; then
   echo "RESILIENCE: SKIP (no test files found)"
-  echo "SKIP" > "${RESULTS_DIR}/resilience_resilience_testing.result"
+  check_write_result "$FEATURE_DIR" "resilience" "SKIP"
   exit 0
 fi
 
@@ -145,10 +152,10 @@ esac
 # ── Report results ───────────────────────────────────────────────
 if [ "$RESILIENCE_PATTERNS" -ge 2 ]; then
   echo "RESILIENCE: PASS — ${RESILIENCE_PATTERNS} resilience test pattern type(s) detected"
-  echo "PASS" > "${RESULTS_DIR}/resilience_resilience_testing.result"
+  check_write_result "$FEATURE_DIR" "resilience" "PASS"
   exit 0
 fi
 
 echo "RESILIENCE: FAIL — only ${RESILIENCE_PATTERNS} resilience test pattern type(s) found (need at least 2)"
-echo "FAIL" > "${RESULTS_DIR}/resilience_resilience_testing.result"
+check_write_result "$FEATURE_DIR" "resilience" "FAIL"
 exit 0

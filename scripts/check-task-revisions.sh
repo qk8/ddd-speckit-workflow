@@ -17,6 +17,21 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse --json and --help flags ──────────────────────────────────
+JSON_MODE=false
+FILTERED_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --json)      JSON_MODE=true ;;
+    --help)      check_help "check-task-revisions.sh" "<feature_dir> <task_id> [max_revisions] [--json] [--help] | --auto|--dry-run|--success <feature_dir> [max_revisions]" ;;
+    *)           FILTERED_ARGS+=("$arg") ;;
+  esac
+done
+set -- "${FILTERED_ARGS[@]}"
+
 DRY_RUN=false
 INCREMENT=false
 if [ "${1:-}" = "--dry-run" ]; then
@@ -88,6 +103,7 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
     echo "REVISION_OK=false"
     echo "REVISION_EXHAUSTED=true"
     echo "TASK $TASK_ID has exceeded $MAX_REVISIONS revisions ($CURRENT attempts)." >&2
+    check_write_result "$FEATURE_DIR" "task_revisions" "FAIL" "Task $TASK_ID exhausted $MAX_REVISIONS revisions"
     exit 1
   fi
 
@@ -95,6 +111,7 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
     bash scripts/state-engine.sh write "$FEATURE_DIR" "revisions.per_task.$TASK_ID" "$((CURRENT + 1))" >/dev/null
     echo "REVISION_COUNT=$((CURRENT + 1))"
   fi
+  check_write_result "$FEATURE_DIR" "task_revisions" "PASS"
   exit 0
 fi
 
@@ -142,6 +159,7 @@ if [ "$CURRENT" -ge "$MAX_REVISIONS" ]; then
   echo "REVISION_EXHAUSTED=true"
   echo "TASK $TASK_ID has exceeded $MAX_REVISIONS revisions ($CURRENT attempts)." >&2
   flock -u 200
+  check_write_result "$FEATURE_DIR" "task_revisions" "FAIL" "Task $TASK_ID exhausted $MAX_REVISIONS revisions"
   exit 1
 fi
 
@@ -154,5 +172,6 @@ else
 fi
 
 flock -u 200
+check_write_result "$FEATURE_DIR" "task_revisions" "PASS"
 
 exit 0

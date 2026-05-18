@@ -8,11 +8,18 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-crosscutting.sh" "<feature_dir> [--help]"
+fi
+
 FEATURE_DIR="${1:?Usage: check-crosscutting.sh <feature_dir>}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
-mkdir -p "$RESULTS_DIR"
 
 echo "CROSSCUTTING: Scanning ${FEATURE_DIR}"
 
@@ -30,7 +37,7 @@ fi
 
 if [ -z "$LANGUAGE" ]; then
   echo "CROSSCUTTING: SKIP (no recognized language in ${FEATURE_DIR})"
-  echo "SKIP" > "${RESULTS_DIR}/integration_crosscutting.result"
+  check_write_result "$FEATURE_DIR" "crosscutting" "SKIP"
   exit 0
 fi
 
@@ -65,7 +72,7 @@ esac
 
 if [ -z "$SRC_FILES" ]; then
   echo "CROSSCUTTING: SKIP (no source files found)"
-  echo "SKIP" > "${RESULTS_DIR}/integration_crosscutting.result"
+  check_write_result "$FEATURE_DIR" "crosscutting" "SKIP"
   exit 0
 fi
 
@@ -173,12 +180,10 @@ if [ "$VIOLATIONS" -gt 0 ]; then
   echo -e "$VIOLATION_TYPES" | while read -r line; do
     [ -n "$line" ] && echo "  $line"
   done
-  echo "FAIL" > "${RESULTS_DIR}/integration_crosscutting.result"
-  echo "---" >> "${RESULTS_DIR}/integration_crosscutting.result"
-  echo -e "$VIOLATION_TYPES" >> "${RESULTS_DIR}/integration_crosscutting.result"
-  exit 1
+  check_write_result "$FEATURE_DIR" "crosscutting" "FAIL" "$VIOLATION_TYPES"
+  exit 0
 fi
 
 echo "CROSSCUTTING: PASS — no cross-cutting concern violations found"
-echo "PASS" > "${RESULTS_DIR}/integration_crosscutting.result"
+check_write_result "$FEATURE_DIR" "crosscutting" "PASS"
 exit 0

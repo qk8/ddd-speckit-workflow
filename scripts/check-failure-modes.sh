@@ -8,11 +8,18 @@
 
 set -euo pipefail
 
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
+
+# ── Parse flags ────────────────────────────────────────────────────
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-failure-modes.sh" "<feature_dir> [--help]"
+fi
+
 FEATURE_DIR="${1:?Usage: check-failure-modes.sh <feature_dir>}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
-mkdir -p "$RESULTS_DIR"
 
 echo "FAILURE MODES: Scanning ${FEATURE_DIR}"
 
@@ -30,7 +37,7 @@ fi
 
 if [ -z "$LANGUAGE" ]; then
   echo "FAILURE MODES: SKIP (no recognized language in ${FEATURE_DIR})"
-  echo "SKIP" > "${RESULTS_DIR}/test_design_failure_modes.result"
+  check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
   exit 0
 fi
 
@@ -61,7 +68,7 @@ esac
 
 if [ -z "$TEST_FILES" ]; then
   echo "FAILURE MODES: SKIP (no test files found)"
-  echo "SKIP" > "${RESULTS_DIR}/test_design_failure_modes.result"
+  check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
   exit 0
 fi
 
@@ -149,10 +156,10 @@ fi
 # ── Report results ───────────────────────────────────────────────
 if [ "$ERROR_PATTERNS" -ge 2 ]; then
   echo "FAILURE MODES: PASS — ${ERROR_PATTERNS} error pattern types detected in tests"
-  echo "PASS" > "${RESULTS_DIR}/test_design_failure_modes.result"
+  check_write_result "$FEATURE_DIR" "failure_modes" "PASS"
   exit 0
 fi
 
 echo "FAILURE MODES: FAIL — only ${ERROR_PATTERNS} error pattern type(s) found (need at least 2)"
-echo "FAIL" > "${RESULTS_DIR}/test_design_failure_modes.result"
+check_write_result "$FEATURE_DIR" "failure_modes" "FAIL"
 exit 0

@@ -1,34 +1,96 @@
-# ── Quality Checks: Dimension Reference ──────────────────────────
+# ── Quality Checks: Dimension Reference (SOURCE OF TRUTH for check-runner.sh) ──
 #
-# NOTE: This file defines the intended dimension framework but the
-# sub_checks are NOT invoked through this framework at runtime.
-# Scripts are invoked directly in workflow YAMLs (see 07-verify.yml
-# and 05-implement-02-core.yml).
-#
-# Dimension -> Script mapping (for reference):
-#   test_execution.regression      -> scripts/run-regression.sh
-#   test_execution.new_tests       -> scripts/run-new-tests.sh
-#   code_quality.lint              -> scripts/run-lint.sh
-#   code_quality.complexity        -> scripts/verify-code-quality.sh
-#   code_quality.naming            -> scripts/verify-naming-conventions.sh
-#   spec_compliance.drift          -> scripts/quick-drift-check.sh
-#   spec_compliance.constraints    -> scripts/run-antihallucination.sh
-#   spec_compliance.api_surface    -> scripts/api-surface-check.sh
-#   security.secret_scan           -> scripts/secret-scan.sh
-#   security.owasp                 -> scripts/run-owasp-basic.sh
-#   security.session_security      -> scripts/run-session-security.sh
-#   test_design.test_quality       -> scripts/verify-test-quality.sh
-#   test_design.failure_modes      -> scripts/check-failure-modes.sh
-#   test_design.negative_tests     -> scripts/verify-negative-tests.sh
-#   integration.arch_tests         -> scripts/run-arch-tests.sh
-#   integration.contract           -> scripts/validate-api-contract.sh
-#   integration.migration          -> scripts/run-migration-test.sh
-#   integration.crosscutting       -> scripts/check-crosscutting.sh
-#   resilience.resilience_testing  -> scripts/check-resilience.sh
-#   resilience.adversarial         -> scripts/check-adversarial.sh
-#   performance.performance_budget -> scripts/check-performance-budget.sh
-#   performance.quantitative       -> scripts/run-quantitative.sh
-#
-# To activate the dimension framework, a check-runner orchestrator
-# script would need to be built that reads this YAML and invokes
-# the sub_checks in order. This is tracked as a future enhancement.
+# Each dimension declares its sub-checks and the script that implements them.
+# The check-runner.sh reads this file to expand dimensions at runtime.
+# If a dimension is missing here, the runner falls back to hardcoded defaults.
+
+dimensions:
+  test_execution:
+    sub_checks:
+      regression:
+        script: run-regression.sh
+        description: "Run full regression test suite"
+      new_tests:
+        script: run-new-tests.sh
+        description: "Verify new tests pass"
+
+  code_quality:
+    sub_checks:
+      lint:
+        script: run-lint.sh
+        description: "No lint errors"
+      complexity:
+        script: verify-code-quality.sh
+        description: "Cyclomatic complexity within thresholds"
+      naming:
+        script: check-naming.sh
+        description: "Ubiquitous language compliance"
+
+  spec_compliance:
+    sub_checks:
+      drift:
+        script: quick-drift-check.sh
+        description: "Constraint drift detection"
+      constraints:
+        script: run-antihallucination.sh
+        description: "Implementation matches plan.md"
+      api_surface:
+        script: api-surface-check.sh
+        description: "API surface matches contract"
+
+  security:
+    sub_checks:
+      secret_scan:
+        script: secret-scan.sh
+        description: "No credentials or secrets"
+      owasp:
+        script: run-owasp-basic.sh
+        description: "OWASP Top 10 checks"
+      session_security:
+        script: run-session-security.sh
+        description: "JWT/session security"
+
+  test_design:
+    sub_checks:
+      test_quality:
+        script: verify-test-quality.sh
+        description: "Assertions prove acceptance criteria"
+      failure_modes:
+        script: check-failure-modes.sh
+        description: "Error paths have tests"
+      negative_tests:
+        script: verify-negative-tests.sh
+        description: "Negative test coverage"
+
+  integration:
+    sub_checks:
+      arch_tests:
+        script: run-arch-tests.sh
+        description: "Clean architecture enforcement"
+      contract:
+        script: validate-api-contract.sh
+        description: "API contract compliance"
+      migration:
+        script: run-migration-test.sh
+        description: "Schema migration tests"
+      crosscutting:
+        script: check-crosscutting.sh
+        description: "Cross-cutting concern audit"
+
+  resilience:
+    sub_checks:
+      resilience_testing:
+        script: check-resilience.sh
+        description: "Circuit breakers, retries, timeouts"
+      adversarial:
+        script: check-adversarial.sh
+        description: "Adversarial input handling"
+
+  performance:
+    sub_checks:
+      performance_budget:
+        script: check-performance-budget.sh
+        description: "Response times within budget"
+      quantitative:
+        script: run-quantitative.sh
+        description: "Coverage thresholds, type check"

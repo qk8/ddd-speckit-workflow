@@ -8,11 +8,15 @@
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: check-adversarial.sh <feature_dir>}"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPTS_DIR/lib/check-common.sh"
 
-ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
-RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
-mkdir -p "$RESULTS_DIR"
+# ── Parse flags ────────────────────────────────────────────────────
+if [ "${1:-}" = "--help" ]; then
+  check_help "check-adversarial.sh" "<feature_dir> [--help]"
+fi
+
+FEATURE_DIR="${1:?Usage: check-adversarial.sh <feature_dir>}"
 
 echo "ADVERSARIAL: Scanning ${FEATURE_DIR}"
 
@@ -30,7 +34,7 @@ fi
 
 if [ -z "$LANGUAGE" ]; then
   echo "ADVERSARIAL: SKIP (no recognized language in ${FEATURE_DIR})"
-  echo "SKIP" > "${RESULTS_DIR}/resilience_adversarial.result"
+  check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
   exit 0
 fi
 
@@ -61,7 +65,7 @@ esac
 
 if [ -z "$TEST_FILES" ]; then
   echo "ADVERSARIAL: SKIP (no test files found)"
-  echo "SKIP" > "${RESULTS_DIR}/resilience_adversarial.result"
+  check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
   exit 0
 fi
 
@@ -153,10 +157,10 @@ esac
 # ── Report results ───────────────────────────────────────────────
 if [ "$ADVERSARIAL_PATTERNS" -ge 2 ]; then
   echo "ADVERSARIAL: PASS — ${ADVERSARIAL_PATTERNS} adversarial test pattern type(s) detected"
-  echo "PASS" > "${RESULTS_DIR}/resilience_adversarial.result"
+  check_write_result "$FEATURE_DIR" "adversarial" "PASS"
   exit 0
 fi
 
 echo "ADVERSARIAL: FAIL — only ${ADVERSARIAL_PATTERNS} adversarial test pattern type(s) found (need at least 2)"
-echo "FAIL" > "${RESULTS_DIR}/resilience_adversarial.result"
+check_write_result "$FEATURE_DIR" "adversarial" "FAIL"
 exit 0
