@@ -56,10 +56,11 @@ steps:
       - id: impl_snapshot
         type: shell
         command: >
-          bash scripts/check-point.sh snapshot
+          bash scripts/recovery-engine.sh checkpoint
           "{{ steps.impl_check_remaining.output.feature_dir }}"
-          "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-          "{{ steps.impl_check_remaining.output.feature_dir }}/../.."
+          --phase implement
+          --task "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+          --root-dir "{{ steps.impl_check_remaining.output.feature_dir }}/../.."
         continue_on_error: true
 
       - id: impl_check_spec_revision_limit
@@ -182,7 +183,7 @@ steps:
               - id: impl_cleanup_parse
                 type: shell
                 command: >
-                  bash scripts/cleanup-abandoned-state.sh
+                  bash scripts/recovery-engine.sh abort
                   "{{ steps.impl_check_remaining.output.feature_dir }}"
                   "parse_error"
               - goto: abort
@@ -277,13 +278,13 @@ steps:
               - id: impl_resume
                 type: shell
                 command: >
-                  bash scripts/reset-stagnation.sh
+                  bash scripts/recovery-engine.sh reset-stagnation
                   "{{ steps.impl_check_remaining.output.feature_dir }}"
             on_abort:
               - id: impl_cleanup_stag
                 type: shell
                 command: >
-                  bash scripts/cleanup-abandoned-state.sh
+                  bash scripts/recovery-engine.sh abort
                   "{{ steps.impl_check_remaining.output.feature_dir }}"
                   "stagnation"
               - goto: abort

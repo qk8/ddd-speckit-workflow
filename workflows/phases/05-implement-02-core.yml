@@ -286,7 +286,7 @@ steps:
   - id: impl_post_verify_cp
     type: shell
     command: >
-      bash scripts/post-verify-checkpoint.sh
+      bash scripts/recovery-engine.sh post-verify
       "{{ steps.impl_check_remaining.output.feature_dir }}"
 
   - id: impl_scope_guard

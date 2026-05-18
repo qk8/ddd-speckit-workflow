@@ -14,6 +14,6 @@ if [ "$ABANDONED" -gt 0 ]; then
   # Clean up abandoned task artifacts
   FEATURE_DIR="${FEATURE_DIR:-$(bash scripts/find-first-feature.sh 2>/dev/null || echo "")}"
   if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/tasks.md" ]; then
-    bash scripts/cleanup-abandoned.sh "$FEATURE_DIR" 2>/dev/null || true
+    bash scripts/recovery-engine.sh abandoned "$FEATURE_DIR" 2>/dev/null || true
   fi
 fi

@@ -108,7 +108,7 @@ steps:
       - id: vf_cleanup_abort
         type: shell
         command: >
-          bash scripts/cleanup-abandoned-state.sh
+          bash scripts/recovery-engine.sh abort
           "$(bash scripts/find-first-feature.sh)"
           "final_verify"
       - goto: abort
@@ -236,8 +236,8 @@ steps:
           - id: fix_rollback
             type: shell
             command: >
-              bash scripts/check-point.sh rollback
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              bash scripts/recovery-engine.sh restore
+              "{{ steps.impl_check_remaining.output.feature_dir }}" "" || true
             continue_on_error: true
           - goto: impl_loop
         on_abort: abort
@@ -279,7 +279,7 @@ steps:
       - id: vf_fix_abort_cleanup
         type: shell
         command: >
-          bash scripts/cleanup-abandoned-state.sh
+          bash scripts/recovery-engine.sh abort
           "$(bash scripts/find-first-feature.sh)"
           "fix_needed_post_loop"
       - goto: abort

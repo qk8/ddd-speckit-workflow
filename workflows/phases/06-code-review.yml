@@ -152,7 +152,7 @@ steps:
           - id: cr_cleanup_abort
             type: shell
             command: >
-              bash scripts/cleanup-abandoned-state.sh
+              bash scripts/recovery-engine.sh abort
               "$(bash scripts/find-first-feature.sh)"
               "code_review"
           - goto: abort
@@ -183,7 +183,7 @@ steps:
       - id: cr_post_abort
         type: shell
         command: >
-          bash scripts/cleanup-abandoned-state.sh
+          bash scripts/recovery-engine.sh abort
           "$(bash scripts/find-first-feature.sh)"
           "code_review_post_loop"
       - goto: abort

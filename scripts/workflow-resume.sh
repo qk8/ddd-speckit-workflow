@@ -3,7 +3,7 @@
 #
 # Usage: scripts/workflow-resume.sh <feature_dir>
 #
-# Checks for saved pause state (from save-pause-state.sh).
+# Checks for saved pause state (from recovery-engine.sh pause).
 # If pause state exists, restores task state from pause point.
 # Outputs: RESUME_OK=true|false, RESUME_TASK=<task_id>
 

@@ -109,12 +109,12 @@ steps:
 
           Approve to continue to the next task.
           Revise to send the task back for fixes.
-          Stop to save state and pause (resume with: bash scripts/resume-workflow.sh)
+          Stop to save state and pause (resume with: bash scripts/recovery-engine.sh resume)
         options: [approve, revise, stop]
         on_stop:
           type: shell
           command: >
-            bash scripts/save-pause-state.sh
+            bash scripts/recovery-engine.sh pause
             "{{ steps.impl_check_remaining.output.feature_dir }}"
             "review-unified"
         on_revise:

@@ -181,7 +181,7 @@ steps:
               - id: impl_cleanup_drift
                 type: shell
                 command: >
-                  bash scripts/cleanup-abandoned-state.sh
+                  bash scripts/recovery-engine.sh abort
                   "{{ steps.impl_check_remaining.output.feature_dir }}"
                   "drift_check"
               - goto: abort
@@ -189,5 +189,5 @@ steps:
       - id: impl_post_gate_cp
         type: shell
         command: >
-          bash scripts/post-gate-checkpoint.sh
+          bash scripts/recovery-engine.sh post-gate
           "{{ steps.impl_check_remaining.output.feature_dir }}"

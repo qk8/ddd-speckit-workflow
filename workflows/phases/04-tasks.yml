@@ -130,7 +130,7 @@ steps:
           - id: ts_cleanup_abort
             type: shell
             command: >
-              bash scripts/cleanup-abandoned-state.sh
+              bash scripts/recovery-engine.sh abort
               "$(bash scripts/find-first-feature.sh)"
               "tasks_phase"
           - goto: abort
@@ -172,7 +172,7 @@ steps:
       - id: ts_cleanup_trace
         type: shell
         command: >
-          bash scripts/cleanup-abandoned-state.sh
+          bash scripts/recovery-engine.sh abort
           "$(bash scripts/find-first-feature.sh)"
           "traceability_check"
       - goto: abort
