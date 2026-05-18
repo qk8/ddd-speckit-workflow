@@ -12,7 +12,7 @@
 set -euo pipefail
 
 # ── Argument parsing ────────────────────────────────────────────
-VALID_PHASES="clarify spec plan tasks implement verify code-review"
+VALID_PHASES="clarify spec plan tasks implement verify code-review verify-independent test-context"
 PHASE="${1:?Usage: bundle-assembler.sh <phase> <task_id> <feature_dir> [--max-lines N] [--output FILE]}"
 TASK_ID="${2:?Usage: bundle-assembler.sh <phase> <task_id> <feature_dir>}"
 FEATURE_DIR="${3:?Usage: bundle-assembler.sh <phase> <task_id> <feature_dir>}"
@@ -448,6 +448,97 @@ code-review)
   echo "## Files Modified"
   if [ -f "$STATE_FILE" ]; then
     jq_q ".tasks[\"$TASK_ID\"].files_modified // [] | .[]" 2>/dev/null
+  fi
+  ;;
+
+# ── Independent verification: minimal, non-biased context ─────────
+# Used by the independent verification agent. Contains ONLY spec + plan + code diff.
+# Never includes: error memory, prior corrections, implementation context,
+# or any information that could bias the verifier toward the implementer's choices.
+verify-independent)
+  echo "## Spec"
+  local_spec=$(spec_for_type "$FEATURE_DIR")
+  if [ -n "$local_spec" ]; then
+    cat "$local_spec"
+  else
+    echo "  (no spec found)"
+  fi
+  echo ""
+
+  echo "## Plan (Relevant Sections Only)"
+  if [ -f "$PLAN_FILE" ]; then
+    # Include only the sections relevant to verification: spec, constraints, architecture
+    extract_section "$PLAN_FILE" "2" "$MAX_PER_SECTION" || echo "  (section 2 not found)"
+    echo ""
+    extract_section "$PLAN_FILE" "16" 0 || echo "  (section 16 not found)"
+    echo ""
+  fi
+
+  echo "## Spec Companion Files"
+  for f in "${FEATURE_DIR}/docs/spec/api-contract.yaml" \
+           "${FEATURE_DIR}/docs/spec/data-model.sql" \
+           "${FEATURE_DIR}/docs/spec/backend-interfaces."* \
+           "${FEATURE_DIR}/docs/spec/frontend-interfaces."*; do
+    [ -f "$f" ] && echo "### $(basename "$f")" && cat "$f" && echo ""
+  done
+
+  echo "## Layer Rules"
+  if [ -f "$CLAUDE_MD" ]; then
+    awk '/^## Layer rules/{found=1; next} found && /^## /{exit} found{print}' "$CLAUDE_MD" 2>/dev/null
+  fi
+  ;;
+
+# ── Test context: minimal bundle for writing tests only ──────────
+# Contains ONLY what's needed to write tests: acceptance criteria,
+# task type, test instructions, layer rules.
+# NEVER includes: implementation details, file paths, code from the plan,
+# error memory, or any information that could bias the test writer
+# toward the implementation architecture.
+test-context)
+  echo "## Task"
+  if [ -f "$STATE_FILE" ]; then
+    local_title=$(jq_q ".tasks[\"$TASK_ID\"].title // \"(unknown)\"" 2>/dev/null || echo "(unknown)")
+    local_ttype=$(jq_q ".tasks[\"$TASK_ID\"].type // \"(unknown)\"" 2>/dev/null || echo "(unknown)")
+    local_status=$(jq_q ".tasks[\"$TASK_ID\"].status // \"TODO\"" 2>/dev/null || echo "TODO")
+    local_depends=$(jq_q ".tasks[\"$TASK_ID\"].depends_on // [] | join(\", \")" 2>/dev/null || echo "")
+    echo "Title: ${local_title}"
+    echo "Type: ${local_ttype}"
+    echo "Status: ${local_status}"
+    echo "Depends: [${local_depends}]"
+  else
+    echo "Title: (unknown)"
+    echo "Type: (unknown)"
+    echo "Status: TODO"
+    echo "Depends: []"
+  fi
+  echo ""
+
+  echo "## Acceptance Criteria"
+  if [ -f "$STATE_FILE" ]; then
+    jq_q ".tasks[\"$TASK_ID\"].acceptance_criteria // [] | to_entries[] | \"\(.key + 1). \(.value)\"" 2>/dev/null
+  fi
+  if [ -f "$TASKS_FILE" ]; then
+    awk -v tid="## ${TASK_ID}" '
+      index($0, tid) { found=1; next }
+      found && /^## / { exit }
+      found && /^[[:space:]]*[0-9]+\./ { gsub(/^[[:space:]]*[0-9]+\.[[:space:]]*/, ""); print }
+    ' "$TASKS_FILE" 2>/dev/null
+  fi
+  echo ""
+
+  echo "## Test Instructions"
+  local_test_file=""
+  [ -n "$local_ttype" ] && [ "$local_ttype" != "(unknown)" ] && local_test_file="${TEST_INSTR_DIR}/${local_ttype}.md"
+  if [ -n "$local_test_file" ] && [ -f "$local_test_file" ]; then
+    cat "$local_test_file"
+  else
+    echo "  (no test instructions for type '${local_ttype:-unknown}')"
+  fi
+  echo ""
+
+  echo "## Layer Rules"
+  if [ -f "$CLAUDE_MD" ]; then
+    awk '/^## Layer rules/{found=1; next} found && /^## /{exit} found{print}' "$CLAUDE_MD" 2>/dev/null
   fi
   ;;
 

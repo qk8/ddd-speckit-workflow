@@ -136,6 +136,11 @@ steps:
             command: >
               bash scripts/scope-audit.sh
               "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+          - id: impl_velocity_status
+            type: shell
+            command: >
+              bash scripts/velocity-tracker.sh status
+              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
       - id: impl_check_context_health
         type: if

@@ -40,6 +40,12 @@ steps:
       "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
     continue_on_error: true
 
+  - id: impl_sanitize_prompt
+    type: shell
+    command: >
+      bash scripts/sanitize-prompt.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
   - id: impl_generate_context
     type: shell
     command: >
@@ -177,6 +183,18 @@ steps:
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
 
+  - id: impl_velocity_record
+    type: if
+    condition: >
+      {{ steps.impl_batch_abort_check.output | default '0' }} < 10
+    then:
+      - id: impl_run_velocity_record
+        type: shell
+        command: >
+          bash scripts/velocity-tracker.sh record
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+
   - id: impl_per_task_drift
     type: if
     condition: "{{ steps.impl_check_remaining.output.todo_count | int }} > 0"
@@ -219,6 +237,19 @@ steps:
             command: >
               bash scripts/validate-tests.sh --full
               "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
+  - id: impl_semantic_check
+    type: if
+    condition: >
+      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+    then:
+      - id: impl_run_semantic_check
+        type: shell
+        command: >
+          bash scripts/post-batch-semantic-check.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+        continue_on_error: true
 
   - id: impl_merge_check
     type: if

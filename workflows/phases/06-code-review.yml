@@ -40,6 +40,21 @@ steps:
         circuit breaker patterns.
         Write findings to .artifacts/hardening-report-resilience.md.
 
+  # ── Architecture review (DDD patterns) ──────────────────────────
+  - id: cr_architecture
+    command: speckit.code-review
+    integration: claude
+    input:
+      args: >
+        Run DDD architecture coherence review:
+        Read plan.md §11 (domain model) and compare against actual
+        domain layer code. Evaluate:
+          1. Aggregate boundaries: Are aggregates cohesive?
+          2. Domain events: Are state changes properly emitted?
+          3. Bounded context separation: Are contexts properly isolated?
+          4. Repository pattern: Are repositories correctly implemented?
+        Write findings to .artifacts/hardening-report-architecture.md.
+
   - id: cr_backup
     type: shell
     command: >
@@ -137,6 +152,7 @@ steps:
       [ ] Hardening reports present:
           - .artifacts/hardening-report-data.md
           - .artifacts/hardening-report-resilience.md
+          - .artifacts/hardening-report-architecture.md
       [ ] No unresolved FAIL items remain
 
       Approve to continue to final verify.

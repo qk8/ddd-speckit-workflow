@@ -19,6 +19,12 @@ steps:
       bash scripts/integration-smoke.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}"
 
+  - id: vf_perf_regression
+    type: shell
+    command: >
+      bash scripts/perf-regression.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
   - id: vf_verify_all
     type: if
     condition: >
