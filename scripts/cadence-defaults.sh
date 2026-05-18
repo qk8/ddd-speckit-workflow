@@ -29,3 +29,8 @@ cadence_get() {
     traceability_interval_complex) echo "$CADENCE_TRACEABILITY_INTERVAL_COMPLEX" ;;
   esac
 }
+
+# List all known cadence counter keys
+cadence_known_keys() {
+  echo "traceability_counter"
+}

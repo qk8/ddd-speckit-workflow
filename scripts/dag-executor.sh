@@ -297,7 +297,6 @@ while IFS= read -r level_line; do
   # Filter out already DONE/BLOCKED/ABANDONED tasks
   RUNNABLE=()
   for task in "${tasks[@]}"; do
-    local status
     status=$(jq -r --arg tid "$task" '.tasks[$tid].status' "$STATE_FILE")
     case "$status" in
       DONE)
@@ -334,7 +333,7 @@ while IFS= read -r level_line; do
         if ! wait "$pid" 2>/dev/null; then
           LEVEL_FAILED=true
           FAILED_TASKS=$((FAILED_TASKS + 1))
-          local result_file="$ARTIFACTS_DIR/task_${task}.result"
+          result_file="$ARTIFACTS_DIR/task_${task}.result"
           if [ -f "$result_file" ] && [ "$(cat "$result_file")" = "FAIL" ]; then
             cascade_blocked "$task"
           fi
@@ -357,9 +356,9 @@ while IFS= read -r level_line; do
 
   # Wait for remaining tasks
   for task_idx in "${!PIDS[@]}"; do
-    local pid="${PIDS[$task_idx]}"
+    pid="${PIDS[$task_idx]}"
     # Get the task name from RUNNABLE
-    local pending_task="${RUNNABLE[$task_idx]}"
+    pending_task="${RUNNABLE[$task_idx]}"
     if ! wait "$pid" 2>/dev/null; then
       LEVEL_FAILED=true
       FAILED_TASKS=$((FAILED_TASKS + 1))

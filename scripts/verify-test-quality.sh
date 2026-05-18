@@ -96,6 +96,54 @@ scan_file() {
       fi
     fi
 
+    # === Python anti-patterns ===
+
+    # ERROR: assert True / assert False (trivial boolean)
+    if echo "$line" | grep -qiE '^\s*assert[[:space:]]+(True|False)[[:space:]]*[,)]' 2>/dev/null; then
+      ERRORS=$((ERRORS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} ERROR: Python trivial boolean assertion (assert True/False). "
+    fi
+
+    # ERROR: assert 200 / assert 404 (hardcoded status code)
+    if echo "$line" | grep -qiE '^\s*assert[[:space:]]+(200|301|404|500)[[:space:]]*[,)]' 2>/dev/null; then
+      ERRORS=$((ERRORS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} ERROR: Python hardcoded status code assertion. "
+    fi
+
+    # WARNING: self.assertEqual(True/False) — should use assertTrue/assertFalse
+    if echo "$line" | grep -qiE 'self\.assertEqual[[:space:]]*\([[:space:]]*(True|False)' 2>/dev/null; then
+      WARNINGS=$((WARNINGS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} WARNING: Python self.assertEqual(True/False) — use assertTrue/assertFalse. "
+    fi
+
+    # === Go anti-patterns ===
+
+    # WARNING: t.Log without t.Error/t.Fatal — logging, not asserting
+    if echo "$line" | grep -qiE '\.Log\([[:space:]]*"[^"]*"[[:space:]]*\)' 2>/dev/null; then
+      WARNINGS=$((WARNINGS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} WARNING: Go t.Log — logging, not asserting. "
+    fi
+
+    # ERROR: assert.Equal tautology (same value on both sides)
+    if echo "$line" | grep -qiE 'assert\.Equal[[:space:]]*\([^,]+,[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*,[[:space:]]*\1' 2>/dev/null; then
+      ERRORS=$((ERRORS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} ERROR: Go assert.Equal tautology (same value on both sides). "
+    fi
+
+    # === Java anti-patterns ===
+
+    # ERROR: assertEquals(tautology) — same value on both sides
+    if echo "$line" | grep -qiE 'assertEquals[[:space:]]*\([^,]+,[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*,[[:space:]]*\1' 2>/dev/null; then
+      ERRORS=$((ERRORS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} ERROR: Java assertEquals tautology (same value on both sides). "
+    fi
+
+    # WARNING: assertTrue(true) / assertFalse(false) — trivial
+    if echo "$line" | grep -qiE '(assertTrue|assertFalse)[[:space:]]*\(\s*(true|false)\s*\)' 2>/dev/null; then
+      WARNINGS=$((WARNINGS + 1))
+      ISSUES="${ISSUES}${file}:${line_num} WARNING: Java trivial assertTrue(true)/assertFalse(false). "
+    fi
+
   done < "$file"
 }
 

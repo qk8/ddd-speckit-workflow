@@ -405,6 +405,19 @@ do_spec_increment() {
 do_cadence_increment() {
   state_lock_acquire || return 1
   local counter_key="${1:?Usage: state-engine.sh cadence-increment <counter_key>}"
+  # Validate counter_key against known cadence keys
+  source scripts/cadence-defaults.sh 2>/dev/null || true
+  local known_keys
+  known_keys=$(cadence_known_keys 2>/dev/null || echo "traceability_counter")
+  local valid=false
+  for k in $known_keys; do
+    [ "$k" = "$counter_key" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
+    echo "ERROR: Unknown cadence counter key: ${counter_key}. Known: ${known_keys}" >&2
+    state_lock_release
+    return 1
+  fi
   ensure_exists
 
   local jq_path=".cadence.${counter_key}"
@@ -420,6 +433,19 @@ do_cadence_increment() {
 do_cadence_reset() {
   state_lock_acquire || return 1
   local counter_key="${1:?Usage: state-engine.sh cadence-reset <counter_key>}"
+  # Validate counter_key against known cadence keys
+  source scripts/cadence-defaults.sh 2>/dev/null || true
+  local known_keys
+  known_keys=$(cadence_known_keys 2>/dev/null || echo "traceability_counter")
+  local valid=false
+  for k in $known_keys; do
+    [ "$k" = "$counter_key" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
+    echo "ERROR: Unknown cadence counter key: ${counter_key}. Known: ${known_keys}" >&2
+    state_lock_release
+    return 1
+  fi
   ensure_exists
 
   local tmp

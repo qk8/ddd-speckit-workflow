@@ -112,6 +112,13 @@ steps:
         Use the prompt context at .artifacts/prompts/[task_id]/context.md
         if available — it contains targeted plan sections for this task.
 
+  - id: impl_write_test_track_tokens
+    type: shell
+    command: >
+      bash scripts/track-token-budget.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+    continue_on_error: true
+
   - id: impl_test_review
     type: shell
     command: >
@@ -139,6 +146,13 @@ steps:
           After the batch, remove .artifacts/batch_tasks.txt.
         Otherwise: implement only the first TODO task.
         Always check Depends-on before starting.
+
+  - id: impl_execute_track_tokens
+    type: shell
+    command: >
+      bash scripts/track-token-budget.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+    continue_on_error: true
 
   # ── Batch abort-on-failure (Issue 4) ─────────────────────────────
   # If the task reached the global correction cap (10), the batch failed.
@@ -182,6 +196,12 @@ steps:
             Continue from the just-completed implementation.
             Run quality checks (STEP 3) and produce the completion report (STEP 4).
             Do NOT re-implement — only verify and report.
+      - id: impl_verify_run_track_tokens
+        type: shell
+        command: >
+          bash scripts/track-token-budget.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+        continue_on_error: true
 
   - id: impl_velocity_record
     type: if

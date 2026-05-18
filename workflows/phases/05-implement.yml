@@ -193,12 +193,14 @@ steps:
         then:
           - id: impl_done_summary
             type: shell
+            continue_on_error: true
             command: >
               bash scripts/log-impl-complete.sh
               "{{ steps.impl_check_remaining.output.done_count }}"
               "{{ steps.impl_check_remaining.output.total_tasks }}"
               "{{ steps.impl_check_remaining.output.abandoned_count | int }}"
           - id: impl_post_drift
+            continue_on_error: true
             command: speckit.check
             integration: claude
             input:

@@ -125,6 +125,29 @@ do_checkpoint() {
       echo "WARNING: Low disk space (${disk_free_kb}KB free). Checkpoint may fail." >&2
     fi
 
+    # Save text file content for content-based restore (avoids git checkout HEAD
+    # which loses changes committed by other tasks after the checkpoint was taken).
+    local content_dir="${cp_dir}/content"
+    mkdir -p "$content_dir"
+    while IFS= read -r filepath; do
+      local rel_path="${filepath#${root_dir}/}"
+      case "$rel_path" in
+        .git/*|.artifacts/*|node_modules/*|.next/*|dist/*|build/*|.specify/*) continue ;;
+      esac
+      if file "$filepath" 2>/dev/null | grep -q 'text'; then
+        local safe_name="${rel_path//\//_}"
+        cp "$filepath" "${content_dir}/${safe_name}" 2>/dev/null || true
+      fi
+    done < <(
+      { git -C "$root_dir" ls-files 2>/dev/null || true; } | while IFS= read -r f; do echo "$root_dir/$f"; done
+      { git -C "$root_dir" ls-files --others --exclude-standard 2>/dev/null || true; } | while IFS= read -r f; do
+        case "$f" in
+          *.o|*.pyc|*.pyo|*.class|*.jar|*.war|*.ear|*.zip|*.tar|*.gz|*.log|*.tmp|*.swp|*.swo|*~) continue ;;
+          *) echo "$root_dir/$f" ;;
+        esac
+      done
+    )
+
     # Git diff
     if [ -d "$root_dir/.git" ]; then
       (cd "$root_dir" && git diff --stat 2>/dev/null || true) > "${cp_dir}/git-diff.txt"
@@ -207,14 +230,21 @@ do_restore() {
           if [ "$expected_hash" != "binary" ] && [ "$expected_hash" != "" ]; then
             current_hash=$(sha256sum "$full_path" 2>/dev/null | cut -d' ' -f1 || echo "unknown")
             if [ "$current_hash" != "$expected_hash" ]; then
-              if git -C "$ROOT_DIR" checkout HEAD -- "$full_path" 2>/dev/null; then
+              # Prefer saved checkpoint content over git checkout HEAD.
+              # git checkout HEAD loses changes committed by other tasks
+              # after the checkpoint was taken.
+              local content_path="${cp_dir}/content/${rel_path//\//_}"
+              if [ -f "$content_path" ]; then
+                cp "$content_path" "$full_path"
+                restored=$((restored + 1))
+              elif git -C "$ROOT_DIR" checkout HEAD -- "$full_path" 2>/dev/null; then
                 restored=$((restored + 1))
               fi
             fi
           fi
         fi
       done < <(jq -r '.files | keys[]' "${cp_dir}/files.json")
-      echo "RESTORE: ${restored} file(s) restored via git checkout"
+      echo "RESTORE: ${restored} file(s) restored (content-based from checkpoint)"
     fi
   fi
 

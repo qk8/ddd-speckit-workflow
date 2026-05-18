@@ -23,6 +23,13 @@ steps:
         Verify or fix: ACID compliance, idempotency guarantees.
         Write findings to .artifacts/hardening-report-data.md.
 
+  - id: cr_data_integrity_track_tokens
+    type: shell
+    command: >
+      bash scripts/track-token-budget.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+    continue_on_error: true
+
   # ── Resilience scenarios ────────────────────────────────────────
   - id: cr_resilience
     command: speckit.code-review
@@ -40,6 +47,13 @@ steps:
         circuit breaker patterns.
         Write findings to .artifacts/hardening-report-resilience.md.
 
+  - id: cr_resilience_track_tokens
+    type: shell
+    command: >
+      bash scripts/track-token-budget.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+    continue_on_error: true
+
   # ── Architecture review (DDD patterns) ──────────────────────────
   - id: cr_architecture
     command: speckit.code-review
@@ -54,6 +68,13 @@ steps:
           3. Bounded context separation: Are contexts properly isolated?
           4. Repository pattern: Are repositories correctly implemented?
         Write findings to .artifacts/hardening-report-architecture.md.
+
+  - id: cr_architecture_track_tokens
+    type: shell
+    command: >
+      bash scripts/track-token-budget.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}"
+    continue_on_error: true
 
   - id: cr_backup
     type: shell

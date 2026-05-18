@@ -25,6 +25,12 @@ steps:
       bash scripts/perf-regression.sh
       "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
+  - id: vf_dep_scan
+    type: shell
+    command: >
+      bash scripts/run-dep-scan.sh
+      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+
   - id: vf_verify_all
     type: if
     condition: >

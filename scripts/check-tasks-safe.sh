@@ -206,15 +206,20 @@ if [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/state.json" ]; then
     normalize_state "$FEATURE_DIR/state.json"
 
     # Stale state validation: cross-check against tasks.md
-    _layer1_valid=true
+    _stale=false
     if [ -f "$FEATURE_DIR/tasks.md" ]; then
       _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
       _diff=$((_N_DONE - _actual_done))
       [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
-      [ "$_diff" -gt 1 ] && _layer1_valid=false
+      [ "$_diff" -gt 1 ] && _stale=true
     fi
 
-    if [ "$_layer1_valid" = true ]; then
+    if [ "$_stale" = true ]; then
+      # State.json is out of sync with tasks.md — use tasks.md directly
+      OUTPUT=$(bash scripts/check-tasks.sh 2>/dev/null) || true
+      OUTPUT="${OUTPUT}
+state_source=stale_tasks_md"
+    else
       compute_output "$FEATURE_DIR"
     fi
   fi
@@ -226,15 +231,19 @@ if [ -z "$OUTPUT" ] && [ -n "$FEATURE_DIR" ] && [ -f "$FEATURE_DIR/.workflow-sta
     normalize_state "$FEATURE_DIR/.workflow-state.json"
 
     # Stale state validation
-    _layer1_valid=true
+    _stale=false
     if [ -f "$FEATURE_DIR/tasks.md" ]; then
       _actual_done=$(grep -c "^Status: DONE$" "$FEATURE_DIR/tasks.md" 2>/dev/null || true)
       _diff=$((_N_DONE - _actual_done))
       [ "$_diff" -lt 0 ] && _diff=$((_diff * -1))
-      [ "$_diff" -gt 1 ] && _layer1_valid=false
+      [ "$_diff" -gt 1 ] && _stale=true
     fi
 
-    if [ "$_layer1_valid" = true ]; then
+    if [ "$_stale" = true ]; then
+      OUTPUT=$(bash scripts/check-tasks.sh 2>/dev/null) || true
+      OUTPUT="${OUTPUT}
+state_source=stale_workflow_state"
+    else
       compute_output "$FEATURE_DIR"
     fi
   fi
