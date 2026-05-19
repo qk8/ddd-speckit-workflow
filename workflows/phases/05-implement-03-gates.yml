@@ -126,3 +126,21 @@ steps:
               IN_PROGRESS
               "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
               "Task sent back for revision — acceptance, quality, or TDD issues not met."
+
+  - id: impl_module_verify
+    type: if
+    condition: >
+      {{ steps.impl_check_remaining.output.retro_trigger == 'true' }}
+    then:
+      - id: impl_run_module_verify
+        type: prompt
+        command: speckit.verify
+        integration: claude
+        input:
+          args: >
+            Run speckit.verify with scope "module" (not "full").
+            Verify only the module type that just completed.
+            This is a lightweight check — focus on the recently
+            completed task's module, not the entire codebase.
+            Write findings to .artifacts/module-verify-report.md.
+            If drift detected: fix in code or add fix task.

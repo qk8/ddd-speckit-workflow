@@ -18,6 +18,9 @@ source "$SCRIPTS_DIR/lib/check-common.sh"
 
 PRESET_DIR="$(cd "$SCRIPTS_DIR/../ddd-clean-arch" && pwd)"
 
+# ── Source dimension lookup library (single source of truth) ────────
+source "$SCRIPTS_DIR/check-dimensions.sh"
+
 # ── Parse flags ────────────────────────────────────────────────────
 MODE="run"
 FEATURE_DIR=""
@@ -82,141 +85,6 @@ parse_routing() {
   ' "$preset_file" 2>/dev/null
 }
 
-# ── Map dimension name to check script ─────────────────────────────
-# Dimension -> script mapping (source of truth for the runner).
-# If preset-checks-dimensions.yml has the mapping, use it; otherwise use defaults.
-dimension_to_script() {
-  local dim="$1"
-  local sub="$2"
-  local preset_file="$PRESET_DIR/preset-checks-dimensions.yml"
-
-  if [ -f "$preset_file" ]; then
-    # Try to parse from preset-checks-dimensions.yml
-    local script
-    script=$(awk -v dim="$dim" -v sub="$sub" '
-      $0 ~ ("^  " dim ":") { found=1; next }
-      found && /sub_checks:/ { in_sub=1; next }
-      in_sub && ("^    " sub ":") { in_sc=1; next }
-      in_sc && /script:/ { gsub(/.*script:[ ]*"?/, ""); gsub(/".*/, ""); print; exit }
-      in_sc && /^[^ ]/ { exit }
-      in_sub && /^[^ ]/ { in_sub=0 }
-      found && /^[^ ]/ { exit }
-    ' "$preset_file" 2>/dev/null || true)
-    if [ -n "$script" ]; then
-      echo "$script"
-      return
-    fi
-  fi
-
-  # ── Default dimension->script mapping (fallback) ───────────────
-  case "$dim" in
-    test_execution)
-      if [ "$sub" = "regression" ]; then echo "run-regression.sh"
-      elif [ "$sub" = "new_tests" ]; then echo "run-new-tests.sh"
-      else echo "run-regression.sh"
-      fi ;;
-    code_quality)
-      if [ "$sub" = "lint" ]; then echo "run-lint.sh"
-      elif [ "$sub" = "complexity" ]; then echo "verify-code-quality.sh"
-      elif [ "$sub" = "naming" ]; then echo "check-naming.sh"
-      else echo "verify-code-quality.sh"
-      fi ;;
-    spec_compliance)
-      if [ "$sub" = "drift" ]; then echo "quick-drift-check.sh"
-      elif [ "$sub" = "constraints" ]; then echo "run-antihallucination.sh"
-      elif [ "$sub" = "api_surface" ]; then echo "api-surface-check.sh"
-      else echo "quick-drift-check.sh"
-      fi ;;
-    security)
-      if [ "$sub" = "secret_scan" ]; then echo "secret-scan.sh"
-      elif [ "$sub" = "owasp" ]; then echo "run-owasp-basic.sh"
-      elif [ "$sub" = "session_security" ]; then echo "run-session-security.sh"
-      else echo "secret-scan.sh"
-      fi ;;
-    test_design)
-      if [ "$sub" = "test_quality" ]; then echo "verify-test-quality.sh"
-      elif [ "$sub" = "failure_modes" ]; then echo "check-failure-modes.sh"
-      elif [ "$sub" = "negative_tests" ]; then echo "verify-negative-tests.sh"
-      else echo "verify-test-quality.sh"
-      fi ;;
-    integration)
-      if [ "$sub" = "arch_tests" ]; then echo "run-arch-tests.sh"
-      elif [ "$sub" = "contract" ]; then echo "validate-api-contract.sh"
-      elif [ "$sub" = "migration" ]; then echo "run-migration-test.sh"
-      elif [ "$sub" = "crosscutting" ]; then echo "check-crosscutting.sh"
-      else echo "check-crosscutting.sh"
-      fi ;;
-    resilience)
-      if [ "$sub" = "resilience_testing" ]; then echo "check-resilience.sh"
-      elif [ "$sub" = "adversarial" ]; then echo "check-adversarial.sh"
-      else echo "check-resilience.sh"
-      fi ;;
-    performance)
-      if [ "$sub" = "performance_budget" ]; then echo "check-performance-budget.sh"
-      elif [ "$sub" = "quantitative" ]; then echo "run-quantitative.sh"
-      else echo "check-performance-budget.sh"
-      fi ;;
-    # Standalone checks (no sub-checks)
-    AC) echo "check-adversarial.sh" ;;
-    E) echo "check-drift.sh" ;;
-    G) echo "check-drift.sh" ;;
-    *) echo "" ;;
-  esac
-}
-
-# ── Expand dimension into sub-check IDs ────────────────────────────
-expand_dimension() {
-  local dim="$1"
-  local preset_file="$PRESET_DIR/preset-checks-dimensions.yml"
-
-  if [ -f "$preset_file" ]; then
-    local subs
-    subs=$(awk -v dim="$dim" '
-      $0 ~ ("^  " dim ":") { found=1; next }
-      found && /sub_checks:/ { in_sub=1; next }
-      in_sub && /^    [a-z]/ {
-        sub(/:.*/, "", $0)
-        gsub(/[[:space:]]/, "", $0)
-        if ($0 != "") print $0
-        next
-      }
-      in_sub && /^[^ ]/ { exit }
-      found && /^[^ ]/ { exit }
-    ' "$preset_file" 2>/dev/null || true)
-    if [ -n "$subs" ]; then
-      echo "$subs"
-      return
-    fi
-  fi
-
-  # ── Default sub-checks per dimension ───────────────────────────
-  case "$dim" in
-    test_execution) echo "regression
-new_tests" ;;
-    code_quality) echo "lint
-complexity
-naming" ;;
-    spec_compliance) echo "drift
-constraints
-api_surface" ;;
-    security) echo "secret_scan
-owasp
-session_security" ;;
-    test_design) echo "test_quality
-failure_modes
-negative_tests" ;;
-    integration) echo "arch_tests
-contract
-migration
-crosscutting" ;;
-    resilience) echo "resilience_testing
-adversarial" ;;
-    performance) echo "performance_budget
-quantitative" ;;
-    AC|E|G) ;; # standalone, no sub-checks
-  esac
-}
-
 # ── Run a single check ────────────────────────────────────────────
 run_check() {
   local check_id="$1"
@@ -272,11 +140,11 @@ if [ "$MODE" = "list" ] || [ "$MODE" = "dry-run" ]; then
       subs=$(expand_dimension "$dim")
       if [ -n "$subs" ]; then
         for sub in $subs; do
-          script=$(dimension_to_script "$dim" "$sub")
+          script=$(check_script "${dim}/${sub}")
           echo "  [critical] $dim/$sub -> $script"
         done
       else
-        script=$(dimension_to_script "$dim" "$dim")
+        script=$(check_script "$dim")
         echo "  [critical] $dim -> $script"
       fi
     done
@@ -292,11 +160,11 @@ if [ "$MODE" = "list" ] || [ "$MODE" = "dry-run" ]; then
       subs=$(expand_dimension "$dim")
       if [ -n "$subs" ]; then
         for sub in $subs; do
-          script=$(dimension_to_script "$dim" "$sub")
+          script=$(check_script "${dim}/${sub}")
           echo "  [secondary] $dim/$sub -> $script"
         done
       else
-        script=$(dimension_to_script "$dim" "$dim")
+        script=$(check_script "$dim")
         echo "  [secondary] $dim -> $script"
       fi
     done
@@ -315,7 +183,7 @@ if [ "$MODE" = "single" ]; then
   fi
 
   # Find the script for this check
-  script=$(dimension_to_script "$CHECK_ID" "$CHECK_ID")
+  script=$(check_script "$CHECK_ID")
   run_check "$CHECK_ID" "$script"
   exit 0
 fi
@@ -341,12 +209,12 @@ for tier in $TIERS; do
     subs=$(expand_dimension "$dim")
     if [ -n "$subs" ]; then
       for sub in $subs; do
-        script=$(dimension_to_script "$dim" "$sub")
+        script=$(check_script "${dim}/${sub}")
         ALL_CHECKS+=("${dim}/${sub}")
         ALL_SCRIPTS+=("$script")
       done
     else
-      script=$(dimension_to_script "$dim" "$dim")
+      script=$(check_script "$dim")
       ALL_CHECKS+=("$dim")
       ALL_SCRIPTS+=("$script")
     fi

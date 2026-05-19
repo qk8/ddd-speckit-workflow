@@ -19,13 +19,15 @@ if [ ! -d "$PHASES_DIR" ]; then
   exit 1
 fi
 
-# Whitelist of allowed cross-phase goto targets
-# These targets are intentionally referenced across phase boundaries
+# Whitelist of allowed cross-phase goto targets (from workflow-config.json)
 # abort — control flow keyword (handled separately)
-# cl_round — 00-validate jumps to 01-clarify's loop
-# fix_needed_round — 07-verify jumps back to 05-implement's loop
-# impl_loop — 07-verify jumps back to 05-implement's loop
-CROSS_PHASE_WHITELIST="cl_round fix_needed_round impl_loop"
+CONFIG_FILE="ddd-clean-arch/workflow-config.json"
+if [ -f "$CONFIG_FILE" ]; then
+  CROSS_PHASE_WHITELIST=$(jq -r '.dag.cross_phase_goto // [] | .[]' "$CONFIG_FILE" 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
+else
+  # Fallback: hardcoded whitelist if config missing
+  CROSS_PHASE_WHITELIST="cl_round fix_needed_round impl_loop"
+fi
 
 ERRORS=()
 CROSS_PHASE_GOTOS=()

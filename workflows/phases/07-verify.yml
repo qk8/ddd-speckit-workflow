@@ -119,18 +119,6 @@ steps:
           bash scripts/record-phase-revision.sh fix_needed_round 1
       - goto: fix_needed_round
 
-  - id: vf_backup_fix_needed
-    type: shell
-    command: >
-      bash scripts/backup-tasks.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" "pre-fix-needed"
-
-  - id: vf_track_fix_cycle
-    type: shell
-    command: >
-      bash scripts/state-engine.sh fix-cycles-increment
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
-
   - id: vf_fix_cycle_limit
     type: if
     condition: >

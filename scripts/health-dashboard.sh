@@ -119,6 +119,39 @@ if [ -f "$DRIFT_FILE" ]; then
   DRIFT_VIOLATIONS=$(grep -cE 'VIOLATION|DRIFT' "$DRIFT_FILE" 2>/dev/null) || DRIFT_VIOLATIONS=0
 fi
 
+# ── State.json data (token budget, context health, fix cycles, revisions) ──
+STATE_FILE="$FEATURE_DIR/state.json"
+FIX_CYCLES=0
+SPEC_REVISIONS=0
+IMPLEMENT_REVISIONS=0
+TOKEN_COST=0
+TOKEN_DOLLARS=0
+CONTEXT_RESETS=0
+
+if [ -f "$STATE_FILE" ]; then
+  # Fix cycle count
+  FIX_CYCLES=$(grep -o '"fix_cycles"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE_FILE" 2>/dev/null | grep -oE '[0-9]+$' || echo 0)
+  case "$FIX_CYCLES" in ''|*[!0-9]*) FIX_CYCLES=0 ;; esac
+
+  # Spec revision count
+  SPEC_REVISIONS=$(grep -o '"spec_revisions"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE_FILE" 2>/dev/null | grep -oE '[0-9]+$' || echo 0)
+  case "$SPEC_REVISIONS" in ''|*[!0-9]*) SPEC_REVISIONS=0 ;; esac
+
+  # Implement revision count
+  IMPLEMENT_REVISIONS=$(grep -o '"implement_revisions"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE_FILE" 2>/dev/null | grep -oE '[0-9]+$' || echo 0)
+  case "$IMPLEMENT_REVISIONS" in ''|*[!0-9]*) IMPLEMENT_REVISIONS=0 ;; esac
+
+  # Token budget usage
+  TOKEN_COST=$(grep -o '"total_cost_tokens"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE_FILE" 2>/dev/null | grep -oE '[0-9]+$' || echo 0)
+  case "$TOKEN_COST" in ''|*[!0-9]*) TOKEN_COST=0 ;; esac
+  # Convert tokens to approximate dollars (5$/M input, 30$/M output, rough 10$/M avg)
+  TOKEN_DOLLARS=$((TOKEN_COST / 100000))
+
+  # Context resets
+  CONTEXT_RESETS=$(grep -o '"context_resets"[[:space:]]*:[[:space:]]*[0-9]*' "$STATE_FILE" 2>/dev/null | grep -oE '[0-9]+$' || echo 0)
+  case "$CONTEXT_RESETS" in ''|*[!0-9]*) CONTEXT_RESETS=0 ;; esac
+fi
+
 # ── Health scoring (0-100) ──────────────────────────────────────
 # task_progress: 25% — DONE/total * 25
 if [ "$TASK_TOTAL" -gt 0 ]; then
@@ -233,6 +266,15 @@ else
 fi
 echo "║                                          ║"
 printf "║  RISKS:  %-3d abandoned, %-3d blocked, stagnation  ║\n" "$TASK_ABANDONED" "$TASK_BLOCKED"
+
+# State.json section (detailed mode)
+if [ "$DETAILED" = true ] && [ -f "$STATE_FILE" ]; then
+  echo "║                                          ║"
+  printf "║  TOKENS:  %-8d (~$TOKEN_DOLLARS)          ║\n" "$TOKEN_COST"
+  printf "║  CONTEXT: %-8d resets               ║\n" "$CONTEXT_RESETS"
+  printf "║  FIX CYCLES: %-3d | SPEC REV: %-3d | IMPL REV: %-3d ║\n" "$FIX_CYCLES" "$SPEC_REVISIONS" "$IMPLEMENT_REVISIONS"
+fi
+
 echo "╚══════════════════════════════════════════════╝"
 
 # ── Detailed mode ───────────────────────────────────────────────

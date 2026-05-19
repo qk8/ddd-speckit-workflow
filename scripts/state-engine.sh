@@ -304,6 +304,56 @@ do_validate() {
     exit 1
   fi
 
+  # Check task statuses are valid enum values
+  local bad_statuses
+  bad_statuses=$(jq -r '
+    .tasks | to_entries[]
+    | select(.value.status != "TODO" and .value.status != "IN_PROGRESS" and
+             .value.status != "DONE" and .value.status != "ABANDONED" and
+             .value.status != "BLOCKED" and .value.status != null)
+    | "\(.key)=\(.value.status)"
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$bad_statuses" ]; then
+    echo "VALIDATION: FAIL — invalid task statuses:" >&2
+    echo "$bad_statuses" | while IFS='=' read -r task status; do
+      echo "  $task: '$status' (valid: TODO, IN_PROGRESS, DONE, ABANDONED, BLOCKED)" >&2
+    done
+    exit 1
+  fi
+
+  # Check for self-referential dependencies
+  local self_refs
+  self_refs=$(jq -r '
+    .tasks | to_entries[]
+    | . as $entry
+    | select($entry.value.dependencies // [] | any(. == $entry.key))
+    | .key
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$self_refs" ]; then
+    echo "VALIDATION: FAIL — self-referential dependencies: $self_refs" >&2
+    exit 1
+  fi
+
+  # Check metadata.updated_at is present
+  if ! jq -e '.metadata.updated_at // empty' "$STATE_FILE" >/dev/null 2>&1; then
+    echo "VALIDATION: FAIL — metadata.updated_at is missing" >&2
+    exit 1
+  fi
+
+  # Warn about tasks missing scope.creates (backward compat)
+  local missing_creates
+  missing_creates=$(jq -r '
+    .tasks | to_entries[]
+    | select(.value.scope.creates == null or (.value.scope.creates | length == 0))
+    | .key
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$missing_creates" ]; then
+    echo "WARNING: Tasks missing scope.creates: $(echo "$missing_creates" | tr '\n' ', ' | sed 's/,$//')" >&2
+  fi
+
   echo "VALIDATION: PASS"
 }
 

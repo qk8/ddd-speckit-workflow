@@ -1,7 +1,6 @@
-# ── FILE SNAPSHOT / ROLLBACK (Issue D) ──────────────────────────
-# Before verification, check if a pre-task snapshot exists.
-# If verification fails, restore files from snapshot rather than
-# leaving partial changes on disk.
+# ── IMPLEMENT VERIFY — ORCHESTRATOR ────────────────────────────
+# Reads: speckit.implement-verify-checks.md (quality checks)
+#        speckit.implement-verify-report.md (completion report)
 
 You are continuing implementation of a task. The code was just written
 and tests pass. Now run quality checks and produce the completion report.
@@ -10,327 +9,41 @@ Read tasks.md to determine the current task (first IN_PROGRESS or first TODO).
 Read plan.md §13 and CLAUDE.md for layer rules and constraints.
 
 ─────────────────────────────────────────
-STEP 2.5 — RESTORE FROM SNAPSHOT ON FAILURE
+STEP 1 — READ TASK CONTEXT
 ─────────────────────────────────────────
-If any quality check (STEP 3) or smoke test (STEP 4) fails:
-
-  1. Check for pre-task snapshot:
-     FEATURE_DIR="[feature_dir from tasks.md]"
-     TASK_ID="[current task ID]"
-     if [ -f "$FEATURE_DIR/.artifacts/snapshots/${TASK_ID}.snapshot.json" ]; then
-       bash scripts/check-point.sh rollback "$FEATURE_DIR" "$TASK_ID"
-     fi
-
-  2. If rollback succeeds: print "FILES RESTORED from pre-task snapshot."
-     and mark task IN_PROGRESS (not DONE).
-  3. If no snapshot exists: print "NO SNAPSHOT AVAILABLE — partial files remain."
-     and mark task IN_PROGRESS with note: "partial_files_remain".
+Identify the current task from tasks.md. Note:
+  - Task ID (e.g., TASK-3)
+  - Task type (e.g., implement, test)
+  - Module type (e.g., backend-domain, shared)
+  - Feature directory (where tasks.md lives)
+  - Build command from plan.md §13
 
 ─────────────────────────────────────────
-STEP 2.6 — DIAGNOSTIC ENFORCEMENT CHECK
+STEP 2 — RUN QUALITY CHECKS
 ─────────────────────────────────────────
-Before running quality checks, verify no diagnostic enforcement violations:
-
-If .artifacts/diagnostic-enforcement.action exists:
-  Run: bash scripts/diagnostic-enforcement.sh --verify --auto-revert "$(bash scripts/find-first-feature.sh)"
-  Read the result:
-    ENFORCEMENT=ENFORCED — proceed to quality checks.
-    ENFORCEMENT=VIOLATION_FOUND — STOP. Revert ALL unauthorized changes:
-      1. For each VIOLATION-N line, identify the violated file.
-      2. Run: git checkout HEAD -- <file>
-      3. The --auto-revert flag should have done this, but verify manually.
-      4. Do NOT proceed until violations are resolved.
-    ENFORCEMENT=NOT_APPLICABLE — proceed to quality checks.
-
-  Additionally, check REQUIRED_ACTION directly:
-    If REQUIRED_ACTION=FIX_TEST:
-      You should NOT be modifying implementation files at this stage.
-      The previous step indicated the test is wrong, not the implementation.
-      Revert any implementation changes and fix the test instead.
-    If REQUIRED_ACTION=HUMAN:
-      Stop. Print: "DIAGNOSTIC ENFORCEMENT: HUMAN review required."
-      Do NOT proceed with quality checks.
+Execute STEP 2.5 through STEP 3D from speckit.implement-verify-checks.md:
+  1. Restore from snapshot on failure (STEP 2.5)
+  2. Diagnostic enforcement check (STEP 2.6)
+  3. Deterministic checks via check-runner.sh (STEP 3A)
+  4. Batched Claude checks if last task of module (STEP 3B)
+  5. Fix deterministic check failures (STEP 3C)
+  6. Error budget & escalation (STEP 3D)
 
 ─────────────────────────────────────────
-STEP 3 — RUN QUALITY CHECKS
+STEP 3 — SMOKE TEST
 ─────────────────────────────────────────
-Read the current task type from tasks.md.
-Load applicable checks from ddd-clean-arch/preset.yml, filtered by tier:
-
-TIER FILTERING:
-  preset.yml assigns each check a tier:
-  - critical (A, BC, D, I, L, Z): run every task — non-negotiable quality gates
-  - secondary (E, F, G, J, K, M, N, O): run only when the LAST task for a
-    module type completes (e.g., last backend-api task)
-  - tertiary (H, P, Q, R, S, T, U): skip entirely during per-task execution —
-    handled in Phase 6 code review and Phase 7 final verify
-
-  For this task, run only critical-tier checks.
-  Check which module type this task belongs to (from tasks.md Type field).
-  If this is the last task of that type (count remaining TODO/IN_PROGRESS tasks
-  of the same type), also run secondary-tier checks for that module.
+Execute STEP 4 from speckit.implement-verify-checks.md:
+  1. Validate build command prerequisites
+  2. Run build command or import/load check
+  3. Fix-and-revert protocol on failure (max 2 attempts)
 
 ─────────────────────────────────────────
-STEP 3A — DETERMINISTIC CHECKS (check-runner.sh)
+STEP 4 — PRODUCE COMPLETION REPORT
 ─────────────────────────────────────────
-Run the deterministic check engine:
-
-  bash scripts/check-runner.sh "[feature_dir]" "[task_type]"
-
-This executes all deterministic checks (A, AC, AS, BC, D, E, F, I, K, L, O, OW, R, US, V, W, Z) in parallel.
-Results are written to .artifacts/check-results/<check-id>.result (PASS/FAIL).
-
-If check-runner.sh exits 0: all deterministic checks passed. Proceed to STEP 3B.
-If check-runner.sh exits 1: deterministic checks failed. Proceed to STEP 3C.
-
-─────────────────────────────────────────
-STEP 3B — BATCHED CLAUDE CHECKS
-─────────────────────────────────────────
-For non-deterministic checks that need Claude judgment (G, H, J, M, N, P, Q, S, T):
-
-If this is the LAST task of the current module type, run these checks:
-  - Read the sub-check file from commands/checks/check_[X]_[name].mdc for each
-  - Execute each check. Record result: PASS | FAIL — details.
-
-For non-last tasks, skip batched Claude checks (handled at module boundary).
-
-Note: Checks O (Security Hardening) and U (Session & Token Security) are now
-deterministic (OW, US scripts) and run in STEP 3A. They are no longer here.
-
-─────────────────────────────────────────
-STEP 3C — FIX DETERMINISTIC CHECK FAILURES
-─────────────────────────────────────────
-If check-runner.sh reported failures:
-  1. Read .artifacts/check-results/[X].result for each failed check.
-  2. Attempt to fix the underlying issue.
-  3. Re-run check-runner.sh from the beginning.
-  4. If not fixable after 2 attempts: mark ABANDONED.
-
-─────────────────────────────────────────
-STEP 3D — ERROR BUDGET & ESCALATION
-─────────────────────────────────────────
-ERROR BUDGET:
-  - Critical checks: 0 error budget — ALL must pass. No exceptions.
-  - Secondary checks: 1 error budget — at most one may fail (logged as warning).
-  - If error budget exceeded: stop revising, produce summary report, escalate.
-
-PER-CHECK ITERATION CAP:
-  Deterministic checks (check-runner.sh): up to 2 fix attempts.
-  Batched Claude checks: up to 2 fix attempts.
-  The correction loop (STEP 2) gets up to 3 attempts per test failure.
-  GLOBAL CAP: Max 10 total correction attempts across ALL checks for a task.
-  Track via: bash scripts/state-engine.sh get "$FEATURE_DIR" corrections.global_total
-  If global cap reached: stop and escalate to human review.
-
-  If the SAME check fails 3 consecutive times:
-    1. Print: "CHECK [X] FAILED 3 TIMES — escalating to human review."
-    2. Create .artifacts/failure-report.md:
-       ## Failure Report — Check [X] ([check_name])
-       - **Task**: [TASK-N]
-       - **Check**: [X] — [check_name]
-       - **Tier**: [critical/secondary]
-       - **Attempt 1**: [summary of fix attempt + error]
-       - **Attempt 2**: [summary of fix attempt + error]
-       - **Recommendation**: ABANDON or HUMAN REVIEW
-    3. Mark task ABANDONED in tasks.md (Status: ABANDONED, Abandoned at: STEP 3D check [X]).
-    4. Print: "Task ABANDONED due to unresolvable check failure."
-    5. Proceed to next task (do NOT block the workflow).
-
-A task cannot be marked DONE until every applicable check passes — unless it has been
-ABANDONED per the procedure above, in which case the failure report serves as the
-record and the workflow continues to the next task.
-
-─────────────────────────────────────────
-STEP 4 — SMOKE TEST (CODE-LEVEL VALIDATION)
-─────────────────────────────────────────
-Before marking the task DONE, verify the code actually compiles/builds.
-This prevents the stagnation detector from counting tasks as done when
-the code does not actually work.
-
-Read plan.md §13 for the build/compile command:
-  [build_command from plan.md §13, or "none" if no build step]
-
-PRE-VALIDATION:
-  Before running the build command, verify the required files exist:
-  - If build_command starts with "npm": verify package.json exists
-  - If build_command starts with "mvn": verify pom.xml exists
-  - If build_command starts with "gradle": verify build.gradle exists
-  - If build_command starts with "go": verify go.mod exists
-  - If build_command starts with "pytest": verify pytest config exists
-  - If the required file does NOT exist: flag as BUILD_COMMAND_ERROR,
-    add a fix task to tasks.md to correct plan.md §13, and skip smoke test.
-
-If build_command is not "none":
-  RUN: [build_command]
-  Use scripts/validate-tests.sh to capture and validate the result:
-    bash scripts/validate-tests.sh "[build_command]" "pass"
-  Read the output. If TEST_RESULT is "fail":
-    1. STOP — do NOT mark the task DONE.
-    2. Revert tasks.md Status from DONE back to IN_PROGRESS.
-    3. Print: "SMOKE TEST FAILED — reverted to IN_PROGRESS for review."
-    4. Print: "See: $TEST_OUTPUT_FILE"
-    5. After each failure, check if the SAME error message appeared before:
-       - If error is about a missing file/command that plan.md says exists:
-         Flag BUILD_COMMAND_MISMATCH — add fix task to correct plan.md §13.
-       - If error is about missing source files: this is an implementation error.
-    6. Attempt to fix the build (max 2 attempts, same correction loop as STEP 2).
-    7. If still failing after 2 attempts: mark ABANDONED, print FAILURE_REPORT.md.
-
-If no build step (build_command is "none"):
-  Run a minimal import/load check instead:
-    - For Node.js/TypeScript: run "node -e 'require(\"./src/index\")'" or equivalent
-    - For Python: run "python -c 'import [main_module]'"
-    - For Go: run "go build ./..." in the module root
-    - For Ruby: run "ruby -c lib/**/*.rb"
-  Use scripts/validate-tests.sh with expected "pass".
-  If it fails: same fix-and-revert protocol as above.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 5 — COMPLETION REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Print:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COMPLETION REPORT — TASK-[N]
-
-Test file: [path] ([N] test cases committed)
-
-Acceptance criteria:
-  [1] [criterion] → SATISFIED — [test name that proves it]
-  ...
-
-Do NOT constraint: [restate] → RESPECTED — [how]
-
-Read templates/check-report-template.md for the 21-check results table.
-
-Test data isolation: [confirmed — factory/fixture used | N/A for unit tests]
-
-SMOKE TEST: [PASS — build/load verified | N/A — no build step]
-ROLLBACK FILES: [list of files restored/removed | none]
-ROLLBACK NOTE: [rollback note from tasks.md | none]
-
-━━ SPEC LEARNINGS ━━━━━━━━━━━━━━━━━━━━━━
-  A) Spec decision wrong/impractical?    [yes — description | none]
-  B) Gap requiring a decision?           [yes — description | none]
-  C) CLAUDE.md rule ambiguous?           [yes — description | none]
-  D) Assumption invalidated by library?  [yes — description | none]
-
-For each finding: propose a change to plan.md [section.field → new value].
-Do NOT apply until user confirms. List all and wait for confirmation.
-After confirmation: update plan.md and record in tasks.md.
-
-# ── PERSIST UNAPPLIED LEARNINGS ───────────────────────────
-# If any spec learning was proposed but NOT applied (user rejected or not yet
-# confirmed), persist it to a pending file so speckit.retrospect can cross-check.
-
-Read the current feature directory from tasks.md (the directory containing tasks.md).
-PENDING_DIR="[feature_dir]/.artifacts"
-mkdir -p "$PENDING_DIR"
-PENDING_FILE="$PENDING_DIR/pending-learnings.md"
-
-For each learning that was proposed but NOT applied:
-  Append to pending-learnings.md:
-    ## TASK-[N] — [date in UTC]
-    - Type: [A|B|C|D from spec learnings categories]
-    - Description: [the learning]
-    - Proposed change: [plan.md section.field -> new value]
-    - Status: PENDING
-    - Rejected: [yes/no/unknown]
-
-Print: "Pending learnings written to $PENDING_FILE"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Update tasks.md for TASK-[N]:
-  Status: DONE
-  Built: [one sentence]
-  Test file: [path]
-  Spec changes applied: [list | none]
-  Perf warning: [Check [J] warning text | none]
-    (Record any performance budget warnings here so retrospect can read them.)
-  Rollback note: [regression note | none]
-    (If this task was rolled back and retried, record the reason.)
-
-# Recovery note for the next session if this task was previously ABANDONED:
-# If the task was previously ABANDONED and this is a restart, verify that
-# partial files from the previous attempt are consistent with what was just built.
-# Remove any stale partial artifacts before marking DONE.
-
-Count total DONE tasks. The workflow (check-tasks.sh) handles adaptive retrospective
-cadence based on project complexity. Print a completion notice:
-  "[N] tasks completed."
-
-# ── PERSIST CHECKPOINT ──────────────────────────────────────
-# After updating tasks.md, write structured checkpoint data
-# so future sessions can resume without re-parsing tasks.md.
-
-FEATURE_DIR="[feature_dir from tasks.md location]"
-TASK_ID="[current task ID, e.g. TASK-3]"
-TASK_TYPE="[task type from tasks.md]"
-BUILT="[one sentence from Built field]"
-TEST_FILE="[path from Test file field]"
-
-mkdir -p "$FEATURE_DIR/.artifacts"
-
-# Write checkpoint using check-point.sh helper (bash 3.2 compatible)
-bash scripts/check-point.sh write "$FEATURE_DIR" task_done "$TASK_ID" "$TASK_TYPE" "$BUILT" "$TEST_FILE" 2>/dev/null || {
-    echo "WARNING: Checkpoint write failed for $TASK_ID — state may not persist across sessions." >&2
-    echo "Continuing anyway — tasks.md is the source of truth." >&2
-  }
-
-echo "Checkpoint updated: $TASK_ID marked DONE in .workflow-state.json"
-
-# ── UPDATE ERROR MEMORY ─────────────────────────────────────
-# Record corrections and patterns from this task for future tasks.
-# The diagnostic-classifier.sh output (from STEP 2) contains
-# classification info that can be used to populate error memory.
-
-FEATURE_DIR="[feature_dir from tasks.md location]"
-TASK_ID="[current task ID, e.g. TASK-3]"
-
-# If any corrections were made during the inline correction loop,
-# record them in error memory for future tasks to learn from.
-# The diagnostic classifier output (if available) has the classification
-# AND specific evidence for targeted learning.
-
-if [ -f "$TEST_OUTPUT_FILE" ]; then
-  # Extract classification and specific evidence from diagnostic output
-  DIAG_CLASS=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^CLASSIFICATION=" | head -1 | sed 's/CLASSIFICATION=//')
-  DIAG_EVIDENCE=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^EVIDENCE=" | head -1 | sed 's/EVIDENCE=//')
-
-  if [ -n "$DIAG_CLASS" ]; then
-    # Store both classification and specific evidence
-    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "$DIAG_CLASS" "${DIAG_EVIDENCE:-Test failure during implementation}" "Review diagnostic output and apply fix pattern" "${DIAG_EVIDENCE:-}" 2>/dev/null || true
-  fi
-
-  # Extract IMPL_FAULT_COUNT for error memory
-  DIAG_IMPL_COUNT=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^IMPL_FAULT_COUNT=" | head -1 | sed 's/IMPL_FAULT_COUNT=//')
-  DIAG_MIXED=$(cat "${TEST_OUTPUT_FILE%.txt}_diag.out" 2>/dev/null | grep "^MIXED_FAULTS=" | head -1 | sed 's/MIXED_FAULTS=//')
-  if [ -n "$DIAG_MIXED" ] && [ "$DIAG_MIXED" = "true" ]; then
-    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "mixed_faults" "Mixed TEST_FAULT and IMPL_ERROR detected — requires human review" "Cross-fault diagnosis needed" "" 2>/dev/null || true
-  fi
-fi
-
-# Record any drift patterns detected during quick drift check
-if [ -f "$FEATURE_DIR/.artifacts/post-implementation-drift.md" ]; then
-  DRIFT_ISSUES=$(grep -c "VIOLATION\|DRIFT" "$FEATURE_DIR/.artifacts/post-implementation-drift.md" 2>/dev/null || echo 0)
-  # Note: grep -c returns non-zero when count is 0, hence || echo 0 is safe here
-  if [ "$DRIFT_ISSUES" -gt 0 ]; then
-    bash scripts/error-memory.sh update "$FEATURE_DIR" "$TASK_ID" "drift" "$DRIFT_ISSUES drift violations detected" "Review plan.md §16 constraints" 2>/dev/null || true
-  fi
-fi
-
-echo "Error memory updated for $TASK_ID"
-
-# ── LOG TEST HEALTH TRENDS ────────────────────────────────────
-# Track test metrics over time to detect degradation.
-FEATURE_DIR="[feature_dir from tasks.md location]"
-TASK_ID="[current task ID]"
-TASK_TYPE="[task type from tasks.md]"
-
-bash scripts/test-health-log.sh "$FEATURE_DIR" "$TASK_ID" "$TASK_TYPE" 2>/dev/null || true
-
-# ── LOG COMPLEXITY TRENDS ─────────────────────────────────────
-# Track code complexity over time to detect growth.
-bash scripts/complexity-trend.sh "$FEATURE_DIR" "$TASK_ID" 2>/dev/null || true
+Execute STEP 5 from speckit.implement-verify-report.md:
+  1. Print completion report with test/acceptance summary
+  2. Persist spec learnings to pending-learnings.md
+  3. Update tasks.md (Status: DONE, Built, Test file, etc.)
+  4. Write checkpoint via check-point.sh
+  5. Update error memory from diagnostic output
+  6. Log test health trends and complexity trends

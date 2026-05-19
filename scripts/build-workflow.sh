@@ -95,25 +95,20 @@ extract_steps() {
     yq '.steps[]' "$file" 2>/dev/null | sed 's/^/  /' || true
   else
     # Text-based fallback: improved parser that tracks YAML context.
-    # Only matches 'steps:' at depth 1 (no leading whitespace) to avoid
+    # Only matches 'steps:' at depth 0 (no leading whitespace) to avoid
     # matching "steps:" inside YAML strings, comments, or nested keys.
-    # State machine: tracks quote state, comment state, and indentation depth.
-    local IN_STEPS=false SKIP_BLANKS=true IN_QUOTE=false IN_COMMENT=false
+    # Uses parameter expansion instead of grep to avoid stdin consumption.
+    local IN_STEPS=false SKIP_BLANKS=true IN_QUOTE=false
     local STEP_DEPTH=0
-    local WARNED=false
     while IFS= read -r line; do
-      # Track comment state: if line starts with #, skip it
-      if [[ "$line" =~ ^[[:space:]]*# ]]; then
-        IN_COMMENT=true
-        continue
-      fi
-      IN_COMMENT=false
+      # Skip comment lines
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
 
       # Track quote state: toggle if we encounter an odd number of quotes
-      local stripped
-      stripped=$(echo "$line" | sed 's/^[[:space:]]*//')
+      local stripped="${line#"${line%%[![:space:]]*}"}"
       local quote_count
-      quote_count=$(echo "$stripped" | tr -cd '"' | wc -c)
+      local tmp="${stripped//[^\"]/}"
+      quote_count="${#tmp}"
       if [ $((quote_count % 2)) -eq 1 ]; then
         if [ "$IN_QUOTE" = true ]; then IN_QUOTE=false; else IN_QUOTE=true; fi
       fi
@@ -123,10 +118,9 @@ extract_steps() {
         continue
       fi
 
-      # Calculate indentation depth (number of leading spaces)
-      local leading_spaces
-      leading_spaces=$(echo "$line" | grep -oE '^[[:space:]]*' | wc -c)
-      leading_spaces=$((leading_spaces - 1))  # wc -c includes newline
+      # Calculate indentation depth using parameter expansion (no grep)
+      local no_leading="${line#"${line%%[![:space:]]*}"}"
+      local leading_spaces=$(( ${#line} - ${#no_leading} ))
 
       # Detect 'steps:' key at depth 0 (no leading whitespace) only
       if [ "$leading_spaces" -eq 0 ] && [[ "$stripped" =~ ^steps:([[:space:]]|$) ]]; then
@@ -182,11 +176,16 @@ extract_steps() {
 
     # Issue 10: Use manifest if provided, otherwise fall back to glob discovery
     if [ -n "$MANIFEST" ] && [ -f "$MANIFEST" ]; then
-      # Use manifest: one sub-phase file per line, in execution order
+      # Use manifest: one sub-phase file per line, in execution order.
+      # Only apply manifest to phases whose prefix matches the sub-phase prefix.
+      MANIFEST_PREFIX="${PHASE_PREFIX%-*}"
       while IFS= read -r sub_name; do
         # Skip comments and empty lines
         [[ "$sub_name" =~ ^#.*$ ]] && continue
         [ -z "$sub_name" ] && continue
+        # Skip sub-phases from other phases (e.g., 05-* when processing 01-*)
+        SUB_PREFIX="${sub_name%-*}"
+        [ "$SUB_PREFIX" != "$MANIFEST_PREFIX" ] && continue
         sub_file="$PHASE_DIR/$sub_name"
         [ -f "$sub_file" ] || continue
         [ "$sub_name" = "$PHASE_BASE" ] && continue
@@ -250,6 +249,61 @@ if [ "$GOTO_ERRORS" -gt 0 ]; then
 fi
 
 echo "  Pre-flight validation passed: all goto targets resolve to defined steps." >&2
+
+# ── max_iterations sync validation ────────────────────────────────
+# Compare YAML max_iterations with workflow-config.json iteration_limits.*
+echo "" >&2
+echo "Checking max_iterations sync with workflow-config.json..." >&2
+CONFIG_FILE="ddd-clean-arch/workflow-config.json"
+SYNC_ERRORS=0
+
+if [ -f "$CONFIG_FILE" ] && command -v jq &>/dev/null 2>&1; then
+  # Loop ID → config key mapping
+  declare -A LOOP_TO_KEY
+  LOOP_TO_KEY[impl_loop]="implement_loop"
+  LOOP_TO_KEY[cl_round]="clarify_round"
+  LOOP_TO_KEY[tasks_phase]="tasks_phase"
+  LOOP_TO_KEY[spec_audit]="spec_audit"
+  LOOP_TO_KEY[pl_review]="plan_review"
+  LOOP_TO_KEY[fix_needed_round]="verify_fix_needed"
+  LOOP_TO_KEY[cr_round]="code_review_round"
+
+  # Extract max_iterations from merged YAML with loop context
+  # We look for: - id: <loop_id> type: while → later max_iterations: N
+  CURRENT_LOOP=""
+  while IFS= read -r line; do
+    if echo "$line" | grep -qE '^\s+- id:'; then
+      CURRENT_LOOP=$(echo "$line" | sed 's/.*- id: *//' | tr -d '"' | tr -d "'")
+    fi
+    if echo "$line" | grep -qE '^\s+max_iterations:' && [ -n "$CURRENT_LOOP" ]; then
+      YAML_VAL=$(echo "$line" | sed 's/.*max_iterations: *//' | tr -d '"' | tr -d "'" | tr -d ' ')
+      CONFIG_KEY="${LOOP_TO_KEY[$CURRENT_LOOP]:-}"
+      if [ -n "$CONFIG_KEY" ]; then
+        JSON_VAL=$(jq -r ".iteration_limits.${CONFIG_KEY} // \"MISSING\"" "$CONFIG_FILE" 2>/dev/null)
+        case "$JSON_VAL" in
+          MISSING|null)
+            echo "  ERROR: $CURRENT_LOOP → config key '$CONFIG_KEY' not found in workflow-config.json" >&2
+            SYNC_ERRORS=$((SYNC_ERRORS + 1))
+            ;;
+          *)
+            if [ "$YAML_VAL" != "$JSON_VAL" ]; then
+              echo "  ERROR: $CURRENT_LOOP — YAML=$YAML_VAL but config=$JSON_VAL" >&2
+              SYNC_ERRORS=$((SYNC_ERRORS + 1))
+            fi
+            ;;
+        esac
+      fi
+    fi
+  done < "$TMP_BUILD"
+
+  if [ "$SYNC_ERRORS" -eq 0 ]; then
+    echo "  OK: All max_iterations values match workflow-config.json" >&2
+  fi
+fi
+
+if [ "$SYNC_ERRORS" -gt 0 ]; then
+  echo "  max_iterations sync failed — values must match workflow-config.json" >&2
+fi
 
 # Optional full DAG validation
 if [ "$VALIDATE" = "--validate" ]; then

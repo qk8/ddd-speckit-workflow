@@ -58,7 +58,8 @@
   },
   "dag": {
     "max_parallel": 4,
-    "bundle_max_lines": 200
+    "bundle_max_lines": 200,
+    "cross_phase_goto": ["cl_round", "fix_needed_round", "impl_loop"]
   },
   "other": {
     "batch_correction_cap": 10,
