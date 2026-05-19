@@ -29,9 +29,21 @@ set -euo pipefail
 
 ACTION="${1:-update}"
 FEATURE_DIR="${2:-}"
+PROTECT_TASK=""
+SHOW_STATS=false
+
+# Parse additional flags
+shift 2 2>/dev/null || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --protect) PROTECT_TASK="${2:-}"; shift 2 ;;
+    --stats)   SHOW_STATS=true; shift ;;
+    *)         shift ;;
+  esac
+done
 
 if [ -z "$FEATURE_DIR" ]; then
-  echo "Usage: bash error-memory.sh <read|update|clear|summary> <feature_dir> [args...]"
+  echo "Usage: bash error-memory.sh <read|update|clear|summary> <feature_dir> [--protect <task_id>] [--stats]"
   exit 1
 fi
 
@@ -179,16 +191,45 @@ do_update() {
     new_entry=$(echo "$new_entry" | jq --arg ev "$evidence" '. + {evidence: $ev}')
   fi
 
-  # Append to corrections array and enforce 10-entry cap
+  # Append to corrections array and enforce 10-entry cap with confidence-weighted eviction
   local tmp_file
   tmp_file=$(mktemp "${MEMORY_FILE}.XXXXXX")
-  jq --argjson entry "$new_entry" --arg updated "$ts" '
+
+  # Build the jq filter for confidence-weighted eviction
+  local jq_filter='
     .corrections += [$entry] |
     if (.corrections | length) > 10 then
-      .corrections = .corrections[-10:]
+      # Find the entry to evict: lowest count * confidence score
+      # Protected entries: confidence >= 0.8 AND count >= 3
+      .corrections |
+      map(
+        . + {
+          "score": (.count * .confidence),
+          "protected": ((.confidence >= 0.8) and (.count >= 3))
+        }
+      ) |
+      # Separate protected and evictable
+      (map(select(.protected))) as $protected |
+      (map(select((.protected | not))) | sort_by(.score) | .[0]) as $to_evict |
+      if $to_evict != null then
+        # Find original index and remove it
+        .corrections as $orig |
+        ($orig | length) as $len |
+        # Rebuild: remove the evictable entry (lowest score, not protected)
+        [to_entries[] | select(.value | .score != ($to_evict.score) or .protected)] |
+        map(del(.value.score) | del(.value.protected))
+      else $orig
+      end
     else . end |
     .updated = $updated
-  ' "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
+  '
+
+  if [ -n "$PROTECT_TASK" ]; then
+    jq_filter=$(echo "$jq_filter" | sed 's/"protected": ((\.confidence >= 0.8) and (\.count >= 3))/"protected": ((.confidence >= 0.8) and (.count >= 3) or .task == "'"${PROTECT_TASK}"'")/')
+  fi
+
+  jq --argjson entry "$new_entry" --arg updated "$ts" "$jq_filter" \
+    "$MEMORY_FILE" > "$tmp_file" && mv "$tmp_file" "$MEMORY_FILE"
   echo "ERROR-MEMORY: added correction for $task_id ($error_type)"
 }
 
@@ -320,6 +361,44 @@ do_summary() {
   echo "  Last updated: $(grep '"updated"' "$MEMORY_FILE" 2>/dev/null | head -1 | sed 's/.*"updated": "\(.*\)".*/\1/')"
 }
 
+# ── Stats: print confidence distribution ────────────────────────
+do_stats() {
+  if [ ! -f "$MEMORY_FILE" ]; then
+    echo "Error memory stats: empty"
+    return
+  fi
+
+  echo "Error Memory Stats:"
+
+  # Confidence distribution
+  jq -r '
+    .corrections |
+    if length == 0 then "  No corrections"
+    else
+      (map(.count * .confidence) | add / length) as $avg |
+      (map(.count * .confidence) | max) as $max |
+      (map(.count * .confidence) | min) as $min |
+      (map(select(.confidence >= 0.8 and .count >= 3)) | length) as $protected |
+      "  Corrections: \(length)" | . + "\n" +
+      "  Avg score (count*confidence): \($avg | . * 100 | round / 100)" | . + "\n" +
+      "  Min score: \($min | . * 100 | round / 100)" | . + "\n" +
+      "  Max score: \($max | . * 100 | round / 100)" | . + "\n" +
+      "  Protected (conf>=0.8, count>=3): $protected"
+    end
+  ' "$MEMORY_FILE" 2>/dev/null || echo "  Error reading stats"
+
+  # Drift pattern stats
+  jq -r '
+    .drift_patterns |
+    if length == 0 then ""
+    else
+      "\n  Drift patterns: \(length)" | . +
+      (map(select(.confidence >= 0.8)) | length) as $high_conf |
+      "\n  High confidence (>=0.8): $high_conf"
+    end
+  ' "$MEMORY_FILE" 2>/dev/null || true
+}
+
 # ── Main ─────────────────────────────────────────────────────────
 case "$ACTION" in
   read)
@@ -328,6 +407,9 @@ case "$ACTION" in
     ;;
   update)
     do_update "$FEATURE_DIR" "$ACTION" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+    if $SHOW_STATS; then
+      do_stats
+    fi
     ;;
   clear)
     do_clear
@@ -335,8 +417,12 @@ case "$ACTION" in
   summary)
     do_summary
     ;;
+  stats)
+    init_memory
+    do_stats
+    ;;
   *)
-    echo "Usage: bash error-memory.sh <read|update|clear|summary> <feature_dir> [args...]"
+    echo "Usage: bash error-memory.sh <read|update|clear|summary|stats> <feature_dir> [--protect <task_id>] [--stats]"
     exit 1
     ;;
 esac

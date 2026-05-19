@@ -32,14 +32,24 @@ STEP 2.6 — DIAGNOSTIC ENFORCEMENT CHECK
 Before running quality checks, verify no diagnostic enforcement violations:
 
 If .artifacts/diagnostic-enforcement.action exists:
-  Read the REQUIRED_ACTION from the file.
-  If REQUIRED_ACTION=FIX_TEST:
-    You should NOT be modifying implementation files at this stage.
-    The previous step indicated the test is wrong, not the implementation.
-    Revert any implementation changes and fix the test instead.
-  If REQUIRED_ACTION=HUMAN:
-    Stop. Print: "DIAGNOSTIC ENFORCEMENT: HUMAN review required."
-    Do NOT proceed with quality checks.
+  Run: bash scripts/diagnostic-enforcement.sh --verify --auto-revert "$(bash scripts/find-first-feature.sh)"
+  Read the result:
+    ENFORCEMENT=ENFORCED — proceed to quality checks.
+    ENFORCEMENT=VIOLATION_FOUND — STOP. Revert ALL unauthorized changes:
+      1. For each VIOLATION-N line, identify the violated file.
+      2. Run: git checkout HEAD -- <file>
+      3. The --auto-revert flag should have done this, but verify manually.
+      4. Do NOT proceed until violations are resolved.
+    ENFORCEMENT=NOT_APPLICABLE — proceed to quality checks.
+
+  Additionally, check REQUIRED_ACTION directly:
+    If REQUIRED_ACTION=FIX_TEST:
+      You should NOT be modifying implementation files at this stage.
+      The previous step indicated the test is wrong, not the implementation.
+      Revert any implementation changes and fix the test instead.
+    If REQUIRED_ACTION=HUMAN:
+      Stop. Print: "DIAGNOSTIC ENFORCEMENT: HUMAN review required."
+      Do NOT proceed with quality checks.
 
 ─────────────────────────────────────────
 STEP 3 — RUN QUALITY CHECKS

@@ -16,8 +16,27 @@
 
 set -euo pipefail
 
-INPUT_FILE="${1:?Usage: sanitize-prompt.sh <input_file> [output_file]}"
-OUTPUT_FILE="${2:-}"
+TOLERANT=false
+INPUT_FILE=""
+OUTPUT_FILE=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --tolerant) TOLERANT=true ;;
+    *)
+      if [ -z "$INPUT_FILE" ]; then
+        INPUT_FILE="$arg"
+      elif [ -z "$OUTPUT_FILE" ]; then
+        OUTPUT_FILE="$arg"
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$INPUT_FILE" ]; then
+  echo "Usage: sanitize-prompt.sh [--tolerant] <input_file> [output_file]" >&2
+  exit 1
+fi
 
 if [ ! -f "$INPUT_FILE" ]; then
   echo "ERROR: File not found: $INPUT_FILE" >&2
@@ -136,5 +155,9 @@ fi
 # Exit 0 even with warnings — warnings are advisory
 # The workflow reads the warning count to decide next steps
 echo "SANITIZE_WARNINGS=$WARNINGS"
+
+if [ "$WARNINGS" -gt 0 ] && [ "$TOLERANT" = false ]; then
+  exit 1
+fi
 
 exit 0

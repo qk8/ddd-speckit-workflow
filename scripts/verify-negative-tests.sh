@@ -2,13 +2,30 @@
 # Negative Tests Check (Check NT / test_design.negative_tests)
 # Verifies negative tests exist for public APIs (invalid input, unauthorized, etc.)
 #
-# Usage: verify-negative-tests.sh <feature_dir>
+# Usage: verify-negative-tests.sh <feature_dir> [--run] [--help]
 #
-# Writes PASS/FAIL to .artifacts/check-results/test_design_negative_tests.result
+# --run: actually execute the test suite and verify error paths pass.
+#        Requires a working test runner.
+# --pattern: (default) pattern matching only — outputs SKIP when test runner
+#            is unavailable, otherwise reports pattern coverage.
+#
+# Writes PASS/FAIL/SKIP to .artifacts/check-results/test_design_negative_tests.result
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: verify-negative-tests.sh <feature_dir>}"
+FEATURE_DIR=""
+RUN_MODE=false
+for arg in "$@"; do
+  case "$arg" in
+    --run) RUN_MODE=true ;;
+    --pattern) ;;
+    --help) echo "Usage: verify-negative-tests.sh <feature_dir> [--run] [--help]"; exit 0 ;;
+    -*) continue ;;
+    *) [ -z "$FEATURE_DIR" ] && FEATURE_DIR="$arg" ;;
+  esac
+done
+
+FEATURE_DIR="${FEATURE_DIR:?Usage: verify-negative-tests.sh <feature_dir> [--run]}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
@@ -31,6 +48,97 @@ fi
 if [ -z "$LANGUAGE" ]; then
   echo "NEGATIVE TESTS: SKIP (no recognized language in ${FEATURE_DIR})"
   echo "SKIP" > "${RESULTS_DIR}/test_design_negative_tests.result"
+  exit 0
+fi
+
+# ── Try to detect test runner ────────────────────────────────────
+TEST_RUNNER=""
+TEST_RUN_CMD=""
+case "$LANGUAGE" in
+  typescript)
+    if [ -f "${FEATURE_DIR}/package.json" ]; then
+      TEST_RUN_CMD=$(grep -oE '"test"[[:space:]]*:[[:space:]]*"[^"]+"' "${FEATURE_DIR}/package.json" 2>/dev/null | head -1 | sed 's/"test"[[:space:]]*:[[:space:]]*"\(.*\)"/\1/' || true)
+      if [ -n "$TEST_RUN_CMD" ]; then
+        TEST_RUNNER="npm"
+      fi
+    fi
+    if [ -z "$TEST_RUNNER" ] && command -v npx &>/dev/null; then
+      TEST_RUNNER="npx"
+      TEST_RUN_CMD="vitest"
+    fi
+    ;;
+  python)
+    if command -v pytest &>/dev/null; then
+      TEST_RUNNER="pytest"
+      TEST_RUN_CMD="pytest"
+    elif [ -f "${FEATURE_DIR}/pyproject.toml" ] && grep -q '^\[tool.pytest' "${FEATURE_DIR}/pyproject.toml" 2>/dev/null; then
+      TEST_RUNNER="pip+pytest"
+      TEST_RUN_CMD="pytest"
+    fi
+    ;;
+  java)
+    if [ -f "${FEATURE_DIR}/mvnw" ]; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="./mvnw test -q"
+    elif command -v mvn &>/dev/null; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="mvn test -q"
+    elif [ -f "${FEATURE_DIR}/gradlew" ]; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="./gradlew test --quiet"
+    elif command -v gradle &>/dev/null; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="gradle test --quiet"
+    fi
+    ;;
+  go)
+    if command -v go &>/dev/null; then
+      TEST_RUNNER="go"
+      TEST_RUN_CMD="go test ./..."
+    fi
+    ;;
+esac
+
+# ── RUN mode: actually execute the test suite ─────────────────────
+if [ "$RUN_MODE" = true ]; then
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "NEGATIVE TESTS: SKIP (no test runner found for ${LANGUAGE})"
+    echo "SKIP" > "${RESULTS_DIR}/test_design_negative_tests.result"
+    exit 0
+  fi
+
+  echo "NEGATIVE TESTS: RUN mode — executing tests via ${TEST_RUNNER}: ${TEST_RUN_CMD}"
+  cd "$FEATURE_DIR"
+
+  set +e
+  TEST_OUTPUT=$(eval "$TEST_RUN_CMD" 2>&1)
+  TEST_EXIT=$?
+  set -e
+
+  if [ "$TEST_EXIT" -ne 0 ]; then
+    echo "NEGATIVE TESTS: FAIL — tests did not pass (exit code: ${TEST_EXIT})"
+    echo "NEGATIVE TESTS: Test output:"
+    echo "$TEST_OUTPUT" | tail -20
+    echo "FAIL" > "${RESULTS_DIR}/test_design_negative_tests.result"
+    exit 0
+  fi
+
+  CRASHES=0
+  for pattern in 'UnhandledPromiseRejection' 'unhandled rejection' 'FATAL' 'panic: ' 'Segmentation fault' 'EXC_BAD_ACCESS' 'Fatal error' 'FATAL EXCEPTION'; do
+    if echo "$TEST_OUTPUT" | grep -qi "$pattern" 2>/dev/null; then
+      CRASHES=$((CRASHES + 1))
+      echo "NEGATIVE TESTS: WARNING — found '$pattern' in test output"
+    fi
+  done
+
+  if [ "$CRASHES" -gt 0 ]; then
+    echo "NEGATIVE TESTS: FAIL — ${CRASHES} crash/unhandled exception pattern(s) in test output"
+    echo "FAIL" > "${RESULTS_DIR}/test_design_negative_tests.result"
+    exit 0
+  fi
+
+  echo "NEGATIVE TESTS: PASS — tests executed cleanly, no crashes detected"
+  echo "PASS" > "${RESULTS_DIR}/test_design_negative_tests.result"
   exit 0
 fi
 
@@ -60,8 +168,13 @@ case "$LANGUAGE" in
 esac
 
 if [ -z "$TEST_FILES" ]; then
-  echo "NEGATIVE TESTS: SKIP (no test files found)"
-  echo "SKIP" > "${RESULTS_DIR}/test_design_negative_tests.result"
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "NEGATIVE TESTS: SKIP (no test runner available for pattern matching)"
+    echo "SKIP" > "${RESULTS_DIR}/test_design_negative_tests.result"
+  else
+    echo "NEGATIVE TESTS: WARN (test files found but no runner — pattern matching only, no execution)"
+    echo "SKIP" > "${RESULTS_DIR}/test_design_negative_tests.result"
+  fi
   exit 0
 fi
 

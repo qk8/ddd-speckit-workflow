@@ -17,13 +17,16 @@ source "$SCRIPTS_DIR/lib/check-common.sh"
 
 # ── Parse flags ────────────────────────────────────────────────────
 JSON_MODE=false
+CRITICAL_SKIP_BLOCKS="true"
 GATE_NAME=""
 POSITIONAL=()
 for arg in "$@"; do
   case "$arg" in
-    --json)      JSON_MODE=true ;;
-    --help)      check_help "check-gate-preconditions.sh" "<feature_dir> <gate_name> [--json] [--help]" ;;
-    *)           POSITIONAL+=("$arg") ;;
+    --json)              JSON_MODE=true ;;
+    --help)              check_help "check-gate-preconditions.sh" "<feature_dir> <gate_name> [--json] [--critical-skip-blocks] [--help]" ;;
+    --critical-skip-blocks) CRITICAL_SKIP_BLOCKS="true" ;;
+    --no-critical-skip-blocks) CRITICAL_SKIP_BLOCKS="false" ;;
+    *)                   POSITIONAL+=("$arg") ;;
   esac
 done
 set -- "${POSITIONAL[@]}"
@@ -69,6 +72,7 @@ else
 fi
 
 FAILING=""
+GATE_BLOCKED="false"
 if [ -d "$RESULTS_DIR" ]; then
   for result_file in "$RESULTS_DIR"/*.result; do
     [ -f "$result_file" ] || continue
@@ -84,14 +88,59 @@ if [ -d "$RESULTS_DIR" ]; then
   done
 fi
 
-if [ -n "$FAILING" ]; then
+# ── Detect critical-tier skipped checks ──────────────────────────
+# A skipped critical check means a required quality gate was not executed.
+# This is treated as equivalent to FAIL for gate blocking when --critical-skip-blocks.
+CRITICAL_SKIPS=""
+CRITICAL_SKIP_COUNT=0
+
+if [ "$CRITICAL_SKIP_BLOCKS" = "true" ] && [ -d "$RESULTS_DIR" ]; then
+  for result_file in "$RESULTS_DIR"/*.result; do
+    [ -f "$result_file" ] || continue
+    check_id=$(basename "$result_file" .result)
+    first_line=$(head -1 "$result_file" 2>/dev/null || echo "UNKNOWN")
+    if [ "$first_line" = "SKIP" ]; then
+      # Check if this is a critical-tier check
+      # Critical checks: those in preset-routing.yml under routing_critical for any task type
+      # For simplicity, treat all non-deterministic checks (G,T,U,Z, etc.) and security checks as critical
+      # when no tier info is available. Known critical check IDs:
+      is_critical=false
+      case "$check_id" in
+        adversarial|crosscutting|failure_modes|resilience|performance_budget|secret_scan|owasp|session_security|regression|new_tests|lint|complexity|naming|drift|constraints|api_surface|test_quality|negative_tests|arch_tests|contract|migration|quantitative)
+          is_critical=true
+          ;;
+      esac
+      if [ "$is_critical" = true ]; then
+        CRITICAL_SKIP_COUNT=$((CRITICAL_SKIP_COUNT + 1))
+        if [ -n "$CRITICAL_SKIPS" ]; then
+          CRITICAL_SKIPS="$CRITICAL_SKIPS,$check_id"
+        else
+          CRITICAL_SKIPS="$check_id"
+        fi
+      fi
+    fi
+  done
+fi
+
+if [ -n "$CRITICAL_SKIPS" ]; then
   echo "GATE_BLOCKED=true"
-  echo "FAILING_CHECKS=$FAILING"
-  log_gate "gate_blocked=true failing_checks=$FAILING"
+  if [ -n "$FAILING" ]; then
+    echo "FAILING_CHECKS=$FAILING,$CRITICAL_SKIPS"
+  else
+    echo "FAILING_CHECKS=$CRITICAL_SKIPS"
+  fi
+  log_gate "gate_blocked=true failing_checks=${FAILING:+$FAILING,}$CRITICAL_SKIPS"
+  log_gate "CRITICAL_SKIPS=$CRITICAL_SKIPS (skipped critical checks treated as FAIL)"
 else
-  echo "GATE_BLOCKED=false"
-  echo "FAILING_CHECKS="
-  log_gate "gate_blocked=false"
+  if [ -n "$FAILING" ]; then
+    echo "GATE_BLOCKED=true"
+    echo "FAILING_CHECKS=$FAILING"
+    log_gate "gate_blocked=true failing_checks=$FAILING"
+  else
+    echo "GATE_BLOCKED=false"
+    echo "FAILING_CHECKS="
+    log_gate "gate_blocked=false"
+  fi
 fi
 
 echo "AUTO_APPROVE=$AUTO_APPROVE"
@@ -164,6 +213,10 @@ if [ "$AUTO_APPROVE" = "true" ] && [ "$GATE_BLOCKED" = "false" ] && [ "$GATE_FOR
   echo "  checks_pass=$_PASS"
   echo "  checks_fail=$_FAIL"
   echo "  checks_skip=$_SKIP"
+  if [ -n "$CRITICAL_SKIPS" ]; then
+    echo "  critical_skips=$CRITICAL_SKIP_COUNT"
+    echo "  critical_skip_list=$CRITICAL_SKIPS"
+  fi
   echo "  gate=$GATE_NAME"
   echo "  status=APPROVED"
 fi

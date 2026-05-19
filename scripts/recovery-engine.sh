@@ -45,6 +45,16 @@ mkdir -p "$ARTIFACTS_DIR" "$CHECKPOINT_DIR"
 NOW=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ')
 EPOCH_MS=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
 
+# ── Binary file handling mode ───────────────────────────────────
+# Default: copy (use base64 for binary files)
+# Options: copy, skip, hash-only
+BINARY_MODE="copy"
+if command -v base64 &>/dev/null; then
+  BINARY_MODE="copy"
+else
+  BINARY_MODE="hash-only"
+fi
+
 # ── Helpers ──────────────────────────────────────────────────────
 maybe_file() {
   [ -f "$1" ] && cat "$1" || echo "  (not found: $1)"
@@ -52,6 +62,7 @@ maybe_file() {
 
 # Build a file snapshot JSON (same format as old check-point.sh snapshot)
 # Captures both git-tracked and untracked project files. No artificial cap.
+# Tracks file type (text/binary) for restore operations.
 build_file_snapshot() {
   local root_dir="$1"
   local file_list="" file_count=0
@@ -69,11 +80,13 @@ build_file_snapshot() {
       .git/*|.artifacts/*|node_modules/*|.next/*|dist/*|build/*|.specify/*|.claude/.agents/*|.claude/skills/*) continue ;;
     esac
     local hash_val="binary"
+    local file_type="binary"
     if file "$filepath" 2>/dev/null | grep -q 'text'; then
       hash_val=$(sha256sum "$filepath" 2>/dev/null | cut -d' ' -f1 || echo "unreadable")
+      file_type="text"
     fi
     [ -n "$file_list" ] && file_list="${file_list},"
-    file_list="${file_list}\"${rel_path}\":\"${hash_val}\""
+    file_list="${file_list}\"${rel_path}\":{\"hash\":\"${hash_val}\",\"type\":\"${file_type}\"}"
     file_count=$((file_count + 1))
   done < <(
     # Git-tracked files first (highest priority for restore)
@@ -125,18 +138,35 @@ do_checkpoint() {
       echo "WARNING: Low disk space (${disk_free_kb}KB free). Checkpoint may fail." >&2
     fi
 
-    # Save text file content for content-based restore (avoids git checkout HEAD
+    # Save file content for content-based restore (avoids git checkout HEAD
     # which loses changes committed by other tasks after the checkpoint was taken).
+    # Text files: stored as-is. Binary files: stored as base64.
     local content_dir="${cp_dir}/content"
     mkdir -p "$content_dir"
+    local binary_count=0 text_count=0
     while IFS= read -r filepath; do
       local rel_path="${filepath#${root_dir}/}"
       case "$rel_path" in
         .git/*|.artifacts/*|node_modules/*|.next/*|dist/*|build/*|.specify/*) continue ;;
       esac
+      local safe_name="${rel_path//\//_}"
       if file "$filepath" 2>/dev/null | grep -q 'text'; then
-        local safe_name="${rel_path//\//_}"
+        # Text file: store as-is
         cp "$filepath" "${content_dir}/${safe_name}" 2>/dev/null || true
+        text_count=$((text_count + 1))
+      elif [ "$BINARY_MODE" = "copy" ] && command -v base64 &>/dev/null; then
+        # Binary file: store as base64
+        local file_size_kb
+        file_size_kb=$(du -k "$filepath" 2>/dev/null | awk '{print $1}' || echo 0)
+        local overhead_kb=$((file_size_kb * 33 / 100))
+        local disk_free_kb
+        disk_free_kb=$(df -k "$content_dir" 2>/dev/null | tail -1 | awk '{print $4}' || echo 0)
+        if [ "$disk_free_kb" -ge "$overhead_kb" ] 2>/dev/null; then
+          base64 "$filepath" > "${content_dir}/${safe_name}.b64" 2>/dev/null || true
+          binary_count=$((binary_count + 1))
+        else
+          echo "WARNING: Insufficient disk space for binary file: $rel_path" >&2
+        fi
       fi
     done < <(
       { git -C "$root_dir" ls-files 2>/dev/null || true; } | while IFS= read -r f; do echo "$root_dir/$f"; done
@@ -161,7 +191,9 @@ do_checkpoint() {
   "phase": "${phase}",
   "task_id": "${task_id:-none}",
   "created_at": "${NOW}",
-  "checkpoint_id": "${cp_id}"
+  "checkpoint_id": "${cp_id}",
+  "binary_mode": "${BINARY_MODE}",
+  "files_stored": {"text": ${text_count:-0}, "binary": ${binary_count:-0}}
 }
 EOF
 
@@ -216,23 +248,23 @@ do_restore() {
   fi
 
   if [ -f "${cp_dir}/files.json" ] && [ -n "${ROOT_DIR:-}" ]; then
-    # Restore files via git checkout
+    # Restore files via content-based restore (with binary support)
     local file_count
     file_count=$(jq '.file_count // 0' "${cp_dir}/files.json")
     if [ "$file_count" -gt 0 ]; then
-      local restored=0
+      local restored=0 restored_binary=0
       while IFS= read -r rel_path; do
         [ -z "$rel_path" ] && continue
         local full_path="${ROOT_DIR}/${rel_path}"
         if [ -f "$full_path" ]; then
-          local expected_hash current_hash
-          expected_hash=$(jq -r --arg f "$rel_path" '.files[$f] // ""' "${cp_dir}/files.json")
-          if [ "$expected_hash" != "binary" ] && [ "$expected_hash" != "" ]; then
+          # Get file type and hash from new format: .files[path] = {hash, type}
+          local file_type expected_hash current_hash
+          file_type=$(jq -r --arg f "$rel_path" '.files[$f].type // "text"' "${cp_dir}/files.json")
+          expected_hash=$(jq -r --arg f "$rel_path" '.files[$f].hash // ""' "${cp_dir}/files.json")
+
+          if [ "$file_type" = "text" ] && [ -n "$expected_hash" ] && [ "$expected_hash" != "binary" ]; then
             current_hash=$(sha256sum "$full_path" 2>/dev/null | cut -d' ' -f1 || echo "unknown")
             if [ "$current_hash" != "$expected_hash" ]; then
-              # Prefer saved checkpoint content over git checkout HEAD.
-              # git checkout HEAD loses changes committed by other tasks
-              # after the checkpoint was taken.
               local content_path="${cp_dir}/content/${rel_path//\//_}"
               if [ -f "$content_path" ]; then
                 cp "$content_path" "$full_path"
@@ -241,10 +273,20 @@ do_restore() {
                 restored=$((restored + 1))
               fi
             fi
+          elif [ "$file_type" = "binary" ]; then
+            # Check for base64-encoded binary content
+            local b64_path="${cp_dir}/content/${rel_path//\//_}.b64"
+            if [ -f "$b64_path" ] && command -v base64 &>/dev/null; then
+              base64 -d "$b64_path" > "$full_path" 2>/dev/null && restored_binary=$((restored_binary + 1))
+            elif [ -f "${cp_dir}/content/${rel_path//\//_}" ]; then
+              # Fallback: non-base64 binary content (legacy)
+              cp "${cp_dir}/content/${rel_path//\//_}" "$full_path"
+              restored=$((restored + 1))
+            fi
           fi
         fi
       done < <(jq -r '.files | keys[]' "${cp_dir}/files.json")
-      echo "RESTORE: ${restored} file(s) restored (content-based from checkpoint)"
+      echo "RESTORE: ${restored} text file(s) + ${restored_binary} binary file(s) restored (content-based from checkpoint)"
     fi
   fi
 

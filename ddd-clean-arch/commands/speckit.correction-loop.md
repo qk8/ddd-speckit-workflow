@@ -86,11 +86,20 @@ STEP 4 — ENFORCEMENT CHECK
 ─────────────────────────────────────────
 
 After completing the correction loop:
-  bash scripts/diagnostic-enforcement.sh --verify "$(bash scripts/find-first-feature.sh)"
+  bash scripts/diagnostic-enforcement.sh --verify --auto-revert "$(bash scripts/find-first-feature.sh)"
 Read the result:
   ENFORCEMENT=ENFORCED — no violations, proceed.
-  ENFORCEMENT=VIOLATION_FOUND — revert unauthorized changes and re-run correction loop.
-  ENFORCEMENT=NOT_APPLICABLE — no diagnostic was run.
+  ENFORCEMENT=VIOLATION_FOUND — STOP. The diagnostic classifier said REQUIRED_ACTION=FIX_TEST but you modified implementation files (or vice versa).
+    1. Revert ALL unauthorized changes: for each VIOLATION-N line, run `git checkout HEAD -- <file>`
+    2. The script with --auto-revert will auto-revert, but verify manually.
+    3. Do NOT proceed until violations are resolved.
+    4. Re-run the correction loop with the correct target.
+  ENFORCEMENT=NOT_APPLICABLE — no diagnostic was run, proceed.
+
+MANDATORY REVERT (if violations found and auto-revert did not fully resolve):
+  git checkout HEAD -- src/impl.ts          # example — replace with actual violated files
+  git checkout HEAD -- src/other_impl.ts   # revert ALL non-test files when FIX_TEST
+  git checkout HEAD -- tests/test.ts       # revert ALL test files when FIX_IMPL
 
 ─────────────────────────────────────────
 STEP 5 — ESCALATION (if 3 attempts exhausted)

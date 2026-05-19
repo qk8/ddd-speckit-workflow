@@ -32,12 +32,14 @@ shift
 MAX_PARALLEL=4
 IMPLEMENT_CMD="speckit.implement"
 DRY_RUN=false
+RESOLVE_CONFLICTS=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --max-parallel) MAX_PARALLEL="$2"; shift 2 ;;
     --implement-cmd) IMPLEMENT_CMD="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --resolve-conflicts) RESOLVE_CONFLICTS=true; shift ;;
     *) shift ;;
   esac
 done
@@ -240,6 +242,18 @@ execute_task() {
     log_fail "  FAIL: $task_id (exit $result)"
   fi
 
+  # Record which files this task modified (for conflict detection)
+  local task_files_marker="$ARTIFACTS_DIR/.task_${task_id}.files"
+  : > "$task_files_marker"
+  if command -v git &>/dev/null 2>&1 && git -C "$FEATURE_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
+    git -C "$FEATURE_DIR" diff --name-only HEAD 2>/dev/null | while IFS= read -r f; do
+      echo "$f" >> "$task_files_marker"
+      # Save last state of each modified file for merge
+      local safe_name="${f//\//_}"
+      cp "$FEATURE_DIR/$f" "$ARTIFACTS_DIR/.task_${task_id}_last_${safe_name}" 2>/dev/null || true
+    done || true
+  fi
+
   # Write result marker
   if [ "$result" -eq 0 ]; then
     echo "PASS" > "$ARTIFACTS_DIR/task_${task_id}.result"
@@ -285,6 +299,149 @@ run_batch_consistency() {
   return 0
 }
 
+# ── Snapshot file states for conflict detection ──────────────────
+# Records git hashes of all tracked files before parallel execution.
+snapshot_file_states() {
+  local snapshot_dir="$ARTIFACTS_DIR/.snapshot_${TOTAL_LEVELS}"
+  mkdir -p "$snapshot_dir"
+  if command -v git &>/dev/null 2>&1 && git -C "$FEATURE_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
+    git -C "$FEATURE_DIR" ls-files -z | xargs -0 -I{} git -C "$FEATURE_DIR" hash-object {} > "$snapshot_dir/hashes.txt" 2>/dev/null || true
+    git -C "$FEATURE_DIR" ls-files > "$snapshot_dir/files.txt" 2>/dev/null || true
+  else
+    : > "$snapshot_dir/hashes.txt"
+    : > "$snapshot_dir/files.txt"
+  fi
+  echo "$snapshot_dir"
+}
+
+# ── Resolve file conflicts via three-way merge ───────────────────
+# For files modified by multiple tasks in the same level, attempt
+# a git merge-file (three-way merge with pre-level snapshot as base).
+resolve_conflicts() {
+  local snapshot_dir="$1"
+  local level_tasks=("${@:2}")
+  local merged_count=0
+  local conflict_count=0
+  local conflict_files="$ARTIFACTS_DIR/.merge-conflicts"
+  : > "$conflict_files"
+
+  if [ ! -f "$snapshot_dir/files.txt" ] || [ ! -s "$snapshot_dir/files.txt" ]; then
+    return 0  # No git repo, skip
+  fi
+
+  # Get list of files changed since snapshot
+  local changed_files="$ARTIFACTS_DIR/.changed_files"
+  : > "$changed_files"
+  while IFS= read -r filepath; do
+    current_hash=$(git -C "$FEATURE_DIR" hash-object "$filepath" 2>/dev/null || echo "empty")
+    snapshot_hash=$(git -C "$FEATURE_DIR" hash-object --prefix="$filepath" /dev/null 2>/dev/null || echo "empty")
+    # Compare with pre-level state from snapshot
+    if [ -f "$snapshot_dir/hashes.txt" ]; then
+      local idx
+      idx=$(grep -n "^${filepath}$" "$snapshot_dir/files.txt" 2>/dev/null | head -1 | cut -d: -f1 || echo "")
+      if [ -n "$idx" ]; then
+        local base_hash
+        base_hash=$(sed -n "${idx}p" "$snapshot_dir/hashes.txt" 2>/dev/null || echo "empty")
+        if [ "$current_hash" != "$base_hash" ]; then
+          echo "$filepath" >> "$changed_files"
+        fi
+      fi
+    fi
+  done < "$snapshot_dir/files.txt"
+
+  local changed_count
+  changed_count=$(wc -l < "$changed_files" | tr -d ' ')
+  [ "$changed_count" -eq 0 ] && return 0
+
+  log "  MERGE: $changed_count file(s) changed during parallel execution"
+
+  # For each changed file, check if multiple tasks modified it
+  # by comparing file modification times against task start/end markers
+  local task_files="$ARTIFACTS_DIR/.task_files"
+  : > "$task_files"
+  for task in "${level_tasks[@]}"; do
+    local task_marker="$ARTIFACTS_DIR/.task_${task}.files"
+    if [ -f "$task_marker" ]; then
+      while IFS= read -r f; do
+        echo "$task $f" >> "$task_files"
+      done < "$task_marker"
+    fi
+  done
+
+  # Find files claimed by multiple tasks
+  local multi_claimed="$ARTIFACTS_DIR/.multi_claimed"
+  if [ -s "$task_files" ]; then
+    awk '{print $2}' "$task_files" | sort | uniq -d > "$multi_claimed"
+  else
+    : > "$multi_claimed"
+  fi
+
+  local multi_count
+  multi_count=$(wc -l < "$multi_claimed" | tr -d ' ')
+
+  if [ "$multi_count" -eq 0 ]; then
+    log "  MERGE: No conflicting files detected"
+    return 0
+  fi
+
+  log "  MERGE: $multi_count file(s) modified by multiple tasks — attempting three-way merge"
+
+  while IFS= read -r filepath; do
+    [ -z "$filepath" ] && continue
+    # Get base version from snapshot (pre-level state)
+    local base_file="$snapshot_dir/base_$(echo "$filepath" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+    if [ -f "$FEATURE_DIR/$filepath" ]; then
+      cp "$FEATURE_DIR/$filepath" "$base_file" 2>/dev/null || true
+    fi
+
+    # Gather all versions of this file from tasks
+    local task_versions="$ARTIFACTS_DIR/.versions_$(echo "$filepath" | sed 's/[^a-zA-Z0-9._-]/_/g')"
+    : > "$task_versions"
+    grep " ${filepath}$" "$task_files" 2>/dev/null | awk '{print $1}' | while IFS= read -r t; do
+      local ver_marker="$ARTIFACTS_DIR/.task_${t}_last_${filepath//\//_}"
+      if [ -f "$ver_marker" ]; then
+        cp "$ver_marker" "$task_versions" 2>/dev/null || true
+      fi
+    done
+
+    # Attempt three-way merge using git merge-file
+    if [ "$(wc -l < "$task_versions" | tr -d ' ')" -ge 2 ] && [ -f "$base_file" ]; then
+      local task_a task_b
+      task_a=$(head -1 "$task_versions")
+      task_b=$(sed -n '2p' "$task_versions")
+      if git -C "$FEATURE_DIR" merge-file "$base_file" "$task_a" "$task_b" > "$FEATURE_DIR/$filepath.merged" 2>/dev/null; then
+        # Check for conflict markers in output
+        if grep -q '^<[>=!]' "$FEATURE_DIR/$filepath.merged" 2>/dev/null; then
+          # Unresolvable conflict — mark for human review
+          echo "$filepath" >> "$conflict_files"
+          conflict_count=$((conflict_count + 1))
+          log "    CONFLICT (unresolvable): $filepath"
+        else
+          mv "$FEATURE_DIR/$filepath.merged" "$FEATURE_DIR/$filepath"
+          merged_count=$((merged_count + 1))
+          log "    MERGED: $filepath"
+        fi
+      else
+        echo "$filepath" >> "$conflict_files"
+        conflict_count=$((conflict_count + 1))
+        log "    CONFLICT (merge failed): $filepath"
+      fi
+    fi
+  done < "$multi_claimed"
+
+  if [ "$conflict_count" -gt 0 ]; then
+    log "  MERGE: $conflict_count file(s) have unresolved conflicts — marked for review"
+  fi
+  if [ "$merged_count" -gt 0 ]; then
+    log "  MERGE: $merged_count file(s) merged successfully"
+  fi
+
+  # Clean up temp files
+  rm -f "$task_versions" "$task_a" "$task_b" 2>/dev/null || true
+
+  return 0
+}
+
 # ── Main execution loop ─────────────────────────────────────────
 log "━━━ DAG Executor ━━━"
 log "Feature dir: $FEATURE_DIR"
@@ -327,6 +484,13 @@ while IFS= read -r level_line; do
 
   # Write batch task list
   printf '%s\n' "${RUNNABLE[@]}" > "$ARTIFACTS_DIR/batch_tasks.txt"
+
+  # Snapshot file states before parallel execution (for conflict resolution)
+  local SNAPSHOT_DIR=""
+  if [ "$RESOLVE_CONFLICTS" = true ]; then
+    SNAPSHOT_DIR=$(snapshot_file_states)
+    log "  SNAPSHOT: file states recorded at $SNAPSHOT_DIR"
+  fi
 
   # Execute tasks with parallelism limit
   PIDS=()
@@ -379,9 +543,15 @@ while IFS= read -r level_line; do
     fi
   done
 
+  # Resolve file conflicts from parallel execution
+  if [ "$RESOLVE_CONFLICTS" = true ] && [ -n "${SNAPSHOT_DIR:-}" ]; then
+    resolve_conflicts "$SNAPSHOT_DIR" "${RUNNABLE[@]}"
+  fi
+
   # Clean up result markers and file locks
   rm -f "$ARTIFACTS_DIR"/task_*.result 2>/dev/null || true
   cleanup_file_locks
+  rm -rf "${SNAPSHOT_DIR:-}" 2>/dev/null || true
 
   # Run batch consistency check
   if [ "$LEVEL_FAILED" = false ]; then

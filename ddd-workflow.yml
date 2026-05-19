@@ -33,7 +33,7 @@ workflow:
     Modular phase architecture — merge with scripts/build-workflow.sh.
 
 requires:
-  speckit_version: ">=0.7.2"
+  speckit_version: "0.7.2"
   integrations:
     any: ["claude"]
 

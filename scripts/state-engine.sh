@@ -722,9 +722,85 @@ _save_task() {
 do_migrate() {
   state_lock_acquire || return 1
   LOCK_HELD=1
+
+  # ── Rollback mode ─────────────────────────────────────────────
+  local do_rollback=false
+  local dry_run=false
+  # Check for --rollback and --dry-run in remaining args
+  for _arg in "$@"; do
+    case "$_arg" in
+      --rollback) do_rollback=true ;;
+      --dry-run)  dry_run=true ;;
+    esac
+  done
+
+  if [ "$do_rollback" = true ]; then
+    local backup="${STATE_FILE}.pre-migration.bak"
+    if [ -f "$backup" ]; then
+      cp "$backup" "$STATE_FILE"
+      echo "ROLLBACK: Restored state.json from pre-migration backup"
+      state_lock_release
+      exit 0
+    else
+      echo "ROLLBACK: No pre-migration backup found at ${backup}"
+      state_lock_release
+      exit 1
+    fi
+  fi
+
   # Auto-init if state.json doesn't exist
   if [ ! -f "$STATE_FILE" ]; then
     do_init
+  fi
+
+  # ── Pre-migration backup ──────────────────────────────────────
+  local backup_file="${STATE_FILE}.pre-migration.bak"
+  if [ -f "$STATE_FILE" ]; then
+    cp "$STATE_FILE" "$backup_file"
+    echo "MIGRATE: Pre-migration backup saved to ${backup_file}"
+  fi
+
+  # ── Dry-run mode ──────────────────────────────────────────────
+  local changes=""
+  if [ "$dry_run" = true ]; then
+    if [ -f "$FEATURE_DIR/tasks.md" ]; then
+      changes="${changes}  - Would parse tasks.md (${FEATURE_DIR/tasks.md})\n"
+    fi
+    if [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
+      changes="${changes}  - Would merge .workflow-state.json\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/task-revisions/"*.count &>/dev/null; then
+      changes="${changes}  - Would parse task revision counts\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/created-files/"*.files &>/dev/null; then
+      changes="${changes}  - Would parse created files\n"
+    fi
+    if [ -f "$FEATURE_DIR/.stagnation_state" ]; then
+      changes="${changes}  - Would parse stagnation state\n"
+    fi
+    if [ -f "$FEATURE_DIR/.stagnation_total" ]; then
+      changes="${changes}  - Would parse stagnation total\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/check-results/"*.result &>/dev/null; then
+      changes="${changes}  - Would parse check results\n"
+    fi
+    if [ -f "$FEATURE_DIR/.artifacts/test-health.json" ]; then
+      changes="${changes}  - Would parse test health data\n"
+    fi
+    if [ -f "$FEATURE_DIR/revision_history.md" ]; then
+      changes="${changes}  - Would parse revision history\n"
+    fi
+    if [ -n "$changes" ]; then
+      echo "MIGRATE DRY-RUN: The following changes would be made:"
+      echo -e "$changes"
+      echo "MIGRATE DRY-RUN: Run without --dry-run to apply."
+      state_lock_release
+      exit 0
+    else
+      echo "MIGRATE DRY-RUN: No changes needed — state.json is up to date."
+      state_lock_release
+      exit 0
+    fi
   fi
 
   local migrated=false
@@ -966,6 +1042,30 @@ do_migrate() {
   else
     echo "MIGRATE: No old format files found — state.json is already up to date"
   fi
+
+  # 13. Post-migration validation
+  if [ "$migrated" = true ]; then
+    echo "MIGRATE: Validating post-migration state.json..."
+    if jq empty "$STATE_FILE" 2>/dev/null; then
+      local task_count
+      task_count=$(jq '.tasks | length' "$STATE_FILE" 2>/dev/null || echo 0)
+      echo "MIGRATE: Validation passed — state.json is valid JSON with $task_count tasks"
+    else
+      echo "MIGRATE: VALIDATION FAILED — state.json is corrupted after migration"
+      echo "MIGRATE: Restoring from pre-migration backup..."
+      if [ -f "$backup_file" ]; then
+        cp "$backup_file" "$STATE_FILE"
+        echo "MIGRATE: Restored from ${backup_file}"
+        state_lock_release
+        exit 1
+      else
+        echo "MIGRATE: ERROR — no backup available, state.json is corrupted"
+        state_lock_release
+        exit 1
+      fi
+    fi
+  fi
+
   state_lock_release
 }
 

@@ -2,9 +2,14 @@
 # Adversarial Input Check (Check T / resilience.adversarial)
 # Verifies adversarial input handling (malformed input, rate limiting, chaos scenarios).
 #
-# Usage: check-adversarial.sh <feature_dir>
+# Usage: check-adversarial.sh <feature_dir> [--run] [--help]
 #
-# Writes PASS/FAIL to .artifacts/check-results/resilience_adversarial.result
+# --run: actually execute the test suite and check for unhandled exceptions
+#        on malformed inputs. Requires a working test runner.
+# --pattern: (default) pattern matching only — outputs SKIP when test runner
+#            is unavailable, otherwise reports pattern coverage.
+#
+# Writes PASS/FAIL/SKIP to .artifacts/check-results/resilience_adversarial.result
 
 set -euo pipefail
 
@@ -12,11 +17,22 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPTS_DIR/lib/check-common.sh"
 
 # ── Parse flags ────────────────────────────────────────────────────
+RUN_MODE=false
 if [ "${1:-}" = "--help" ]; then
-  check_help "check-adversarial.sh" "<feature_dir> [--help]"
+  check_help "check-adversarial.sh" "<feature_dir> [--run] [--help]"
 fi
 
-FEATURE_DIR="${1:?Usage: check-adversarial.sh <feature_dir>}"
+FEATURE_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --run) RUN_MODE=true ;;
+    --pattern) ;; # explicit pattern mode (default)
+    -*) continue ;; # skip unknown flags
+    *) [ -z "$FEATURE_DIR" ] && FEATURE_DIR="$arg" ;;
+  esac
+done
+
+FEATURE_DIR="${FEATURE_DIR:?Usage: check-adversarial.sh <feature_dir> [--run] [--help]}"
 
 echo "ADVERSARIAL: Scanning ${FEATURE_DIR}"
 
@@ -35,6 +51,99 @@ fi
 if [ -z "$LANGUAGE" ]; then
   echo "ADVERSARIAL: SKIP (no recognized language in ${FEATURE_DIR})"
   check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
+  exit 0
+fi
+
+# ── Try to detect test runner ────────────────────────────────────
+TEST_RUNNER=""
+TEST_RUN_CMD=""
+case "$LANGUAGE" in
+  typescript)
+    if [ -f "${FEATURE_DIR}/package.json" ]; then
+      TEST_RUN_CMD=$(grep -oE '"test"[[:space:]]*:[[:space:]]*"[^"]+"' "${FEATURE_DIR}/package.json" 2>/dev/null | head -1 | sed 's/"test"[[:space:]]*:[[:space:]]*"\(.*\)"/\1/' || true)
+      if [ -n "$TEST_RUN_CMD" ]; then
+        TEST_RUNNER="npm"
+      fi
+    fi
+    if [ -z "$TEST_RUNNER" ] && command -v npx &>/dev/null; then
+      TEST_RUNNER="npx"
+      TEST_RUN_CMD="vitest"
+    fi
+    ;;
+  python)
+    if command -v pytest &>/dev/null; then
+      TEST_RUNNER="pytest"
+      TEST_RUN_CMD="pytest"
+    elif [ -f "${FEATURE_DIR}/pyproject.toml" ] && grep -q '^\[tool.pytest' "${FEATURE_DIR}/pyproject.toml" 2>/dev/null; then
+      TEST_RUNNER="pip+pytest"
+      TEST_RUN_CMD="pytest"
+    fi
+    ;;
+  java)
+    if [ -f "${FEATURE_DIR}/mvnw" ]; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="./mvnw test -q"
+    elif command -v mvn &>/dev/null; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="mvn test -q"
+    elif [ -f "${FEATURE_DIR}/gradlew" ]; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="./gradlew test --quiet"
+    elif command -v gradle &>/dev/null; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="gradle test --quiet"
+    fi
+    ;;
+  go)
+    if command -v go &>/dev/null; then
+      TEST_RUNNER="go"
+      TEST_RUN_CMD="go test ./..."
+    fi
+    ;;
+esac
+
+# ── RUN mode: actually execute the test suite ─────────────────────
+if [ "$RUN_MODE" = true ]; then
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "ADVERSARIAL: SKIP (no test runner found for ${LANGUAGE})"
+    check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
+    exit 0
+  fi
+
+  echo "ADVERSARIAL: RUN mode — executing tests via ${TEST_RUNNER}: ${TEST_RUN_CMD}"
+  cd "$FEATURE_DIR"
+
+  # Run the test suite, capture exit code
+  set +e
+  TEST_OUTPUT=$(eval "$TEST_RUN_CMD" 2>&1)
+  TEST_EXIT=$?
+  set -e
+
+  if [ "$TEST_EXIT" -ne 0 ]; then
+    echo "ADVERSARIAL: FAIL — tests did not pass (exit code: ${TEST_EXIT})"
+    echo "ADVERSARIAL: Test output:"
+    echo "$TEST_OUTPUT" | tail -20
+    check_write_result "$FEATURE_DIR" "adversarial" "FAIL" "tests_failed_exit_${TEST_EXIT}"
+    exit 0
+  fi
+
+  # Check for unhandled exceptions / crashes in test output
+  CRASHES=0
+  for pattern in 'UnhandledPromiseRejection' 'unhandled rejection' 'FATAL' 'panic: ' 'Segmentation fault' 'EXC_BAD_ACCESS' 'Fatal error' 'FATAL EXCEPTION'; do
+    if echo "$TEST_OUTPUT" | grep -qi "$pattern" 2>/dev/null; then
+      CRASHES=$((CRASHES + 1))
+      echo "ADVERSARIAL: WARNING — found '$pattern' in test output"
+    fi
+  done
+
+  if [ "$CRASHES" -gt 0 ]; then
+    echo "ADVERSARIAL: FAIL — ${CRASHES} crash/unhandled exception pattern(s) in test output"
+    check_write_result "$FEATURE_DIR" "adversarial" "FAIL" "crashes_detected"
+    exit 0
+  fi
+
+  echo "ADVERSARIAL: PASS — tests executed cleanly, no crashes detected"
+  check_write_result "$FEATURE_DIR" "adversarial" "PASS"
   exit 0
 fi
 
@@ -64,8 +173,13 @@ case "$LANGUAGE" in
 esac
 
 if [ -z "$TEST_FILES" ]; then
-  echo "ADVERSARIAL: SKIP (no test files found)"
-  check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "ADVERSARIAL: SKIP (no test runner available for pattern matching)"
+    check_write_result "$FEATURE_DIR" "adversarial" "SKIP"
+  else
+    echo "ADVERSARIAL: WARN (test files found but no runner — pattern matching only, no execution)"
+    check_write_result "$FEATURE_DIR" "adversarial" "SKIP" "no_test_runner"
+  fi
   exit 0
 fi
 

@@ -112,12 +112,18 @@ if [ "$CORRECTION_SNAPSHOT_COUNT" -ge "$DEFAULT_CORRECTION_SNAPSHOTS_WARN" ]; th
 fi
 
 # ── Output results ──────────────────────────────────────────────
+SESSION_ROTATE_REQUIRED="false"
+if [ "$HEALTH" = "CRITICAL" ]; then
+  SESSION_ROTATE_REQUIRED="true"
+fi
+
 echo "CONTEXT_HEALTH=${HEALTH}"
 echo "SESSION_AGE=${SESSION_AGE}"
 echo "RESET_THRESHOLD=${RESET_THRESHOLD}"
 echo "ARTIFACT_SIZE_MB=${ARTIFACT_SIZE_MB}"
 echo "PROMPT_CONTEXT_COUNT=${PROMPT_CONTEXT_COUNT}"
 echo "CORRECTION_SNAPSHOT_COUNT=${CORRECTION_SNAPSHOT_COUNT}"
+echo "SESSION_ROTATE_REQUIRED=${SESSION_ROTATE_REQUIRED}"
 echo "RECOMMENDATION=${RECOMMENDATION}"
 
 exit 0

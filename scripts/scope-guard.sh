@@ -4,31 +4,36 @@
 # Cross-references git diff against tasks.md Scope.Creates/Modifies
 # and other tasks' scope to detect scope creep.
 #
-# Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--monorepo <config_path>]
+# Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--advisory] [--monorepo <config_path>]
 #
 # Output: SCOPE=WITHIN_SCOPE|MINOR_VIOLATION|MAJOR_VIOLATION
 #         VIOLATION-1=...
 #
 # Exit codes:
-#   0 — within scope (or advisory mode)
-#   1 — minor violation (advisory: 1; enforced: 1)
-#   2 — major violation (advisory: 0; enforced: 2)
+#   0 — within scope
+#   1 — minor violation
+#   2 — major violation
 #
-# --enforce: exit non-zero on violations (MAJOR→2, MINOR→1).
-#            Without --enforce, always exits 0 (advisory only).
+# By default: MAJOR_VIOLATION exits 2, MINOR_VIOLATION exits 1.
+# --advisory: always exit 0 (opt-in advisory mode, inverse of default blocking).
+# --enforce: explicit blocking mode (same as default, kept for backward compat).
 # --monorepo <config_path>: path to a YAML/JSON config listing shared directories.
 #                           Files in shared dirs are marked SHARED instead of UNOWNED.
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--monorepo <config>]}"
+FEATURE_DIR="${1:?Usage: scope-guard.sh <feature_dir> [task_id] [--enforce] [--advisory] [--monorepo <config>]}"
 TASK_ID="${2:-}"
-ENFORCE="${3:-}"
+ENFORCE=""
+ADVISORY=""
 MONOREPO_CONFIG="${4:-}"
 
-# Parse remaining args for --enforce and --monorepo
+# Parse remaining args for --enforce, --advisory, and --monorepo
 for arg in "$@"; do
-  [ "$arg" = "--enforce" ] && ENFORCE="true"
+  case "$arg" in
+    --enforce)    ENFORCE="true" ;;
+    --advisory)   ADVISORY="true" ;;
+  esac
 done
 
 # ── Load monorepo shared directories ──────────────────────────────
@@ -36,7 +41,7 @@ declare -A shared_dirs
 if [ -n "$MONOREPO_CONFIG" ] && [ -f "$MONOREPO_CONFIG" ]; then
   # Support YAML (list under 'shared_directories') or JSON
   if command -v jq &>/dev/null; then
-    while IFS= read -v dir; do
+    while IFS= read dir; do
       [ -z "$dir" ] && continue
       shared_dirs["$dir"]=1
     done < <(jq -r '.shared_directories[]? // empty' "$MONOREPO_CONFIG" 2>/dev/null || true)
@@ -84,7 +89,7 @@ extract_scope() {
 declare -A all_task_creates
 declare -A all_task_modifies
 
-while IFS= read -v task_line; do
+while IFS= read task_line; do
   local_tid=$(echo "$task_line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   [ -z "$local_tid" ] && continue
 
@@ -93,12 +98,12 @@ while IFS= read -v task_line; do
   local_modifies
   local_modifies=$(extract_scope "$FEATURE_DIR/tasks.md" "$local_tid" "Modifies")
 
-  while IFS= read -v f; do
+  while IFS= read f; do
     [ -z "$f" ] && continue
     all_task_creates["$local_tid|$f"]=1
   done <<< "$local_creates"
 
-  while IFS= read -v f; do
+  while IFS= read f; do
     [ -z "$f" ] && continue
     all_task_modifies["$local_tid|$f"]=1
   done <<< "$local_modifies"
@@ -129,11 +134,11 @@ current_modifies=$(extract_scope "$FEATURE_DIR/tasks.md" "$TASK_ID" "Modifies")
 
 # Build allowed files set
 declare -A allowed_files
-while IFS= read -v f; do
+while IFS= read f; do
   [ -z "$f" ] && continue
   allowed_files["$f"]=1
 done <<< "$current_creates"
-while IFS= read -v f; do
+while IFS= read f; do
   [ -z "$f" ] && continue
   allowed_files["$f"]=1
 done <<< "$current_modifies"
@@ -154,7 +159,7 @@ VIOLATION_COUNT=0
 MINOR_VIOLATIONS=0
 MAJOR_VIOLATIONS=0
 
-while IFS= read -v fpath; do
+while IFS= read fpath; do
   [ -z "$fpath" ] && continue
 
   # Skip non-code files and artifacts
@@ -210,7 +215,7 @@ done <<< "$modified_files"
 if [ "$MAJOR_VIOLATIONS" -gt 0 ]; then
   echo "SCOPE=MAJOR_VIOLATION"
   local_idx=0
-  while IFS= read -v fpath; do
+  while IFS= read fpath; do
     [ -z "$fpath" ] && continue
     if echo "$fpath" | grep -qE '^\.artifacts/|^\.git/|\.bak$|\.log$|\.tmp$'; then
       continue
@@ -224,7 +229,7 @@ if [ "$MAJOR_VIOLATIONS" -gt 0 ]; then
 elif [ "$MINOR_VIOLATIONS" -gt 0 ]; then
   echo "SCOPE=MINOR_VIOLATION"
   local_idx=0
-  while IFS= read -v fpath; do
+  while IFS= read fpath; do
     [ -z "$fpath" ] && continue
     if echo "$fpath" | grep -qE '^\.artifacts/|^\.git/|\.bak$|\.log$|\.tmp$'; then
       continue
@@ -240,12 +245,16 @@ else
 fi
 
 # ── Exit with appropriate code ───────────────────────────────────
-if [ "$ENFORCE" = "true" ]; then
-  if [ "$MAJOR_VIOLATIONS" -gt 0 ]; then
-    exit 2
-  elif [ "$MINOR_VIOLATIONS" -gt 0 ]; then
-    exit 1
-  fi
+# Default: blocking on all violations (MAJOR→2, MINOR→1).
+# --advisory: opt-in advisory mode (always exit 0).
+if [ "$ADVISORY" = "true" ]; then
+  exit 0
+fi
+
+if [ "$MAJOR_VIOLATIONS" -gt 0 ]; then
+  exit 2
+elif [ "$MINOR_VIOLATIONS" -gt 0 ]; then
+  exit 1
 fi
 
 exit 0

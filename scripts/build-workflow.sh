@@ -94,31 +94,68 @@ extract_steps() {
     # yq-based: proper YAML parsing, handles strings containing "steps:", comments, multi-line strings
     yq '.steps[]' "$file" 2>/dev/null | sed 's/^/  /' || true
   else
-    # Text-based fallback: require steps: at column 0 (no leading whitespace) to avoid
-    # matching "steps:" inside YAML strings or comments.
-    local IN_STEPS=false SKIP_BLANKS=true
+    # Text-based fallback: improved parser that tracks YAML context.
+    # Only matches 'steps:' at depth 1 (no leading whitespace) to avoid
+    # matching "steps:" inside YAML strings, comments, or nested keys.
+    # State machine: tracks quote state, comment state, and indentation depth.
+    local IN_STEPS=false SKIP_BLANKS=true IN_QUOTE=false IN_COMMENT=false
+    local STEP_DEPTH=0
+    local WARNED=false
     while IFS= read -r line; do
-      if [[ "$line" =~ ^steps:[[:space:]]*$ ]] || [[ "$line" == "steps:" ]]; then
-        IN_STEPS=true
-        SKIP_BLANKS=true
+      # Track comment state: if line starts with #, skip it
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        IN_COMMENT=true
         continue
       fi
+      IN_COMMENT=false
+
+      # Track quote state: toggle if we encounter an odd number of quotes
+      local stripped
+      stripped=$(echo "$line" | sed 's/^[[:space:]]*//')
+      local quote_count
+      quote_count=$(echo "$stripped" | tr -cd '"' | wc -c)
+      if [ $((quote_count % 2)) -eq 1 ]; then
+        if [ "$IN_QUOTE" = true ]; then IN_QUOTE=false; else IN_QUOTE=true; fi
+      fi
+
+      # If we're inside a quoted string, skip the line
+      if $IN_QUOTE; then
+        continue
+      fi
+
+      # Calculate indentation depth (number of leading spaces)
+      local leading_spaces
+      leading_spaces=$(echo "$line" | grep -oE '^[[:space:]]*' | wc -c)
+      leading_spaces=$((leading_spaces - 1))  # wc -c includes newline
+
+      # Detect 'steps:' key at depth 0 (no leading whitespace) only
+      if [ "$leading_spaces" -eq 0 ] && [[ "$stripped" =~ ^steps:([[:space:]]|$) ]]; then
+        IN_STEPS=true
+        SKIP_BLANKS=true
+        STEP_DEPTH=0
+        continue
+      fi
+
       if $IN_STEPS; then
+        # If we hit a non-indented, non-empty line, we've left the steps block
+        if [ "$leading_spaces" -eq 0 ] && [[ -n "$stripped" ]]; then
+          break
+        fi
+
         if $SKIP_BLANKS; then
-          if [[ -z "$line" ]]; then
+          if [[ -z "$stripped" ]]; then
             continue
           fi
           SKIP_BLANKS=false
         fi
-        if [[ -z "$line" ]]; then
+
+        if [[ -z "$stripped" ]]; then
           echo ""
           continue
         fi
-        if [[ "$line" =~ ^[[:space:]] ]]; then
-          echo "  $line"
-        else
-          break
-        fi
+
+        # Output indented content
+        echo "  $line"
       fi
     done < "$file"
   fi

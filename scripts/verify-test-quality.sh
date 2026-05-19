@@ -15,11 +15,43 @@
 
 set -euo pipefail
 
-TARGET="${1:?Usage: verify-test-quality.sh <test_file_or_dir>}"
+TARGET="${1:?Usage: verify-test-quality.sh <test_file_or_dir> [--spec <spec_file>] [--help]}"
+SPEC_FILE=""
+
+# Parse optional flags
+FILTERED_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --spec) SPEC_FILE="${2:?Usage: verify-test-quality.sh <test_file_or_dir> --spec <spec_file>}"; shift 2 ;;
+    --help) echo "Usage: verify-test-quality.sh <test_file_or_dir> [--spec <spec_file>] [--help]"; exit 0 ;;
+    *) FILTERED_ARGS+=("$arg") ;;
+  esac
+done
+set -- "${FILTERED_ARGS[@]}"
+TARGET="${1:?Usage: verify-test-quality.sh <test_file_or_dir> [--spec <spec_file>]}"
 
 ERRORS=0
 WARNINGS=0
 ISSUES=""
+
+# ── Spec cross-reference: extract expected values from spec.md ────
+SPEC_VALUES=""
+if [ -n "$SPEC_FILE" ] && [ -f "$SPEC_FILE" ]; then
+  # Extract numeric values from acceptance criteria (e.g., "returns 200", "within 500ms", "max 10 items")
+  SPEC_VALUES=$(grep -oiE '(returns|status|code|expect|should be|must be|limit|max|min|threshold|within)[[:space:]]+[0-9]+' "$SPEC_FILE" 2>/dev/null | grep -oE '[0-9]+' | sort -u || true)
+  # Also extract string values from acceptance criteria
+  SPEC_STRINGS=$(grep -oiE '(returns|status|code|expect|should be|must be|named|title)[[:space:]]+"[^"]+"' "$SPEC_FILE" 2>/dev/null | sed 's/.*"//;s/"$//' || true)
+fi
+
+# ── Check if a number is a spec-backed value ──────────────────────
+is_spec_backed() {
+  local num="$1"
+  if [ -n "$SPEC_VALUES" ]; then
+    echo "$SPEC_VALUES" | grep -qx "$num" 2>/dev/null
+    return $?
+  fi
+  return 1  # No spec file, can't verify
+}
 
 # Scan a single file for quality anti-patterns
 scan_file() {
@@ -142,6 +174,50 @@ scan_file() {
     if echo "$line" | grep -qiE '(assertTrue|assertFalse)[[:space:]]*\(\s*(true|false)\s*\)' 2>/dev/null; then
       WARNINGS=$((WARNINGS + 1))
       ISSUES="${ISSUES}${file}:${line_num} WARNING: Java trivial assertTrue(true)/assertFalse(false). "
+    fi
+
+    # === Fix #19: Assertion meaningfulness checks ===
+
+    # WARNING: Magic number in assertion without spec backing
+    # Extract all numbers from assertion lines and flag those not found in spec
+    local assert_line=""
+    assert_line=$(echo "$line" | grep -oiE '(expect|assert|assertEquals|assertEqual|assertSame|should|must_be|verify)[[:space:]]*[^;]*' 2>/dev/null | head -1 || true)
+    if [ -n "$assert_line" ]; then
+      # Find all standalone numbers (3+ digits or specific patterns)
+      local nums
+      nums=$(echo "$assert_line" | grep -oE '[0-9]{1,}' || true)
+      for num in $nums; do
+        # Skip common benign numbers
+        case "$num" in
+          0|1|2|10|100) continue ;;  # Common benign counts
+        esac
+        # If spec file is provided, check if number is spec-backed
+        if [ -n "$SPEC_FILE" ] && [ -n "$SPEC_VALUES" ]; then
+          if ! is_spec_backed "$num"; then
+            # Only flag if it's a "magic" number (not 0, 1, 2, 10, 100 which are common)
+            if [ "${#num}" -ge 2 ] && [ "$num" -gt 100 ] 2>/dev/null; then
+              WARNINGS=$((WARNINGS + 1))
+              ISSUES="${ISSUES}${file}:${line_num} WARNING: Magic number $num in assertion — not found in spec acceptance criteria. "
+            fi
+          fi
+        fi
+      done
+    fi
+
+    # WARNING: Assertion uses a hardcoded string that may not match spec
+    # Check for expect("some string") patterns with long hardcoded strings
+    local hard_strings
+    hard_strings=$(echo "$line" | grep -oE '"[^"]{10,}"' 2>/dev/null || true)
+    if [ -n "$hard_strings" ] && [ -n "$SPEC_FILE" ]; then
+      while IFS= read -r str; do
+        str="${str//\"/}"  # Remove quotes
+        if [ -n "$SPEC_STRINGS" ]; then
+          if ! echo "$SPEC_STRINGS" | grep -qiF "$str" 2>/dev/null; then
+            WARNINGS=$((WARNINGS + 1))
+            ISSUES="${ISSUES}${file}:${line_num} WARNING: Hardcoded string \"$str\" in assertion — not found in spec. "
+          fi
+        fi
+      done <<< "$hard_strings"
     fi
 
   done < "$file"

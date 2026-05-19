@@ -12,16 +12,19 @@
 #   ENFORCEMENT=ENFORCED|VIOLATION_FOUND|PASSED
 #   VIOLATION-1=...
 #   VIOLATION-2=...
-# Always exits 0 (advisory to orchestrator, enforced by command instruction).
+#   REVERTED=N (count of files reverted with --auto-revert)
+# Exit codes: 0 = enforced/passed, 1 = violation found (or --auto-revert reverted files)
 
 set -euo pipefail
 
 FEATURE_DIR=""
 VERIFY_MODE=false
+AUTO_REVERT=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --verify) VERIFY_MODE=true; shift ;;
+    --auto-revert) AUTO_REVERT=true; shift ;;
     *) FEATURE_DIR="$1"; shift ;;
   esac
 done
@@ -99,44 +102,56 @@ fi
 
 VIOLATION_COUNT=0
 VIOLATIONS=""
+VIOLATED_FILES=""
+
+is_test_file() {
+  echo "$1" | grep -qiE '(\.test\.|\.spec\.|_test\.|test_|tests/|__tests__/|/test/|\.test\.ts$|\.test\.js$|\.spec\.ts$|\.spec\.js$|test_.*\.py$|.*_test\.go$|Test\.|_spec\.rb$)'
+}
+
+is_impl_file() {
+  echo "$1" | grep -qiE '(\.(js|ts|py|go|java|rs|rb|cs|kt)$|src/|lib/|app/|pkg/)'
+}
 
 case "$REQUIRED_ACTION" in
   FIX_TEST)
     # Must NOT modify implementation files. Only test files should change.
-    # Implementation files are those NOT matching test patterns
-    while IFS= read -v fpath; do
+    while IFS= read fpath; do
       [ -z "$fpath" ] && continue
-      # Test file patterns
-      if echo "$fpath" | grep -qiE '(\.test\.|\.spec\.|_test\.|test_|tests/|__tests__/|/test/|\.test\.ts$|\.test\.js$|\.spec\.ts$|\.spec\.js$|test_.*\.py$|.*_test\.go$|Test\.|_spec\.rb$)'; then
-        continue  # This is a test file, OK to modify
+      if is_test_file "$fpath"; then
+        continue
       fi
       VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
       VIOLATIONS="${VIOLATIONS}VIOLATION-${VIOLATION_COUNT}=FIX_TEST action but file modified: ${fpath} (not a test file); "
+      VIOLATED_FILES="${VIOLATED_FILES}${fpath}
+"
     done <<< "$MODIFIED_FILES"
     ;;
   FIX_IMPL)
     # Must NOT modify test files. Only implementation files should change.
-    while IFS= read -v fpath; do
+    while IFS= read fpath; do
       [ -z "$fpath" ] && continue
-      if echo "$fpath" | grep -qiE '(\.test\.|\.spec\.|_test\.|test_|tests/|__tests__/|/test/|\.test\.ts$|\.test\.js$|\.spec\.ts$|\.spec\.js$|test_.*\.py$|.*_test\.go$|Test\.|_spec\.rb$)'; then
+      if is_test_file "$fpath"; then
         VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
         VIOLATIONS="${VIOLATIONS}VIOLATION-${VIOLATION_COUNT}=FIX_IMPL action but test file modified: ${fpath}; "
+        VIOLATED_FILES="${VIOLATED_FILES}${fpath}
+"
       fi
     done <<< "$MODIFIED_FILES"
     ;;
   FIX_ENV)
     # Must NOT modify test or implementation files. Only config/environment files.
-    while IFS= read -v fpath; do
+    while IFS= read fpath; do
       [ -z "$fpath" ] && continue
-      if echo "$fpath" | grep -qiE '(\.test\.|\.spec\.|_test\.|test_|tests/|__tests__/|/test/|\.test\.ts$|\.test\.js$|\.spec\.ts$|\.spec\.js$|test_.*\.py$|.*_test\.go$|Test\.|_spec\.rb$)'; then
+      if is_test_file "$fpath"; then
         VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
         VIOLATIONS="${VIOLATIONS}VIOLATION-${VIOLATION_COUNT}=FIX_ENV action but test file modified: ${fpath}; "
-      fi
-      if echo "$fpath" | grep -qiE '(\.(js|ts|py|go|java|rs|rb|cs|kt)$|src/|lib/|app/|pkg/)'; then
-        if ! echo "$fpath" | grep -qiE '(\.test\.|\.spec\.|_test\.|test_|tests/|__tests__/|/test/)'; then
-          VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
-          VIOLATIONS="${VIOLATIONS}VIOLATION-${VIOLATION_COUNT}=FIX_ENV action but implementation file modified: ${fpath}; "
-        fi
+        VIOLATED_FILES="${VIOLATED_FILES}${fpath}
+"
+      elif is_impl_file "$fpath"; then
+        VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
+        VIOLATIONS="${VIOLATIONS}VIOLATION-${VIOLATION_COUNT}=FIX_ENV action but implementation file modified: ${fpath}; "
+        VIOLATED_FILES="${VIOLATED_FILES}${fpath}
+"
       fi
     done <<< "$MODIFIED_FILES"
     ;;
@@ -150,11 +165,10 @@ case "$REQUIRED_ACTION" in
     if [ -n "$MODIFIED_FILES" ]; then
       VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
       VIOLATIONS="${VIOLATIONS}VIOLATION-1=HUMAN action requires operator review — no changes allowed without --override flag; "
+      VIOLATED_FILES="$MODIFIED_FILES"
     fi
     ;;
   RETRY)
-    # May modify test or impl files, guided by EVIDENCE
-    # No strict enforcement — just log
     echo "ENFORCEMENT=PASSED"
     echo "NOTE: RETRY action allows flexible file modifications"
     exit 0
@@ -169,9 +183,25 @@ esac
 # ── Output results ──────────────────────────────────────────────
 if [ "$VIOLATION_COUNT" -gt 0 ]; then
   echo "ENFORCEMENT=VIOLATION_FOUND"
-  echo "$VIOLATIONS" | tr ';' '\n' | while IFS= read -v line; do
+  echo "$VIOLATIONS" | tr ';' '\n' | while IFS= read line; do
     [ -n "$line" ] && echo "$line"
   done
+
+  # Auto-revert unauthorized changes
+  REVERTED=0
+  if [ "$AUTO_REVERT" = true ] && [ -n "$VIOLATED_FILES" ]; then
+    while IFS= read vfile; do
+      [ -z "$vfile" ] && continue
+      if (cd "$FEATURE_DIR" && git checkout HEAD -- "$vfile" 2>/dev/null); then
+        REVERTED=$((REVERTED + 1))
+        echo "REVERTED: $vfile"
+      else
+        echo "REVERT_FAILED: $vfile (may not be tracked by git)"
+      fi
+    done <<< "$VIOLATED_FILES"
+  fi
+  echo "REVERTED=$REVERTED"
+  exit 1
 else
   echo "ENFORCEMENT=ENFORCED"
 fi

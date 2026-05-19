@@ -8,8 +8,12 @@
 set -euo pipefail
 
 JSON_MODE=false
+STRICT_MODE=false
 if [ "${1:-}" = "--json" ]; then
   JSON_MODE=true
+fi
+if [ "${1:-}" = "--strict" ]; then
+  STRICT_MODE=true
 fi
 
 FEATURE_DIR=$(bash scripts/find-first-feature.sh)
@@ -77,6 +81,8 @@ TASKS_FILE="$SANITIZED_FILE"
 # scope blocks, or description paragraphs.
 #
 # Also outputs IN_PROGRESS_ALL as comma-separated task indices.
+# Normalizes whitespace in headers (e.g., "## TASK- 3" → "TASK-3").
+# Detects malformed headers (nested ## TASK- inside titles).
 read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$(
   awk '
     /^## TASK-/ {
@@ -85,11 +91,14 @@ read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$
         ip = ip task_id
       }
       task_idx++
-      # Extract task ID from header: "## TASK-1" -> "TASK-1"
+      # Extract task ID from header, normalize whitespace
       task_id = $0
       sub(/^## /, "", task_id)
+      # Normalize: remove extra spaces (e.g., "TASK- 3" → "TASK-3")
+      gsub(/[[:space:]]+/, "", task_id)
       in_task = 1
       status = ""
+      has_status = 0
       next
     }
     /^###/ { in_task = 0 }
@@ -97,6 +106,7 @@ read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$
       s = $0
       sub(/^Status:[[:space:]]*/, "", s)
       status = s
+      has_status = 1
     }
     in_task && status == "DONE" { done++ }
     in_task && status == "TODO" { todo++ }
@@ -116,6 +126,60 @@ read -r DONE_COUNT TODO_COUNT ABANDONED_COUNT TOTAL_TASKS IN_PROGRESS_ALL <<< "$
 )"
 
 TOTAL_TASKS=$(grep -c "^## TASK-" "$SANITIZED_FILE" || true)
+
+# ── Malformed header detection ──────────────────────────────────
+# Detect:
+#   1. Headers with extra whitespace: "## TASK- 3" (normalized above, but warn)
+#   2. Task titles containing "## TASK-" pattern (parser-breaking)
+#   3. Tasks without a Status line (orphan headers)
+MALFORMED=0
+ORPHAN_HEADERS=0
+
+awk '
+  /^## TASK-/ {
+    if (in_task && !had_status) {
+      orphan_count++
+    }
+    # Check for whitespace in task ID (e.g., "## TASK- 3")
+    line = $0
+    tid = line
+    sub(/^## /, "", tid)
+    if (tid ~ /[[:space:]]/) {
+      ws_count++
+      if (strict) {
+        print "MALFORMED: Whitespace in header: " $0 > "/dev/stderr"
+      }
+    }
+    in_task = 1
+    had_status = 0
+    next
+  }
+  /^###/ { in_task = 0 }
+  in_task && /^Status:/ { had_status = 1 }
+  END {
+    if (in_task && !had_status) orphan_count++
+    if (orphan_count > 0) {
+      printf "ORPHAN_HEADERS=%d\n", orphan_count > "/dev/stderr"
+    }
+    if (ws_count > 0) {
+      printf "WHITESPACE_HEADERS=%d\n", ws_count > "/dev/stderr"
+    }
+  }
+' strict="$STRICT_MODE" "$SANITIZED_FILE" 2>&1 1>/dev/null || true
+
+# Check for task titles containing "## TASK-" pattern (parser-breaking)
+# This detects lines like "- ## TASK-1: something" inside a task title
+TITLE_COLLISIONS=$(grep -cE '^[[:space:]]+- ## TASK-' "$SANITIZED_FILE" 2>/dev/null || true)
+if [ "$TITLE_COLLISIONS" -gt 0 ]; then
+  echo "WARNING: Found ${TITLE_COLLISIONS} line(s) with '## TASK-' inside task content — may confuse parser." >&2
+  MALFORMED=$((MALFORMED + 1))
+fi
+
+if [ "$STRICT_MODE" = true ] && [ "$MALFORMED" -gt 0 ]; then
+  echo "TASKS: FAIL — malformed headers detected in strict mode" >&2
+  echo "TASKS_PARSE_ERROR=1"
+  exit 0
+fi
 # Ensure numeric
 DONE_COUNT=${DONE_COUNT:-0}
 TODO_COUNT=${TODO_COUNT:-0}

@@ -9,7 +9,7 @@
 # Output: GUARD=SAFE|LOOP_RISK|REQUIRES_DELETION
 #         ABANDONED_TASKS=N
 #         ABANDON_HISTORY-1=...
-# Always exits 0 (advisory to orchestrator, enforced by command instruction).
+# Exit codes: 0 = SAFE, 1 = LOOP_RISK (with --enforce) or REQUIRES_DELETION
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ ABANDONED_COUNT=0
 ABANDONED_TASKS=""
 
 if [ -f "$TASKS_FILE" ]; then
-  while IFS= read -v line; do
+  while IFS= read line; do
     [ -z "$line" ] && continue
     ABANDONED_COUNT=$((ABANDONED_COUNT + 1))
     ABANDONED_TASKS="${ABANDONED_TASKS}${line};"
@@ -42,7 +42,7 @@ ABANDON_HISTORY=""
 HISTORY_IDX=0
 
 # Extract abandoned task IDs
-while IFS= read -v ab_line; do
+while IFS= read ab_line; do
   [ -z "$ab_line" ] && continue
   local_tid=$(echo "$ab_line" | sed 's/^[[:space:]]*Status: ABANDONED[[:space:]]*\(.*\)/\1/' | sed 's/^[[:space:]]*//' | awk '{print $1}' || true)
 
@@ -108,9 +108,17 @@ fi
 
 echo "ABANDONED_TASKS=${ABANDONED_COUNT}"
 if [ -n "$ABANDON_HISTORY" ]; then
-  echo "$ABANDON_HISTORY" | tr ';' '\n' | while IFS= read -v line; do
+  echo "$ABANDON_HISTORY" | tr ';' '\n' | while IFS= read line; do
     [ -n "$line" ] && echo "$line"
   done
+fi
+
+# Exit non-zero on REQUIRES_DELETION (always), LOOP_RISK (with --enforce)
+if [ "$REQUIRES_DELETION" = true ]; then
+  exit 1
+fi
+if [ "$LOOP_RISK" = true ] && [ "${ABANDON_GUARD_ENFORCE:-false}" = "true" ]; then
+  exit 1
 fi
 
 exit 0

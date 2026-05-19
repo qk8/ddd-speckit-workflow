@@ -2,9 +2,14 @@
 # Failure Modes Check (Check M / test_design.failure_modes)
 # Checks that error paths and edge cases have dedicated tests.
 #
-# Usage: check-failure-modes.sh <feature_dir>
+# Usage: check-failure-modes.sh <feature_dir> [--run] [--help]
 #
-# Writes PASS/FAIL to .artifacts/check-results/test_design_failure_modes.result
+# --run: actually execute the test suite and verify error paths pass.
+#        Requires a working test runner.
+# --pattern: (default) pattern matching only — outputs SKIP when test runner
+#            is unavailable, otherwise reports pattern coverage.
+#
+# Writes PASS/FAIL/SKIP to .artifacts/check-results/test_design_failure_modes.result
 
 set -euo pipefail
 
@@ -12,11 +17,22 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPTS_DIR/lib/check-common.sh"
 
 # ── Parse flags ────────────────────────────────────────────────────
+RUN_MODE=false
 if [ "${1:-}" = "--help" ]; then
-  check_help "check-failure-modes.sh" "<feature_dir> [--help]"
+  check_help "check-failure-modes.sh" "<feature_dir> [--run] [--help]"
 fi
 
-FEATURE_DIR="${1:?Usage: check-failure-modes.sh <feature_dir>}"
+FEATURE_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --run) RUN_MODE=true ;;
+    --pattern) ;;
+    -*) continue ;;
+    *) [ -z "$FEATURE_DIR" ] && FEATURE_DIR="$arg" ;;
+  esac
+done
+
+FEATURE_DIR="${FEATURE_DIR:?Usage: check-failure-modes.sh <feature_dir> [--run] [--help]}"
 
 ARTIFACTS_DIR="${FEATURE_DIR}/.artifacts"
 RESULTS_DIR="${ARTIFACTS_DIR}/check-results"
@@ -38,6 +54,97 @@ fi
 if [ -z "$LANGUAGE" ]; then
   echo "FAILURE MODES: SKIP (no recognized language in ${FEATURE_DIR})"
   check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
+  exit 0
+fi
+
+# ── Try to detect test runner ────────────────────────────────────
+TEST_RUNNER=""
+TEST_RUN_CMD=""
+case "$LANGUAGE" in
+  typescript)
+    if [ -f "${FEATURE_DIR}/package.json" ]; then
+      TEST_RUN_CMD=$(grep -oE '"test"[[:space:]]*:[[:space:]]*"[^"]+"' "${FEATURE_DIR}/package.json" 2>/dev/null | head -1 | sed 's/"test"[[:space:]]*:[[:space:]]*"\(.*\)"/\1/' || true)
+      if [ -n "$TEST_RUN_CMD" ]; then
+        TEST_RUNNER="npm"
+      fi
+    fi
+    if [ -z "$TEST_RUNNER" ] && command -v npx &>/dev/null; then
+      TEST_RUNNER="npx"
+      TEST_RUN_CMD="vitest"
+    fi
+    ;;
+  python)
+    if command -v pytest &>/dev/null; then
+      TEST_RUNNER="pytest"
+      TEST_RUN_CMD="pytest"
+    elif [ -f "${FEATURE_DIR}/pyproject.toml" ] && grep -q '^\[tool.pytest' "${FEATURE_DIR}/pyproject.toml" 2>/dev/null; then
+      TEST_RUNNER="pip+pytest"
+      TEST_RUN_CMD="pytest"
+    fi
+    ;;
+  java)
+    if [ -f "${FEATURE_DIR}/mvnw" ]; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="./mvnw test -q"
+    elif command -v mvn &>/dev/null; then
+      TEST_RUNNER="maven"
+      TEST_RUN_CMD="mvn test -q"
+    elif [ -f "${FEATURE_DIR}/gradlew" ]; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="./gradlew test --quiet"
+    elif command -v gradle &>/dev/null; then
+      TEST_RUNNER="gradle"
+      TEST_RUN_CMD="gradle test --quiet"
+    fi
+    ;;
+  go)
+    if command -v go &>/dev/null; then
+      TEST_RUNNER="go"
+      TEST_RUN_CMD="go test ./..."
+    fi
+    ;;
+esac
+
+# ── RUN mode: actually execute the test suite ─────────────────────
+if [ "$RUN_MODE" = true ]; then
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "FAILURE MODES: SKIP (no test runner found for ${LANGUAGE})"
+    check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
+    exit 0
+  fi
+
+  echo "FAILURE MODES: RUN mode — executing tests via ${TEST_RUNNER}: ${TEST_RUN_CMD}"
+  cd "$FEATURE_DIR"
+
+  set +e
+  TEST_OUTPUT=$(eval "$TEST_RUN_CMD" 2>&1)
+  TEST_EXIT=$?
+  set -e
+
+  if [ "$TEST_EXIT" -ne 0 ]; then
+    echo "FAILURE MODES: FAIL — tests did not pass (exit code: ${TEST_EXIT})"
+    echo "FAILURE MODES: Test output:"
+    echo "$TEST_OUTPUT" | tail -20
+    check_write_result "$FEATURE_DIR" "failure_modes" "FAIL" "tests_failed_exit_${TEST_EXIT}"
+    exit 0
+  fi
+
+  CRASHES=0
+  for pattern in 'UnhandledPromiseRejection' 'unhandled rejection' 'FATAL' 'panic: ' 'Segmentation fault' 'EXC_BAD_ACCESS' 'Fatal error' 'FATAL EXCEPTION'; do
+    if echo "$TEST_OUTPUT" | grep -qi "$pattern" 2>/dev/null; then
+      CRASHES=$((CRASHES + 1))
+      echo "FAILURE MODES: WARNING — found '$pattern' in test output"
+    fi
+  done
+
+  if [ "$CRASHES" -gt 0 ]; then
+    echo "FAILURE MODES: FAIL — ${CRASHES} crash/unhandled exception pattern(s) in test output"
+    check_write_result "$FEATURE_DIR" "failure_modes" "FAIL" "crashes_detected"
+    exit 0
+  fi
+
+  echo "FAILURE MODES: PASS — tests executed cleanly, no crashes detected"
+  check_write_result "$FEATURE_DIR" "failure_modes" "PASS"
   exit 0
 fi
 
@@ -67,8 +174,13 @@ case "$LANGUAGE" in
 esac
 
 if [ -z "$TEST_FILES" ]; then
-  echo "FAILURE MODES: SKIP (no test files found)"
-  check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
+  if [ -z "$TEST_RUNNER" ]; then
+    echo "FAILURE MODES: SKIP (no test runner available for pattern matching)"
+    check_write_result "$FEATURE_DIR" "failure_modes" "SKIP"
+  else
+    echo "FAILURE MODES: WARN (test files found but no runner — pattern matching only, no execution)"
+    check_write_result "$FEATURE_DIR" "failure_modes" "SKIP" "no_test_runner"
+  fi
   exit 0
 fi
 

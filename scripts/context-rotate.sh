@@ -1,16 +1,33 @@
 #!/usr/bin/env bash
 # context-rotate.sh — Context rotation for implement phase
 #
-# Usage: scripts/context-rotate.sh <feature_dir>
+# Usage: scripts/context-rotate.sh <feature_dir> [--force] [--help]
 #
-# Reads state.json for done_count vs rotation_threshold.
-# If exceeded: produces .artifacts/context-snapshot.json with aggregate summaries.
-# Prunes history to last 10 entries.
-# Resets per-task context cache in .artifacts/bundles/.
+# Without --force: reads state.json for done_count vs rotation_threshold.
+#   If exceeded: produces .artifacts/context-snapshot.json with aggregate summaries.
+#   Prunes history to last 10 entries.
+#   Resets per-task context cache in .artifacts/bundles/.
+#
+# --force: unconditional rotation — produces context snapshot, resets session_age
+#          to 0, clears recent correction snapshots, outputs ROTATION=COMPLETE.
+#          Used when context-health.sh reports SESSION_ROTATE_REQUIRED=true.
 
 set -euo pipefail
 
-FEATURE_DIR="${1:?Usage: scripts/context-rotate.sh <feature_dir>}"
+FEATURE_DIR="${1:?Usage: scripts/context-rotate.sh <feature_dir> [--force]}"
+FORCE=false
+
+shift
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force) FORCE=true; shift ;;
+    --help)
+      echo "Usage: scripts/context-rotate.sh <feature_dir> [--force]"
+      exit 0
+      ;;
+    *) shift ;;
+  esac
+done
 STATE_FILE="${FEATURE_DIR}/state.json"
 BUNDLE_DIR="${FEATURE_DIR}/.artifacts/bundles"
 SNAPSHOT_FILE="${FEATURE_DIR}/.artifacts/context-snapshot.json"
@@ -85,3 +102,59 @@ if [ -d "$BUNDLE_DIR" ]; then
 fi
 
 echo "CONTEXT_ROTATE: complete (generation=${GEN_COUNT + 1})"
+
+# ── Force mode: unconditional rotation ──────────────────────────
+if [ "$FORCE" = true ]; then
+  echo "CONTEXT_ROTATE: forced rotation..."
+
+  # 1. Produce a full context snapshot
+  SNAPSHOT_PATH="${FEATURE_DIR}/.artifacts/context-snapshot-forced-$(date -u +%Y%m%d-%H%M%S).json"
+
+  if [ -f "$STATE_FILE" ]; then
+    cp "$STATE_FILE" "${SNAPSHOT_PATH}.state.json" 2>/dev/null || true
+    if [ -f "${FEATURE_DIR}/tasks.md" ]; then
+      cp "${FEATURE_DIR}/tasks.md" "${SNAPSHOT_PATH}.tasks.md" 2>/dev/null || true
+    fi
+    if [ -f "${FEATURE_DIR}/plan.md" ]; then
+      cp "${FEATURE_DIR}/plan.md" "${SNAPSHOT_PATH}.plan.md" 2>/dev/null || true
+    fi
+    if [ -f "${FEATURE_DIR}/spec.md" ]; then
+      cp "${FEATURE_DIR}/spec.md" "${SNAPSHOT_PATH}.spec.md" 2>/dev/null || true
+    fi
+    echo "CONTEXT_ROTATE: snapshot saved to ${SNAPSHOT_PATH}.*"
+  fi
+
+  # 2. Reset session_age to 0
+  if [ -f "$STATE_FILE" ]; then
+    local_tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq '.context.session_age = 0 | .context.last_rotation = (now | todate)' "$STATE_FILE" > "$local_tmp" 2>/dev/null && mv "$local_tmp" "$STATE_FILE" || rm -f "$local_tmp"
+    echo "CONTEXT_ROTATE: session_age reset to 0"
+  fi
+
+  # 3. Clear recent correction snapshots (keep only last 2)
+  local_snap_dir="${FEATURE_DIR}/.artifacts/correction-snapshots"
+  if [ -d "$local_snap_dir" ]; then
+    local_snap_count=$(find "$local_snap_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l || echo 0)
+    if [ "$local_snap_count" -gt 2 ]; then
+      find "$local_snap_dir" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null | \
+        sort -rn | tail -n +3 | awk '{print $2}' | \
+        xargs rm -rf 2>/dev/null || true
+      echo "CONTEXT_ROTATE: cleaned up $((local_snap_count - 2)) old correction snapshots"
+    fi
+  fi
+
+  # 4. Clear old prompt contexts (keep last 5)
+  local_prompt_dir="${FEATURE_DIR}/.artifacts/prompts"
+  if [ -d "$local_prompt_dir" ]; then
+    local_ctx_count=$(find "$local_prompt_dir" -name "context.md" 2>/dev/null | wc -l || echo 0)
+    if [ "$local_ctx_count" -gt 5 ]; then
+      find "$local_prompt_dir" -name "context.md" -printf '%T@ %p\n' 2>/dev/null | \
+        sort -rn | tail -n +6 | awk '{print $2}' | \
+        xargs rm -f 2>/dev/null || true
+      echo "CONTEXT_ROTATE: cleaned up $((local_ctx_count - 5)) old prompt contexts"
+    fi
+  fi
+
+  echo "ROTATION=COMPLETE"
+  echo "SNAPSHOT_PATH=${SNAPSHOT_PATH}"
+fi

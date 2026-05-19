@@ -110,6 +110,36 @@ if [ -f "$FEATURE_DIR/state.json" ]; then
   local_cc=$(bash scripts/state-engine.sh read "$FEATURE_DIR" stagnation.consecutive_continues 2>/dev/null || echo 0)
   echo "CONSECUTIVE_CONTINUES=$local_cc"
 
+  # ── Spec revision loop detection ──────────────────────────────────
+  # Track spec_revision tasks in state.json history. If 2+ appear within
+  # the last N history entries, it indicates a spec revision loop.
+  SPEC_REVISION_LOOP=false
+  SPEC_REVISION_LOOP_TASKS=""
+  SPEC_REVISION_WINDOW=8  # Look at last N history entries
+
+  if [ -f "$FEATURE_DIR/state.json" ]; then
+    # Count spec_revision tasks in recent history
+    local_spec_count=$(jq --argjson window "$SPEC_REVISION_WINDOW" '
+      [.history[-($window):] // .history[] |
+       select(.phase == "spec_revision" or (.type // "" | test("spec_revision")))] | length
+    ' "$FEATURE_DIR/state.json" 2>/dev/null || echo 0)
+    case "$local_spec_count" in ''|*[!0-9]*) local_spec_count=0 ;; esac
+
+    # Get list of spec_revision task IDs from recent history
+    if [ "$local_spec_count" -ge 2 ]; then
+      SPEC_REVISION_LOOP=true
+      SPEC_REVISION_LOOP_TASKS=$(jq -r --argjson window "$SPEC_REVISION_WINDOW" '
+        [.history[-($window):] // .history[] |
+         select(.phase == "spec_revision" or (.type // "" | test("spec_revision"))) |
+         .task_id // .key // "unknown"] | join(",")
+      ' "$FEATURE_DIR/state.json" 2>/dev/null || echo "")
+    fi
+  fi
+
+  echo "SPEC_REVISION_LOOP=${SPEC_REVISION_LOOP}"
+  echo "SPEC_REVISION_LOOP_TASKS=${SPEC_REVISION_LOOP_TASKS}"
+  echo "SPEC_REVISION_WINDOW=${SPEC_REVISION_WINDOW}"
+
   # ── Write .result file ─────────────────────────────────────────────
   check_write_result "$FEATURE_DIR" "stagnation" "$([ "$STAGNANT" = "true" ] && echo FAIL || echo PASS)"
   exit 0
