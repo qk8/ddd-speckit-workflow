@@ -9,15 +9,21 @@
 STEP 1 — DIAGNOSTIC CLASSIFICATION
 ─────────────────────────────────────────
 
-Run the independent diagnostic classifier:
-  bash scripts/diagnostic-classifier.sh \
-    "$(bash scripts/find-first-feature.sh)" \
-    "[task_type]" \
-    "$(cat $TEST_OUTPUT_FILE)" \
-    "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
-
-Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION, MIXED_FAULTS.
-Save diagnostic output to: .artifacts/diagnostic-output.txt
+Check for pre-existing diagnostic output (produced by workflow YAML step):
+  FEATURE_DIR="$(bash scripts/find-first-feature.sh)"
+  if [ -f "$FEATURE_DIR/.artifacts/diagnostic-output.txt" ]; then
+    echo "Using pre-existing diagnostic output from workflow."
+    Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION, MIXED_FAULTS.
+  else
+    Run the independent diagnostic classifier:
+      bash scripts/diagnostic-classifier.sh \
+        "$(bash scripts/find-first-feature.sh)" \
+        "[task_type]" \
+        "$(cat $TEST_OUTPUT_FILE)" \
+        "$(cat ${TEST_OUTPUT_FILE%.txt}_impl.out 2>/dev/null || echo '')"
+    Read the diagnostic output: CLASSIFICATION, EVIDENCE, CONFIDENCE, REQUIRED_ACTION, MIXED_FAULTS.
+    Save diagnostic output to: .artifacts/diagnostic-output.txt
+  fi
 
 ENFORCED ACTION FROM DIAGNOSTIC (NON-NEGOTIABLE):
   FIX_TEST  → You MUST NOT modify implementation files. Fix ONLY the test file.

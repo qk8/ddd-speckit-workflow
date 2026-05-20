@@ -18,8 +18,14 @@ steps:
       Does it correctly capture user stories and acceptance requirements?
       Are there missing scenarios or incorrect assumptions?
       Approve to proceed to the technical plan.
-    options: [approve, reject]
-    on_reject: abort
+      {% if steps.sp_audit_round_iteration.output.count | default 0 | int > 0 %}
+      **Previous audit round(s) completed: {{ steps.sp_audit_round_iteration.output.count | default 0 }}**.
+      {% endif %}
+    options: [approve, reject, revise]
+    on_revise:
+      - goto: sp_audit_round
+    on_reject:
+      - goto: sp_audit_round
 
   - id: sp_audit_round
     type: while

@@ -258,6 +258,26 @@ steps:
               bash scripts/validate-tests.sh --full
               "{{ steps.impl_check_remaining.output.feature_dir }}" || true
 
+  # ── Pre-correction diagnostic classification (P9.1 fix) ────────
+  # Run deterministic classifier BEFORE any LLM correction loop.
+  # Produces CLASSIFICATION/EVIDENCE/CONFIDENCE/REQUIRED_ACTION/MIXED_FAULTS.
+  # Output saved to .artifacts/diagnostic-output.txt for speckit.correction-loop.
+  - id: impl_pre_correction_diagnostics
+    type: if
+    condition: >
+      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
+      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+    then:
+      - id: impl_run_diagnostic_classifier
+        type: shell
+        command: >
+          bash scripts/diagnostic-classifier.sh
+          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_check_remaining.output.todo_task_type }}"
+          "$(cat "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/test-output.txt" 2>/dev/null || echo '')"
+          "$(cat "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/test-output-impl.txt" 2>/dev/null || echo '')"
+          > "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/diagnostic-output.txt" 2>&1 || true
+
   - id: impl_semantic_check
     type: if
     condition: >
