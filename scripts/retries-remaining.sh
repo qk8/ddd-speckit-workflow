@@ -56,7 +56,7 @@ get_corrections() {
   local task_id="$1"
   local count=0
   if [ -f "$FEATURE_DIR/state.json" ]; then
-    count=$(bash scripts/state-engine.sh get "$FEATURE_DIR" corrections."$task_id" 2>/dev/null || echo 0)
+    count=$(bash scripts/state-engine.sh read "$FEATURE_DIR" corrections."$task_id" 2>/dev/null || echo 0)
   fi
   case "$count" in ''|*[!0-9]*) count=0 ;; esac
   echo "$count"

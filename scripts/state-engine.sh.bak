@@ -1,0 +1,1147 @@
+#!/usr/bin/env bash
+# state-engine.sh — Unified state engine for DDD + Spec Kit workflow
+#
+# Single source of truth for all workflow state. Replaces 12+ scattered state files.
+# All writes use mktemp + mv for atomicity. Uses jq exclusively.
+#
+# Usage:
+#   state-engine.sh init <feature_dir>                          — create empty state.json scaffold
+#   state-engine.sh read <feature_dir> <key>                    — read any value (dot notation)
+#   state-engine.sh write <feature_dir> <key> <value>           — atomic write
+#   state-engine.sh delete <feature_dir> <key>                  — remove a key
+#   state-engine.sh validate <feature_dir>                      — validate JSON schema
+#   state-engine.sh migrate <feature_dir>                       — migrate old format → state.json
+#   state-engine.sh generate-tasks-md <feature_dir>             — regenerate tasks.md from state.json
+#   state-engine.sh history-append <feature_dir> <json_entry>   — append to history array
+#   state-engine.sh history-prune <feature_dir> <keep>          — keep last N history entries
+#   state-engine.sh task-set <feature_dir> <task_id> <key> <value> — set a field on a task
+#   state-engine.sh task-incr <feature_dir> <task_id> <key>    — increment a numeric field on a task
+#   state-engine.sh cadence-increment <counter_key>            — increment a cadence counter
+#   state-engine.sh cadence-reset <counter_key>                — reset a cadence counter to 0
+#   state-engine.sh context-increment                          — increment session_age by 1
+#   state-engine.sh context-reset                              — reset session_age to 0
+#   state-engine.sh fix-cycles-increment                       — increment fix_needed outer loop counter
+#   state-engine.sh fix-cycles-reset                           — reset fix_needed outer loop counter to 0
+#
+# State is stored in <feature_dir>/state.json
+# Old format files are preserved as .bak after migration.
+
+set -euo pipefail
+
+# ── Prerequisites ────────────────────────────────────────────────
+if ! command -v jq &>/dev/null; then
+  echo "ERROR: jq is required but not installed" >&2
+  exit 1
+fi
+
+MODE="${1:?Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|task-set|task-incr> <feature_dir> [args...]}"
+FEATURE_DIR="${2:?Feature directory required}"
+STATE_FILE="$FEATURE_DIR/state.json"
+
+# ── Helpers ──────────────────────────────────────────────────────
+
+now_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+# ── File locking for state.json ──────────────────────────────────
+# Prevents concurrent writers from corrupting state.json.
+# LOCK_FD=201, LOCK_FILE derived from STATE_FILE path.
+# Migration acquires the lock once and sets LOCK_HELD=1 to skip
+# per-write locking for its internal operations.
+
+LOCK_FD=201
+LOCK_HELD=0
+
+_state_lock_init() {
+  STATE_LOCK_FILE="${STATE_FILE%.json}.lock"
+  mkdir -p "$(dirname "$STATE_LOCK_FILE")"
+  exec 201>"$STATE_LOCK_FILE"
+}
+
+# Acquire lock (blocking, 60s timeout). Returns 0 on success, 1 if already held.
+state_lock_acquire() {
+  _state_lock_init
+  if [ "$LOCK_HELD" -eq 1 ]; then
+    return 0
+  fi
+  if flock -w 60 201; then
+    LOCK_HELD=1
+    return 0
+  fi
+  echo "LOCK: Could not acquire state.json lock within 60s" >&2
+  return 1
+}
+
+# Release lock. Safe to call even if not held.
+state_lock_release() {
+  if [ "$LOCK_HELD" -eq 1 ]; then
+    flock -u 201 2>/dev/null || true
+    LOCK_HELD=0
+  fi
+}
+
+atomic_write() {
+  local target="$1" content="$2"
+  local tmp
+  tmp=$(mktemp "${target}.XXXXXX")
+  echo "$content" > "$tmp"
+  mv "$tmp" "$target"
+}
+
+# Resolve dot-notation key to jq filter (e.g. "tasks.TASK-1.status" → ".tasks.TASK-1.status")
+dot_to_jq() {
+  local key="$1"
+  # Split on dots and build jq path
+  local result=""
+  local IFS='.'
+  for part in $key; do
+    result="${result}.${part}"
+  done
+  echo "$result"
+}
+
+# Ensure state.json exists (used by init + auto-init for read/write)
+ensure_exists() {
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "{}" > "$STATE_FILE"
+  fi
+}
+
+# ── Init ─────────────────────────────────────────────────────────
+do_init() {
+  state_lock_acquire || return 1
+  mkdir -p "$FEATURE_DIR"
+  local ts
+  ts="$(now_utc)"
+  cat > "$STATE_FILE" <<EOF
+{
+  "version": 1,
+  "tasks": {},
+  "history": [],
+  "stagnation": {
+    "consecutive_no_progress": 0,
+    "consecutive_continues": 0,
+    "drift_violations": 0,
+    "total_abort_count": 0,
+    "last_done_count": 0
+  },
+  "revisions": {
+    "plan_review": 0,
+    "tasks_phase": 0,
+    "fix_needed": 0,
+    "per_task": {}
+  },
+  "fix_cycles": 0,
+  "spec": {
+    "version": 1,
+    "last_revision_at": null
+  },
+  "auto_revise": {
+    "count": 0,
+    "last_gate": null
+  },
+  "cadence": {
+    "traceability_counter": 0,
+    "traceability_interval": 15
+  },
+  "context": {
+    "generation_count": 0,
+    "last_snapshot": null,
+    "rotation_threshold": 10,
+    "session_age": 0,
+    "reset_threshold": 15
+  },
+  "context_summary": {
+    "last_compacted": null,
+    "patterns_count": 0,
+    "corrections_count": 0,
+    "decisions_count": 0,
+    "pruned_checkpoints": 0,
+    "pruned_error_memory": 0
+  },
+  "risk_profile": "low",
+  "workflow": {
+    "skip_commits": false,
+    "commit_policy": "per-task",
+    "last_commit_sha": null
+  },
+  "token_budget": {
+    "actual_input_tokens": 0,
+    "actual_output_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "sessions_count": 0,
+    "projected_total": 0,
+    "avg_tokens_per_task": 0,
+    "risk": "OK",
+    "estimated_cost": "0.00",
+    "projected_cost": "0.00"
+  },
+  "metadata": {
+    "created_at": "$ts",
+    "updated_at": "$ts",
+    "feature_dir": "$(cd "$FEATURE_DIR" && pwd)",
+    "workflow_version": "2.0.0"
+  }
+}
+EOF
+  echo "INIT: state.json created at $STATE_FILE"
+  state_lock_release
+}
+
+# ── Read ─────────────────────────────────────────────────────────
+do_read() {
+  local key="$1"
+  [ -z "$key" ] && { echo "Usage: state-engine.sh read <feature_dir> <key>" >&2; exit 1; }
+  ensure_exists
+  # Convert dot-notation to jq array path for safe key handling
+  local jq_path_arr
+  jq_path_arr=$(echo "$key" | jq -R 'split(".")')
+  jq -r "getpath($jq_path_arr) // empty" "$STATE_FILE"
+}
+
+# ── Write ────────────────────────────────────────────────────────
+do_write() {
+  state_lock_acquire || return 1
+  local key="$1"
+  local value="${2:-}"
+  [ -z "$key" ] && { echo "Usage: state-engine.sh write <feature_dir> <key> <value>" >&2; exit 1; }
+  ensure_exists
+
+  # Convert dot-notation to jq array path (e.g. "tasks.TASK-1.status" → ["tasks","TASK-1","status"])
+  local jq_path_arr
+  jq_path_arr=$(echo "$key" | jq -R 'split(".")')
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    jq --argjson path "$jq_path_arr" --argjson val "$value" --arg ts "$(now_utc)" \
+      'setpath($path; $val) | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  elif [[ "$value" == "true" || "$value" == "false" || "$value" == "null" ]]; then
+    jq --argjson path "$jq_path_arr" --argjson val "$value" --arg ts "$(now_utc)" \
+      'setpath($path; $val) | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  else
+    jq --argjson path "$jq_path_arr" --arg val "$value" --arg ts "$(now_utc)" \
+      'setpath($path; $val) | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  fi
+  state_lock_release
+}
+
+# ── Delete ───────────────────────────────────────────────────────
+do_delete() {
+  state_lock_acquire || return 1
+  local key="$1"
+  [ -z "$key" ] && { echo "Usage: state-engine.sh delete <feature_dir> <key>" >&2; exit 1; }
+  ensure_exists
+  local jq_path_arr
+  jq_path_arr=$(echo "$key" | jq -R 'split(".")')
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --argjson path "$jq_path_arr" --arg ts "$(now_utc)" \
+    'delpath($path) | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
+}
+
+# ── Validate ─────────────────────────────────────────────────────
+do_validate() {
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "VALIDATION: FAIL — state.json does not exist" >&2
+    exit 1
+  fi
+
+  # Check valid JSON
+  if ! jq empty "$STATE_FILE" 2>/dev/null; then
+    echo "VALIDATION: FAIL — not valid JSON" >&2
+    exit 1
+  fi
+
+  # Check required top-level keys
+  local missing=""
+  for req_key in version tasks history stagnation revisions metadata; do
+    if ! jq -e "has(\"$req_key\")" "$STATE_FILE" >/dev/null 2>&1; then
+      missing="${missing}${missing:+,}$req_key"
+    fi
+  done
+
+  if [ -n "$missing" ]; then
+    echo "VALIDATION: FAIL — missing keys: $missing" >&2
+    exit 1
+  fi
+
+  # Check version is integer 1
+  local ver
+  ver=$(jq -r '.version' "$STATE_FILE")
+  if [[ ! "$ver" =~ ^1$ ]]; then
+    echo "VALIDATION: FAIL — version must be 1, got $ver" >&2
+    exit 1
+  fi
+
+  # Check tasks is object
+  local tasks_type
+  tasks_type=$(jq -r '.tasks | type' "$STATE_FILE")
+  if [ "$tasks_type" != "object" ]; then
+    echo "VALIDATION: FAIL — tasks must be an object" >&2
+    exit 1
+  fi
+
+  # Check each task has status and type
+  local bad_tasks
+  bad_tasks=$(jq -r '
+    .tasks | to_entries[]
+    | select(.value.status == null or .value.type == null)
+    | .key
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$bad_tasks" ]; then
+    echo "VALIDATION: FAIL — tasks missing status/type: $bad_tasks" >&2
+    exit 1
+  fi
+
+  # Check task statuses are valid enum values
+  local bad_statuses
+  bad_statuses=$(jq -r '
+    .tasks | to_entries[]
+    | select(.value.status != "TODO" and .value.status != "IN_PROGRESS" and
+             .value.status != "DONE" and .value.status != "ABANDONED" and
+             .value.status != "BLOCKED" and .value.status != null)
+    | "\(.key)=\(.value.status)"
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$bad_statuses" ]; then
+    echo "VALIDATION: FAIL — invalid task statuses:" >&2
+    echo "$bad_statuses" | while IFS='=' read -r task status; do
+      echo "  $task: '$status' (valid: TODO, IN_PROGRESS, DONE, ABANDONED, BLOCKED)" >&2
+    done
+    exit 1
+  fi
+
+  # Check for self-referential dependencies
+  local self_refs
+  self_refs=$(jq -r '
+    .tasks | to_entries[]
+    | . as $entry
+    | select($entry.value.dependencies // [] | any(. == $entry.key))
+    | .key
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$self_refs" ]; then
+    echo "VALIDATION: FAIL — self-referential dependencies: $self_refs" >&2
+    exit 1
+  fi
+
+  # Check metadata.updated_at is present
+  if ! jq -e '.metadata.updated_at // empty' "$STATE_FILE" >/dev/null 2>&1; then
+    echo "VALIDATION: FAIL — metadata.updated_at is missing" >&2
+    exit 1
+  fi
+
+  # Warn about tasks missing scope.creates (backward compat)
+  local missing_creates
+  missing_creates=$(jq -r '
+    .tasks | to_entries[]
+    | select(.value.scope.creates == null or (.value.scope.creates | length == 0))
+    | .key
+  ' "$STATE_FILE" 2>/dev/null)
+
+  if [ -n "$missing_creates" ]; then
+    echo "WARNING: Tasks missing scope.creates: $(echo "$missing_creates" | tr '\n' ', ' | sed 's/,$//')" >&2
+  fi
+
+  echo "VALIDATION: PASS"
+}
+
+# ── Task helpers ─────────────────────────────────────────────────
+
+# Set a field on a specific task
+do_task_set() {
+  state_lock_acquire || return 1
+  local tid="$1"
+  local tkey="$2"
+  local tval="${3:-}"
+  [ -z "$tid" ] && { echo "Usage: state-engine.sh task-set <feature_dir> <task_id> <key> <value>" >&2; exit 1; }
+  [ -z "$tkey" ] && { echo "Usage: state-engine.sh task-set <feature_dir> <task_id> <key> <value>" >&2; exit 1; }
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+
+  if [[ "$tval" =~ ^[0-9]+$ ]]; then
+    jq --arg tid "$tid" --argjson val "$tval" --arg ts "$(now_utc)" \
+      '.tasks[$tid].'"$tkey"' = $val | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  elif [[ "$tval" == "true" || "$tval" == "false" || "$tval" == "null" ]]; then
+    jq --arg tid "$tid" --argjson val "$tval" --arg ts "$(now_utc)" \
+      '.tasks[$tid].'"$tkey"' = $val | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  else
+    jq --arg tid "$tid" --arg val "$tval" --arg ts "$(now_utc)" \
+      '.tasks[$tid].'"$tkey"' = $val | .metadata.updated_at = $ts' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  fi
+  state_lock_release
+}
+
+# Increment a numeric field on a specific task
+do_task_incr() {
+  state_lock_acquire || return 1
+  local tid="$1"
+  local tkey="$2"
+  [ -z "$tid" ] && { echo "Usage: state-engine.sh task-incr <feature_dir> <task_id> <key>" >&2; exit 1; }
+  [ -z "$tkey" ] && { echo "Usage: state-engine.sh task-incr <feature_dir> <task_id> <key>" >&2; exit 1; }
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.tasks[$tid].'"$tkey"' = ((.tasks[$tid].'"$tkey"' // 0) + 1) | .metadata.updated_at = $ts' \
+    --arg tid "$tid" \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
+}
+
+# ── History ──────────────────────────────────────────────────────
+
+do_history_append() {
+  state_lock_acquire || return 1
+  local entry="$1"
+  [ -z "$entry" ] && { echo "Usage: state-engine.sh history-append <feature_dir> <json_entry>" >&2; exit 1; }
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --argjson entry "$entry" \
+    '.history += [$entry] | .metadata.updated_at = "'"$(now_utc)"'"' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
+}
+
+do_history_prune() {
+  state_lock_acquire || return 1
+  local keep="$1"
+  [ -z "$keep" ] && { echo "Usage: state-engine.sh history-prune <feature_dir> <keep>" >&2; exit 1; }
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --argjson keep "$keep" \
+    '.history = (.history[-($keep):]) | .metadata.updated_at = "'"$(now_utc)"'"' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  state_lock_release
+}
+
+# ── Spec version increment ───────────────────────────────────────
+do_spec_increment() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.spec.version = (.spec.version + 1) | .spec.last_revision_at = $ts | .revisions.spec_total = ((.revisions.spec_total // 0) + 1) | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "SPEC: version incremented to $(jq -r '.spec.version' "$STATE_FILE")"
+  state_lock_release
+}
+
+# ── Cadence operations ───────────────────────────────────────────
+
+do_cadence_increment() {
+  state_lock_acquire || return 1
+  local counter_key="${1:?Usage: state-engine.sh cadence-increment <counter_key>}"
+  # Validate counter_key against known cadence keys
+  source scripts/cadence-defaults.sh 2>/dev/null || true
+  local known_keys
+  known_keys=$(cadence_known_keys 2>/dev/null || echo "traceability_counter")
+  local valid=false
+  for k in $known_keys; do
+    [ "$k" = "$counter_key" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
+    echo "ERROR: Unknown cadence counter key: ${counter_key}. Known: ${known_keys}" >&2
+    state_lock_release
+    return 1
+  fi
+  ensure_exists
+
+  local jq_path=".cadence.${counter_key}"
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.cadence."'"$counter_key"' = (.cadence."'"$counter_key"' // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CADENCE: ${counter_key} incremented to $(jq -r --arg k "$counter_key" '.cadence[$k]' "$STATE_FILE")"
+  state_lock_release
+}
+
+do_cadence_reset() {
+  state_lock_acquire || return 1
+  local counter_key="${1:?Usage: state-engine.sh cadence-reset <counter_key>}"
+  # Validate counter_key against known cadence keys
+  source scripts/cadence-defaults.sh 2>/dev/null || true
+  local known_keys
+  known_keys=$(cadence_known_keys 2>/dev/null || echo "traceability_counter")
+  local valid=false
+  for k in $known_keys; do
+    [ "$k" = "$counter_key" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
+    echo "ERROR: Unknown cadence counter key: ${counter_key}. Known: ${known_keys}" >&2
+    state_lock_release
+    return 1
+  fi
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.cadence."'"$counter_key"' = 0 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CADENCE: ${counter_key} reset to 0"
+  state_lock_release
+}
+
+# ── Context operations (session age tracking) ────────────────────
+
+do_context_increment() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.context.session_age = (.context.session_age // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CONTEXT: session_age incremented to $(jq -r '.context.session_age' "$STATE_FILE")"
+  state_lock_release
+}
+
+do_context_reset() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.context.session_age = 0 | .context.last_snapshot = $ts | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "CONTEXT: session_age reset to 0"
+  state_lock_release
+}
+
+# ── Fix cycles (outer termination for verify→implement loops) ───
+
+do_fix_cycles_increment() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.fix_cycles = (.fix_cycles // 0) + 1 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "FIX_CYCLES: incremented to $(jq -r '.fix_cycles' "$STATE_FILE")"
+  state_lock_release
+}
+
+do_fix_cycles_reset() {
+  state_lock_acquire || return 1
+  ensure_exists
+
+  local tmp
+  tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+  jq --arg ts "$(now_utc)" \
+    '.fix_cycles = 0 | .metadata.updated_at = $ts' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  echo "FIX_CYCLES: reset to 0"
+  state_lock_release
+}
+
+# ── Generate tasks.md ────────────────────────────────────────────
+
+do_generate_tasks_md() {
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "ERROR: state.json does not exist — run migrate or init first" >&2
+    exit 1
+  fi
+
+  local output
+  output=$(jq -r '
+    "# Implementation Backlog\n",
+    "One task = one speckit.implement session (max 5 files, max 1 aggregate).\n",
+    "# HOW TDD WORKS\n",
+    "# TDD is used throughout — see plan.md for the full explanation.\n",
+    "Task order:\n",
+    "1. backend-domain  (aggregate root, value objects, events, repo interface — one task per aggregate)\n",
+    "2. backend-infra   (repo implementation, DB migration, external adapters — one task per aggregate)\n",
+    "3. backend-api     (controller, use case, wired together — one task per endpoint group)\n",
+    "4. shared          (contract types, generated code — after API contract is stable)\n",
+    "5. integration     (cross-context boundary tests — one task per bounded context relationship)\n",
+    "6. frontend-data   (data layer module — one task per bounded context)\n",
+    "7. frontend-feature (feature components with Playwright E2E TDD — one task per major feature)\n",
+    "8. e2e             (cross-feature journey tests — after all dependent features are DONE)\n",
+    "",
+    "─────────────────────────────────────────────────────────────────────────\n",
+    (.tasks | to_entries | sort_by(.key) | .[] |
+      "## \(.key):\(.value.title // "Untitled")\n",
+      "Status: \(.value.status // "TODO")\n",
+      "Type: \(.value.type // "backend-domain")\n",
+      "Depends on: \(if (.value.depends_on // []) | length > 0 then (.value.depends_on | join(", ")) else "none" end)\n",
+      "Scope:\n",
+      "  Creates:\n",
+      "    - \((.value.scope.creates // []) | if length > 0 then join("\n    - ") else "none" end)\n",
+      "  Modifies:\n",
+      "    - \((.value.scope.modifies // []) | if length > 0 then join("\n    - ") else "none" end)\n",
+      "Acceptance criteria:\n",
+      "  - \((.value.acceptance_criteria // []) | join("\n  - "))\n",
+      "Do NOT:\n",
+      "  - \((.value.do_not // []) | if length > 0 then join("\n  - ") else "Nothing specific" end)\n",
+      (if .value.revision_count // 0 > 0 then "Revision count: \(.value.revision_count)\n" else "" end),
+      (if .value.files_modified // [] | length > 0 then "Files: \(.value.files_modified | join(", "))\n" else "" end),
+      ""
+    ),
+    "─────────────────────────────────────────────────────────────────────────"
+  ' "$STATE_FILE" 2>/dev/null)
+
+  echo "$output"
+}
+
+# ── Migrate ──────────────────────────────────────────────────────
+
+migrate_tasks_md() {
+  local tasks_md="$FEATURE_DIR/tasks.md"
+  [ ! -f "$tasks_md" ] && return
+
+  # Parse each ## TASK-N block
+  local in_task=false
+  local in_section=""  # "creates", "modifies", "ac", "do_not", or ""
+  local tid="" title="" status="TODO" task_type="backend-domain" depends="[]"
+  local creates="" modifies="" ac="" do_not=""
+
+  while IFS= read -r line; do
+    # Detect task header — saves previous task, starts new one
+    if [[ "$line" =~ ^##\ (TASK-[0-9]+):\ (.*) ]]; then
+      if [ -n "$tid" ]; then
+        _save_task "$tid" "$title" "$status" "$task_type" "$depends" "$creates" "$modifies" "$ac" "$do_not"
+      fi
+      tid="${BASH_REMATCH[1]}"
+      title="${BASH_REMATCH[2]}"
+      status="TODO"; task_type="backend-domain"; depends="[]"
+      creates=""; modifies=""; ac=""; do_not=""
+      in_task=true; in_section=""
+      continue
+    fi
+
+    [ "$in_task" = false ] && continue
+
+    # Section headers set the active section
+    if [[ "$line" =~ ^Status:\ (.*) ]]; then
+      status="${BASH_REMATCH[1]}"; in_section=""
+      continue
+    fi
+    if [[ "$line" =~ ^Type:\ (.*) ]]; then
+      task_type="${BASH_REMATCH[1]}"; in_section=""
+      continue
+    fi
+    if [[ "$line" =~ ^Depends\ on:\ (.*) ]]; then
+      local dep_raw="${BASH_REMATCH[1]}"
+      if [ "$dep_raw" = "none" ]; then
+        depends="[]"
+      else
+        # Split on comma, trim spaces, quote each
+        depends="[$(echo "$dep_raw" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^/"/;s/$/"/' | tr '\n' ',' | sed 's/,$//')]"
+      fi
+      in_section=""
+      continue
+    fi
+    if [[ "$line" =~ ^Scope: ]]; then
+      in_section="scope"; continue
+    fi
+    if [[ "$line" =~ ^\ \ Creates: ]]; then
+      in_section="creates"; continue
+    fi
+    if [[ "$line" =~ ^\ \ Modifies: ]]; then
+      in_section="modifies"; continue
+    fi
+    if [[ "$line" =~ ^Acceptance\ criteria: ]]; then
+      in_section="ac"; continue
+    fi
+    if [[ "$line" =~ ^Do\ NOT: ]]; then
+      in_section="do_not"; continue
+    fi
+
+    # Items under active section (4-space indent = scope items, 2-space = AC/do_not)
+    if [ -n "$in_section" ]; then
+      if [[ "$line" =~ ^\ \ \ \ -\ (.*) ]]; then
+        # 4-space indent: Creates or Modifies
+        local item="${BASH_REMATCH[1]}"
+        # Skip "none" entries
+        [ "$item" = "none" ] && continue
+        case "$in_section" in
+          creates)
+            [ -n "$creates" ] && creates="$creates,$item" || creates="$item"
+            ;;
+          modifies)
+            [ -n "$modifies" ] && modifies="$modifies,$item" || modifies="$item"
+            ;;
+        esac
+        continue
+      fi
+      if [[ "$line" =~ ^\ \ -\ (.*) ]]; then
+        # 2-space indent: Acceptance criteria or Do NOT
+        local item="${BASH_REMATCH[1]}"
+        case "$in_section" in
+          ac) [ -n "$ac" ] && ac="$ac|$item" || ac="$item" ;;
+          do_not) [ -n "$do_not" ] && do_not="$do_not|$item" || do_not="$item" ;;
+        esac
+        continue
+      fi
+      # Any other line resets section (e.g., next section header without ":", or blank line)
+      if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+        : # blank line, keep section
+      else
+        in_section=""
+      fi
+    fi
+
+  done < "$tasks_md"
+
+  # Save last task
+  if [ -n "$tid" ]; then
+    _save_task "$tid" "$title" "$status" "$task_type" "$depends" "$creates" "$modifies" "$ac" "$do_not"
+  fi
+}
+
+# Accumulator for migration — we build a JSON string
+_MIG_TASKS_JSONL=""
+
+_save_task() {
+  local tid="$1" title="$2" status="$3" task_type="$4" depends="$5"
+  local creates="$6" modifies="$7" ac="$8" do_not="$9"
+
+  # Build arrays safely using jq -R (handles quotes, special chars)
+  local creates_json="[]"
+  [ -n "$creates" ] && creates_json=$(echo "$creates" | tr ',' '\n' | jq -R . | jq -s .)
+
+  local modifies_json="[]"
+  [ -n "$modifies" ] && modifies_json=$(echo "$modifies" | tr ',' '\n' | jq -R . | jq -s .)
+
+  local ac_json="[]"
+  [ -n "$ac" ] && ac_json=$(echo "$ac" | tr '|' '\n' | jq -R . | jq -s .)
+
+  local dn_json="[]"
+  [ -n "$do_not" ] && dn_json=$(echo "$do_not" | tr '|' '\n' | jq -R . | jq -s .)
+
+  # Append JSON object to JSONL accumulator (O(1) per task instead of O(N))
+  _MIG_TASKS_JSONL+=$(jq -n \
+    --arg tid "$tid" \
+    --arg title "$title" \
+    --arg status "$status" \
+    --arg type "$task_type" \
+    --argjson depends "$depends" \
+    --argjson creates "$creates_json" \
+    --argjson modifies "$modifies_json" \
+    --argjson ac "$ac_json" \
+    --argjson dn "$dn_json" \
+    '{
+      ($tid): {
+        "status": $status,
+        "type": $type,
+        "title": $title,
+        "depends_on": $depends,
+        "scope": { "creates": $creates, "modifies": $modifies },
+        "acceptance_criteria": $ac,
+        "do_not": $dn,
+        "revision_count": 0,
+        "last_changed": "",
+        "files_modified": [],
+        "blocking_reason": null,
+        "check_results": {},
+        "interfaces_produced": [],
+        "interfaces_consumed": []
+      }
+    }')$'\n'
+}
+
+do_migrate() {
+  state_lock_acquire || return 1
+  LOCK_HELD=1
+
+  # ── Rollback mode ─────────────────────────────────────────────
+  local do_rollback=false
+  local dry_run=false
+  # Check for --rollback and --dry-run in remaining args
+  for _arg in "$@"; do
+    case "$_arg" in
+      --rollback) do_rollback=true ;;
+      --dry-run)  dry_run=true ;;
+    esac
+  done
+
+  if [ "$do_rollback" = true ]; then
+    local backup="${STATE_FILE}.pre-migration.bak"
+    if [ -f "$backup" ]; then
+      cp "$backup" "$STATE_FILE"
+      echo "ROLLBACK: Restored state.json from pre-migration backup"
+      state_lock_release
+      exit 0
+    else
+      echo "ROLLBACK: No pre-migration backup found at ${backup}"
+      state_lock_release
+      exit 1
+    fi
+  fi
+
+  # Auto-init if state.json doesn't exist
+  if [ ! -f "$STATE_FILE" ]; then
+    do_init
+  fi
+
+  # ── Pre-migration backup ──────────────────────────────────────
+  local backup_file="${STATE_FILE}.pre-migration.bak"
+  if [ -f "$STATE_FILE" ]; then
+    cp "$STATE_FILE" "$backup_file"
+    echo "MIGRATE: Pre-migration backup saved to ${backup_file}"
+  fi
+
+  # ── Dry-run mode ──────────────────────────────────────────────
+  local changes=""
+  if [ "$dry_run" = true ]; then
+    if [ -f "$FEATURE_DIR/tasks.md" ]; then
+      changes="${changes}  - Would parse tasks.md (${FEATURE_DIR/tasks.md})\n"
+    fi
+    if [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
+      changes="${changes}  - Would merge .workflow-state.json\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/task-revisions/"*.count &>/dev/null; then
+      changes="${changes}  - Would parse task revision counts\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/created-files/"*.files &>/dev/null; then
+      changes="${changes}  - Would parse created files\n"
+    fi
+    if [ -f "$FEATURE_DIR/.stagnation_state" ]; then
+      changes="${changes}  - Would parse stagnation state\n"
+    fi
+    if [ -f "$FEATURE_DIR/.stagnation_total" ]; then
+      changes="${changes}  - Would parse stagnation total\n"
+    fi
+    if ls "$FEATURE_DIR/.artifacts/check-results/"*.result &>/dev/null; then
+      changes="${changes}  - Would parse check results\n"
+    fi
+    if [ -f "$FEATURE_DIR/.artifacts/test-health.json" ]; then
+      changes="${changes}  - Would parse test health data\n"
+    fi
+    if [ -f "$FEATURE_DIR/revision_history.md" ]; then
+      changes="${changes}  - Would parse revision history\n"
+    fi
+    if [ -n "$changes" ]; then
+      echo "MIGRATE DRY-RUN: The following changes would be made:"
+      echo -e "$changes"
+      echo "MIGRATE DRY-RUN: Run without --dry-run to apply."
+      state_lock_release
+      exit 0
+    else
+      echo "MIGRATE DRY-RUN: No changes needed — state.json is up to date."
+      state_lock_release
+      exit 0
+    fi
+  fi
+
+  local migrated=false
+
+  # 1. Parse tasks.md
+  if [ -f "$FEATURE_DIR/tasks.md" ]; then
+    echo "MIGRATE: Parsing tasks.md..."
+    migrate_tasks_md
+    if [ -n "$_MIG_TASKS_JSONL" ]; then
+      local tmp
+      tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+      # Slurp JSONL into a single JSON object — O(N) instead of O(N^2)
+      local tasks_json
+      tasks_json=$(printf '%s' "$_MIG_TASKS_JSONL" | jq -s 'add // {}')
+      jq --argjson tasks "$tasks_json" \
+        '.tasks = $tasks | .metadata.updated_at = "'"$(now_utc)"'"' \
+        "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+      migrated=true
+    fi
+    _MIG_TASKS_JSONL=""
+  fi
+
+  # 2. Merge .workflow-state.json if exists
+  if [ -f "$FEATURE_DIR/.workflow-state.json" ]; then
+    echo "MIGRATE: Merging .workflow-state.json..."
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq '
+      .tasks as $existing |
+      (input | .tasks // {}) as $checkpoint_tasks |
+      .tasks = ($existing * $checkpoint_tasks | to_entries | map(
+        .key as $k |
+        .value as $existing_val |
+        ($checkpoint_tasks[$k] // null) as $cp_val |
+        if $cp_val != null then
+          { key: $k, value: ($existing_val * $cp_val) }
+        else
+          .
+        end
+      ) | from_entries) |
+      .metadata.updated_at = "'"$(now_utc)"'"
+    ' "$STATE_FILE" "$FEATURE_DIR/.workflow-state.json" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 3. Parse .artifacts/task-revisions/*.count → revisions.per_task
+  if ls "$FEATURE_DIR/.artifacts/task-revisions/"*.count &>/dev/null; then
+    echo "MIGRATE: Parsing task revision counts..."
+    local rev_json="{}"
+    for count_file in "$FEATURE_DIR/.artifacts/task-revisions/"*.count; do
+      local tid
+      tid=$(basename "$count_file" .count)
+      local count
+      count=$(cat "$count_file" 2>/dev/null || echo 0)
+      case "$count" in ''|*[!0-9]*) count=0 ;; esac
+      rev_json=$(echo "$rev_json" | jq --arg tid "$tid" --argjson count "$count" '.[$tid] = $count')
+    done
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq --argjson rev "$rev_json" \
+      '.revisions.per_task = $rev | .metadata.updated_at = "'"$(now_utc)"'"' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 4. Parse .artifacts/created-files/*.files → tasks.*.files_modified
+  if ls "$FEATURE_DIR/.artifacts/created-files/"*.files &>/dev/null; then
+    echo "MIGRATE: Parsing created files..."
+
+    # Simpler approach: bash loop
+    for files_file in "$FEATURE_DIR/.artifacts/created-files/"*.files; do
+      local tid
+      tid=$(basename "$files_file" .files)
+      local files_list
+      files_list=$(cat "$files_file" 2>/dev/null || echo "")
+      if [ -n "$files_list" ]; then
+        local tmp
+        tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+        jq --arg tid "$tid" \
+          --argjson files "[$(echo "$files_list" | tr '\n' ',' | sed 's/,$//; s/[^,]$/&"/; s/^/"')" \
+          '.tasks[$tid].files_modified = $files | .metadata.updated_at = "'"$(now_utc)"'"' \
+          "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+      fi
+    done
+    migrated=true
+  fi
+
+  # 5. Parse .stagnation_state* → stagnation
+  if [ -f "$FEATURE_DIR/.stagnation_state" ]; then
+    echo "MIGRATE: Parsing stagnation state..."
+    local prev_done consec
+    prev_done=$(head -1 "$FEATURE_DIR/.stagnation_state" 2>/dev/null || echo "-1")
+    consec=$(sed -n '2p' "$FEATURE_DIR/.stagnation_state" 2>/dev/null || echo "0")
+    case "$prev_done" in ''|*[!0-9-]*) prev_done=-1 ;; esac
+    case "$consec" in ''|*[!0-9]*) consec=0 ;; esac
+
+    local consec_file="$FEATURE_DIR/.stagnation_state.consec"
+    local continue_file="$FEATURE_DIR/.stagnation_state.continue_count"
+    local drift_file="$FEATURE_DIR/.stagnation_state.drift_count"
+    local consec_val=$consec
+    local continue_val=0
+    local drift_val=0
+
+    [ -f "$consec_file" ] && { consec_val=$(cat "$consec_file" 2>/dev/null || echo 0); case "$consec_val" in ''|*[!0-9]*) consec_val=0 ;; esac; }
+    [ -f "$continue_file" ] && { continue_val=$(cat "$continue_file" 2>/dev/null || echo 0); case "$continue_val" in ''|*[!0-9]*) continue_val=0 ;; esac; }
+    [ -f "$drift_file" ] && { drift_val=$(cat "$drift_file" 2>/dev/null || echo 0); case "$drift_val" in ''|*[!0-9]*) drift_val=0 ;; esac; }
+
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq --argjson consec "$consec_val" \
+       --argjson continues "$continue_val" \
+       --argjson drift "$drift_val" \
+       --argjson prev "$prev_done" \
+      '.stagnation.consecutive_no_progress = $consec |
+       .stagnation.consecutive_continues = $continues |
+       .stagnation.drift_violations = $drift |
+       .stagnation.last_done_count = (if $prev >= 0 then $prev else 0 end) |
+       .metadata.updated_at = "'"$(now_utc)"'"' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 6. Parse .stagnation_total → stagnation.total_abort_count
+  if [ -f "$FEATURE_DIR/.stagnation_total" ]; then
+    echo "MIGRATE: Parsing stagnation total..."
+    local abort_count
+    abort_count=$(cat "$FEATURE_DIR/.stagnation_total" 2>/dev/null || echo 0)
+    case "$abort_count" in ''|*[!0-9]*) abort_count=0 ;; esac
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq --argjson count "$abort_count" \
+      '.stagnation.total_abort_count = $count | .metadata.updated_at = "'"$(now_utc)"'"' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 7. Parse .artifacts/check-results/*.result → tasks.*.check_results
+  if ls "$FEATURE_DIR/.artifacts/check-results/"*.result &>/dev/null; then
+    echo "MIGRATE: Parsing check results..."
+    local all_results="{}"
+    for result_file in "$FEATURE_DIR/.artifacts/check-results/"*.result; do
+      local check_id
+      check_id=$(basename "$result_file" .result)
+      local first_line
+      first_line=$(head -1 "$result_file" 2>/dev/null || echo "SKIP")
+      all_results=$(echo "$all_results" | jq --arg id "$check_id" --arg result "$first_line" '.[$id] = $result')
+    done
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq --argjson results "$all_results" \
+      '.check_results = $results | .metadata.updated_at = "'"$(now_utc)"'"' \
+      "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 8. Parse .artifacts/test-health.json → history
+  if [ -f "$FEATURE_DIR/.artifacts/test-health.json" ]; then
+    echo "MIGRATE: Parsing test health data..."
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq '
+      .history += ((.artifacts // . // {}) as $dummy |
+        input | .entries // [] | map({
+          "phase": "test-health",
+          "task": .task_id,
+          "iteration": 0,
+          "result": (if .pass_rate == 100 then "PASS" else "FAIL" end),
+          "timestamp": .completed_at
+        })) |
+      .metadata.updated_at = "'"$(now_utc)"'"
+    ' "$STATE_FILE" "$FEATURE_DIR/.artifacts/test-health.json" > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE" || true
+    migrated=true
+  fi
+
+  # 9. Parse revision_history.md → history
+  if [ -f "$FEATURE_DIR/revision_history.md" ]; then
+    echo "MIGRATE: Parsing revision history..."
+    local tmp
+    tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    jq '
+      .history += [{"phase":"revision","task":"unknown","iteration":0,"result":"REVISION","timestamp":"'"$(now_utc)"'"}] |
+      .metadata.updated_at = "'"$(now_utc)"'"
+    ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    migrated=true
+  fi
+
+  # 10. Validate migration
+  if [ "$migrated" = true ]; then
+    # Validate that state.json has tasks
+    local task_count
+    task_count=$(jq '.tasks | length' "$STATE_FILE" 2>/dev/null || echo 0)
+    if [ "$task_count" -eq 0 ]; then
+      echo "MIGRATE WARNING: state.json has 0 tasks — migration may have failed"
+      echo "MIGRATION_PARTIAL=true"
+    else
+      echo "MIGRATE: Validated $task_count tasks in state.json"
+    fi
+
+    # Validate stagnation migration
+    local stagnation_consec
+    stagnation_consec=$(jq '.stagnation.consecutive_no_progress // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+    if [ "$stagnation_consec" != "0" ] && [ -f "$FEATURE_DIR/.stagnation_state" ]; then
+      echo "MIGRATE: Stagnation data migrated (consecutive_no_progress=$stagnation_consec)"
+    fi
+  fi
+
+  # 11. Backup and clean up old files
+  if [ "$migrated" = true ]; then
+    echo "MIGRATE: Backing up old state files..."
+    local backup_partial=false
+    for old_file in \
+      "$FEATURE_DIR/tasks.md" \
+      "$FEATURE_DIR/.workflow-state.json" \
+      "$FEATURE_DIR/.tasks-state.json" \
+      "$FEATURE_DIR/.stagnation_state" \
+      "$FEATURE_DIR/.stagnation_state.consec" \
+      "$FEATURE_DIR/.stagnation_state.continue_count" \
+      "$FEATURE_DIR/.stagnation_state.drift_count" \
+      "$FEATURE_DIR/.stagnation_total" \
+      "$FEATURE_DIR/revision_history.md" \
+      "$FEATURE_DIR/workflow_state.json"; do
+      if [ -f "$old_file" ]; then
+        cp "$old_file" "${old_file}.bak"
+      else
+        backup_partial=true
+      fi
+    done
+
+    # Create migration marker
+    echo "migrated_at=$(now_utc)" > "$FEATURE_DIR/MIGRATION_DONE"
+
+    echo "MIGRATE: Complete — state.json contains all consolidated data"
+    if [ "$backup_partial" = true ]; then
+      echo "MIGRATE WARNING: Some old files not found (may have been cleaned up previously)"
+      echo "MIGRATION_PARTIAL=true"
+    else
+      echo "MIGRATE: Old files preserved as .bak — remove manually when confident"
+    fi
+  else
+    echo "MIGRATE: No old format files found — state.json is already up to date"
+  fi
+
+  # 13. Post-migration validation
+  if [ "$migrated" = true ]; then
+    echo "MIGRATE: Validating post-migration state.json..."
+    if jq empty "$STATE_FILE" 2>/dev/null; then
+      local task_count
+      task_count=$(jq '.tasks | length' "$STATE_FILE" 2>/dev/null || echo 0)
+      echo "MIGRATE: Validation passed — state.json is valid JSON with $task_count tasks"
+    else
+      echo "MIGRATE: VALIDATION FAILED — state.json is corrupted after migration"
+      echo "MIGRATE: Restoring from pre-migration backup..."
+      if [ -f "$backup_file" ]; then
+        cp "$backup_file" "$STATE_FILE"
+        echo "MIGRATE: Restored from ${backup_file}"
+        state_lock_release
+        exit 1
+      else
+        echo "MIGRATE: ERROR — no backup available, state.json is corrupted"
+        state_lock_release
+        exit 1
+      fi
+    fi
+  fi
+
+  state_lock_release
+}
+
+# ── Main dispatch ────────────────────────────────────────────────
+case "$MODE" in
+  init)             do_init ;;
+  read)             do_read "$3" ;;
+  write)            do_write "$3" "${4:-}" ;;
+  delete)           do_delete "$3" ;;
+  validate)         do_validate ;;
+  migrate)          do_migrate ;;
+  generate-tasks-md) do_generate_tasks_md ;;
+  history-append)   do_history_append "$3" ;;
+  history-prune)    do_history_prune "$3" ;;
+  spec-increment)   do_spec_increment ;;
+  cadence-increment) do_cadence_increment "$3" ;;
+  cadence-reset)    do_cadence_reset "$3" ;;
+  context-increment) do_context_increment "${3:-}" ;;
+  context-reset)    do_context_reset "${3:-}" ;;
+  task-set)             do_task_set "$3" "$4" "${5:-}" ;;
+  task-incr)            do_task_incr "$3" "$4" ;;
+  fix-cycles-increment) do_fix_cycles_increment ;;
+  fix-cycles-reset)     do_fix_cycles_reset ;;
+  *)
+    echo "Unknown mode: $MODE" >&2
+    echo "Usage: state-engine.sh <init|read|write|delete|validate|migrate|generate-tasks-md|history-append|history-prune|spec-increment|cadence-increment|cadence-reset|context-increment|context-reset|task-set|task-incr|fix-cycles-increment|fix-cycles-reset> <feature_dir> [args...]" >&2
+    exit 1
+    ;;
+esac
