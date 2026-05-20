@@ -52,6 +52,8 @@ Before each attempt:
      git diff --name-only | while read f; do
        cp "$f" ".artifacts/correction-snapshots/attempt-${ATTEMPT_NUM}/" 2>/dev/null || true
      done
+  2. Also create a checkpoint snapshot (for verification-phase rollback):
+     bash scripts/check-point.sh snapshot "$FEATURE_DIR" "$TASK_ID" 2>/dev/null || true
 
 Attempt 1:
   1. Diagnose root cause by reading error output, tracing execution.

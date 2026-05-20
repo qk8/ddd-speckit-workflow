@@ -90,8 +90,10 @@ ERROR_DRIFT=0
 ERROR_FILE="$ARTIFACTS_DIR/error-memory.json"
 
 if [ -f "$ERROR_FILE" ]; then
-  ERROR_CORRECTIONS=$(grep -c '"task"' "$ERROR_FILE" 2>/dev/null) || ERROR_CORRECTIONS=0
-  ERROR_DRIFT=$(grep -c '"pattern"' "$ERROR_FILE" 2>/dev/null) || ERROR_DRIFT=0
+  ERROR_CORRECTIONS=$(jq '.corrections | length' "$ERROR_FILE" 2>/dev/null) || ERROR_CORRECTIONS=0
+  case "$ERROR_CORRECTIONS" in ''|*[!0-9]*) ERROR_CORRECTIONS=0 ;; esac
+  ERROR_DRIFT=$(jq '.drift_patterns | length' "$ERROR_FILE" 2>/dev/null) || ERROR_DRIFT=0
+  case "$ERROR_DRIFT" in ''|*[!0-9]*) ERROR_DRIFT=0 ;; esac
 fi
 
 # ── Test health ─────────────────────────────────────────────────

@@ -79,21 +79,29 @@ For each significant spec correction (type A or B):
      - Add "Re-implemented due to spec revision: [reason]" note
 
 ─────────────────────────────────────────
-STEP 4 — UPDATE PLAN.MD AND SPEC.MD
+STEP 4 — PROPOSE SPEC CHANGES
 ─────────────────────────────────────────
-Apply the approved spec corrections to plan.md and spec.md.
-For each change:
+For each approved spec correction:
   - Note the exact section.field being changed
   - Record the old value and new value
-  - Add a comment: "# Spec revision [date]: [reason]"
+  - Print the proposed diff for each file
+  - DO NOT modify plan.md or spec.md yet
 
 ─────────────────────────────────────────
-STEP 5 — RE-ENTER IMPLEMENT LOOP
+STEP 5 — USER CONFIRMATION
 ─────────────────────────────────────────
 Print:
-  "SPEC REVISION: [N] correction(s) applied to plan.md"
+  "SPEC REVISION: [N] proposed change(s) to plan.md and spec.md"
   "Affected tasks reset to TODO: [list]"
-  "The implement loop will re-process these tasks with the corrected spec."
+  "Approve to apply changes. Revise to adjust. Abort to skip."
 
-Wait for user confirmation before proceeding.
+Wait for user confirmation.
+If user approves: apply all proposed changes to plan.md and spec.md.
+  For each change:
+    - Apply the modification
+    - Add a comment: "# Spec revision [date]: [reason]"
+  Print: "SPEC REVISION: [N] correction(s) applied to plan.md"
+If user revises: go back to STEP 2 with feedback.
+If user aborts: print "SPEC REVISION aborted" and proceed to next task.
+
 Do NOT re-enter the implement loop until confirmed.

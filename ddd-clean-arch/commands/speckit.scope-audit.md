@@ -23,12 +23,15 @@ If unowned files found:
   1. For each unowned file, determine:
      - Is it part of the current task's scope? If so, add it to the task.
      - Is it from a previous task that forgot to track it? If so, retroactively track it.
-     - Is it stray/unrelated code? If so, remove or move it.
+     - Is it stray/unrelated code? If so, flag for human review — DO NOT delete.
 
   2. For files that belong to the current task:
      Run: bash scripts/track-created-files.sh "$(bash scripts/find-first-feature.sh)" [task_id] [file1] [file2] ...
 
   3. Re-run audit to confirm all files are now tracked.
+
+  CRITICAL: DO NOT delete any files during scope audit. Only report unowned files
+  and suggest actions. Deletion requires explicit human confirmation.
 
 ─────────────────────────────────────────
 STEP 3 — PERIODIC AUDIT (every 20 tasks)

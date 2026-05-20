@@ -96,13 +96,16 @@ Note: Checks O (Security Hardening) and U (Session & Token Security) are now
 deterministic (OW, US scripts) and run in STEP 3A. They are no longer here.
 
 ─────────────────────────────────────────
-STEP 3C — FIX DETERMINISTIC CHECK FAILURES
+STEP 3C — REPORT DETERMINISTIC CHECK FAILURES
 ─────────────────────────────────────────
 If check-runner.sh reported failures:
+  DO NOT modify implementation files during verification.
   1. Read .artifacts/check-results/[X].result for each failed check.
-  2. Attempt to fix the underlying issue.
+  2. For each failure: create a fix task in tasks.md (Type: fix, linked to current TASK-N).
   3. Re-run check-runner.sh from the beginning.
-  4. If not fixable after 2 attempts: mark ABANDONED.
+  4. If the SAME check still fails after re-run: mark the current task IN_PROGRESS
+     with note "check_failure — fix task created" and do NOT mark DONE.
+  5. If not fixable after 2 re-runs: mark ABANDONED.
 
 ─────────────────────────────────────────
 STEP 3D — ERROR BUDGET & ESCALATION

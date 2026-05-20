@@ -29,11 +29,17 @@ set -euo pipefail
 
 ACTION="${1:-update}"
 FEATURE_DIR="${2:-}"
+# Save task parameters before flag parsing consumes $@
+_P3="${3:-}"
+_P4="${4:-}"
+_P5="${5:-}"
+_P6="${6:-}"
+_P7="${7:-}"
+
 PROTECT_TASK=""
 SHOW_STATS=false
 
-# Parse additional flags
-shift 2 2>/dev/null || true
+# Parse flags
 while [ $# -gt 0 ]; do
   case "$1" in
     --protect) PROTECT_TASK="${2:-}"; shift 2 ;;
@@ -81,11 +87,8 @@ do_read() {
   local has_corrections=false
   if grep -q '"corrections"' "$MEMORY_FILE" 2>/dev/null; then
     local correction_count
-    correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || true)
-    correction_count=${correction_count:-0}
-    if ! echo "$correction_count" | grep -qE '^[0-9]+$'; then
-      correction_count=0
-    fi
+    correction_count=$(jq '.corrections | length' "$MEMORY_FILE" 2>/dev/null || echo 0)
+    case "$correction_count" in ''|*[!0-9]*) correction_count=0 ;; esac
     if [ "$correction_count" -gt 0 ]; then
       has_corrections=true
       echo "# Known Correction Patterns (from recent tasks)"
@@ -197,30 +200,24 @@ do_update() {
 
   # Build the jq filter for confidence-weighted eviction
   local jq_filter='
-    .corrections += [$entry] |
-    if (.corrections | length) > 10 then
-      # Find the entry to evict: lowest count * confidence score
-      # Protected entries: confidence >= 0.8 AND count >= 3
-      .corrections |
+    # Find evictable index BEFORE adding new entry (avoids index shift issues)
+    (.corrections | length) as $orig_len |
+    (.corrections |
       map(
         . + {
           "score": (.count * .confidence),
           "protected": ((.confidence >= 0.8) and (.count >= 3))
         }
       ) |
-      # Separate protected and evictable
-      (map(select(.protected))) as $protected |
-      (map(select((.protected | not))) | sort_by(.score) | .[0]) as $to_evict |
-      if $to_evict != null then
-        # Find original index and remove it
-        .corrections as $orig |
-        ($orig | length) as $len |
-        # Rebuild: remove the evictable entry (lowest score, not protected)
-        [to_entries[] | select(.value | .score != ($to_evict.score) or .protected)] |
-        map(del(.value.score) | del(.value.protected))
-      else $orig
-      end
-    else . end |
+      (to_entries | map(select(.value.protected | not)) | sort_by(.value.score) | .[0].key)
+    ) as $evict_idx |
+    if $evict_idx != null then
+      # Evict needed: remove evict_idx item, append new entry
+      .corrections = ((.corrections | map(del(.score) | del(.protected)) + [$entry]) | del(.[$evict_idx]))
+    else
+      # No eviction needed: just append
+      .corrections += [$entry]
+    end |
     .updated = $updated
   '
 
@@ -344,15 +341,12 @@ do_summary() {
   local abandoned_count=0
   local drift_count=0
 
-  correction_count=$(grep -c '"task"' "$MEMORY_FILE" 2>/dev/null || true)
-  correction_count=${correction_count:-0}
-  echo "$correction_count" | grep -qE '^[0-9]+$' || correction_count=0
-  abandoned_count=$(grep -c '"reason"' "$MEMORY_FILE" 2>/dev/null || true)
-  abandoned_count=${abandoned_count:-0}
-  echo "$abandoned_count" | grep -qE '^[0-9]+$' || abandoned_count=0
-  drift_count=$(grep -c '"pattern"' "$MEMORY_FILE" 2>/dev/null || true)
-  drift_count=${drift_count:-0}
-  echo "$drift_count" | grep -qE '^[0-9]+$' || drift_count=0
+  correction_count=$(jq '.corrections | length' "$MEMORY_FILE" 2>/dev/null || echo 0)
+  case "$correction_count" in ''|*[!0-9]*) correction_count=0 ;; esac
+  abandoned_count=$(jq '.abandoned_tasks | length' "$MEMORY_FILE" 2>/dev/null || echo 0)
+  case "$abandoned_count" in ''|*[!0-9]*) abandoned_count=0 ;; esac
+  drift_count=$(jq '.drift_patterns | length' "$MEMORY_FILE" 2>/dev/null || echo 0)
+  case "$drift_count" in ''|*[!0-9]*) drift_count=0 ;; esac
 
   echo "Error Memory Summary:"
   echo "  Corrections: $correction_count"
@@ -406,7 +400,7 @@ case "$ACTION" in
     do_read
     ;;
   update)
-    do_update "$FEATURE_DIR" "$ACTION" "${3:-}" "${4:-}" "${5:-}" "${6:-}" "${7:-}"
+    do_update "$FEATURE_DIR" "$ACTION" "$_P3" "$_P4" "$_P5" "$_P6" "$_P7"
     if $SHOW_STATS; then
       do_stats
     fi

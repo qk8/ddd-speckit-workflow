@@ -4,13 +4,10 @@ that everything is checked against.)
 
 Read the feature preamble from templates/preamble.md.
 
-Ask: "What do you want to verify?"
-  1. A specific aggregate
-  2. A specific module
-  3. A specific endpoint
-  4. The full codebase
+Auto-detect scope from the calling context (e.g., which sub-phase called verify).
+If no context available, default to full codebase verification.
 
-Wait for answer before loading any spec.
+Load ONLY the relevant plan.md sections based on the detected scope:
 
 Based on the scope chosen, load ONLY the relevant plan.md sections:
 
@@ -84,5 +81,5 @@ VERIFY REPORT — [scope]
   Interface drift: [N] | Unrecorded decisions: [N]
   Overall: CLEAN | DRIFT DETECTED
 
-If DRIFT DETECTED: for each issue state whether to fix in code or in spec.
-Wait for user decision before any changes.
+If DRIFT DETECTED: fix drift in code automatically. Only flag issues that require
+spec changes for human review — do NOT modify spec.md without explicit user approval.
