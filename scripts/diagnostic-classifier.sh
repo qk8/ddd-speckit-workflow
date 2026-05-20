@@ -371,50 +371,112 @@ if [ "$TEST_FAULT_COUNT" -gt 0 ] && [ "$IMPL_FAULT_COUNT" -gt 0 ]; then
   MIXED_FAULTS="true"
 fi
 
-# ── Determine classification based on evidence ─────────────────
-if [ "$MIXED_FAULTS" = "true" ]; then
-  CLASSIFICATION="AMBIGUOUS"
-  CONFIDENCE="high"
-  EVIDENCE="${EVIDENCE}MIXED: Both TEST_FAULT ($TEST_FAULT_COUNT) and IMPL_ERROR ($IMPL_FAULT_COUNT) detected simultaneously. "
-elif echo "$EVIDENCE" | grep -q "SPEC_MISMATCH"; then
-  CLASSIFICATION="SPEC_MISMATCH"
-  CONFIDENCE="high"
-elif echo "$EVIDENCE" | grep -q "TEST_FAULT"; then
-  CLASSIFICATION="TEST_FAULT"
-  CONFIDENCE="high"
-elif echo "$EVIDENCE" | grep -q "IMPL_ERROR"; then
-  CLASSIFICATION="IMPL_ERROR"
-  CONFIDENCE="high"
-elif echo "$EVIDENCE" | grep -q "ENV_FAULT"; then
-  CLASSIFICATION="ENV_FAULT"
-  CONFIDENCE="medium"
-elif [ "$FAULTS_FOUND" -gt 0 ]; then
-  CLASSIFICATION="AMBIGUOUS"
-  CONFIDENCE="low"
-else
-  CLASSIFICATION="AMBIGUOUS"
-  CONFIDENCE="low"
+# ── Classification ─────────────────────────────────────────────
+# Try LLM-based classification first (more accurate for ambiguous cases).
+# Falls back to regex-based classification if claude CLI is unavailable.
+CLASSIFY_METHOD="regex"
+if command -v claude &>/dev/null && [ -n "$TEST_OUTPUT_FILE" ] && [ -f "$TEST_OUTPUT_FILE" ]; then
+  # Build a temporary prompt file for the LLM
+  PROMPT_FILE=$(mktemp)
+  cat > "$PROMPT_FILE" <<LLMEOF
+You are classifying a test failure for an automated workflow. Classify the root cause as exactly ONE category.
+
+## Evidence (from deterministic checks)
+${EVIDENCE:-none}
+
+## Test Output
+$(cat "$TEST_OUTPUT_FILE" 2>/dev/null | head -300)
+
+## Implementation Output
+$(cat "$IMPL_OUTPUT_FILE" 2>/dev/null | head -100)
+
+## Task Type
+${TEST_TYPE:-unknown}
+
+## Categories
+- TEST_FAULT: The test itself is wrong (import errors, mock setup, timing issues, asserts on wrong object, type errors in test code). Fix the test.
+- IMPL_ERROR: The implementation fails to meet the acceptance criterion (wrong value, wrong status code, wrong type, missing functionality). Fix the implementation.
+- ENV_FAULT: Missing dependency, wrong environment, test runner not configured, DB context failure. Fix the environment.
+- SPEC_MISMATCH: The implementation follows the spec differently than written (different HTTP status, different exception type, different boundary). Human review needed.
+
+## Rules
+- If evidence already shows clear TEST_FAULT (import/syntax/mock setup errors), classify as TEST_FAULT.
+- If evidence shows clear IMPL_ERROR (wrong value/status/type), classify as IMPL_ERROR.
+- If both TEST_FAULT and IMPL_ERROR evidence exist, classify as AMBIGUOUS with MIXED faults.
+- If the test output shows a valid test runner executing tests but implementation returns wrong values, classify as IMPL_ERROR.
+- If the test output shows import/syntax/compilation errors, classify as TEST_FAULT.
+- If the test runner cannot execute at all (missing config, missing dependencies), classify as ENV_FAULT.
+
+Respond with ONLY a JSON object, no other text:
+{"classification":"...","confidence":"high|medium|low","evidence":"...","required_action":"FIX_TEST|FIX_IMPL|FIX_ENV|HUMAN|RETRY"}
+LLMEOF
+
+  LLM_RESULT=$(claude -p --bare "$(cat "$PROMPT_FILE")" 2>/dev/null | sed 's/^```json//;s/^```//;s/```$//' || true) && {
+    # Parse LLM JSON response (strip markdown code fences first)
+    LLM_CLASS=$(echo "$LLM_RESULT" | jq -r '.classification // empty' 2>/dev/null || true)
+    LLM_CONF=$(echo "$LLM_RESULT" | jq -r '.confidence // empty' 2>/dev/null || true)
+    LLM_EVID=$(echo "$LLM_RESULT" | jq -r '.evidence // empty' 2>/dev/null || true)
+    LLM_ACTION=$(echo "$LLM_RESULT" | jq -r '.required_action // empty' 2>/dev/null || true)
+
+    if [ -n "$LLM_CLASS" ] && [ -n "$LLM_ACTION" ]; then
+      CLASSIFICATION="$LLM_CLASS"
+      CONFIDENCE="${LLM_CONF:-$CONFIDENCE}"
+      if [ -n "$LLM_EVID" ]; then
+        EVIDENCE="${EVIDENCE}${LLM_EVID}. "
+      fi
+      REQUIRED_ACTION="$LLM_ACTION"
+      CLASSIFY_METHOD="llm"
+    fi
+  }
+  rm -f "$PROMPT_FILE"
 fi
 
-# ── Determine REQUIRED_ACTION based on classification + evidence ─
-if [ "$MIXED_FAULTS" = "true" ]; then
-  REQUIRED_ACTION="HUMAN"
-elif [ "$CLASSIFICATION" = "SPEC_MISMATCH" ]; then
-  REQUIRED_ACTION="HUMAN"
-elif [ "$CLASSIFICATION" = "TEST_FAULT" ] && [ "$CONFIDENCE" = "high" ]; then
-  REQUIRED_ACTION="FIX_TEST"
-elif [ "$CLASSIFICATION" = "IMPL_ERROR" ] && [ "$CONFIDENCE" = "high" ]; then
-  REQUIRED_ACTION="FIX_IMPL"
-elif [ "$CLASSIFICATION" = "ENV_FAULT" ]; then
-  REQUIRED_ACTION="FIX_ENV"
-elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ] && [ "$FAULTS_FOUND" -ge 2 ]; then
-  REQUIRED_ACTION="HUMAN"
-elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ]; then
-  REQUIRED_ACTION="RETRY"
-elif [ "$TEST_FAULT_COUNT" -ge 2 ]; then
-  REQUIRED_ACTION="FIX_TEST"
-else
-  REQUIRED_ACTION="RETRY"
+# Fallback: regex-based classification (if LLM unavailable or returned invalid)
+if [ "$CLASSIFY_METHOD" = "regex" ]; then
+  if [ "$MIXED_FAULTS" = "true" ]; then
+    CLASSIFICATION="AMBIGUOUS"
+    CONFIDENCE="high"
+    EVIDENCE="${EVIDENCE}MIXED: Both TEST_FAULT ($TEST_FAULT_COUNT) and IMPL_ERROR ($IMPL_FAULT_COUNT) detected simultaneously. "
+  elif echo "$EVIDENCE" | grep -q "SPEC_MISMATCH"; then
+    CLASSIFICATION="SPEC_MISMATCH"
+    CONFIDENCE="high"
+  elif echo "$EVIDENCE" | grep -q "TEST_FAULT"; then
+    CLASSIFICATION="TEST_FAULT"
+    CONFIDENCE="high"
+  elif echo "$EVIDENCE" | grep -q "IMPL_ERROR"; then
+    CLASSIFICATION="IMPL_ERROR"
+    CONFIDENCE="high"
+  elif echo "$EVIDENCE" | grep -q "ENV_FAULT"; then
+    CLASSIFICATION="ENV_FAULT"
+    CONFIDENCE="medium"
+  elif [ "$FAULTS_FOUND" -gt 0 ]; then
+    CLASSIFICATION="AMBIGUOUS"
+    CONFIDENCE="low"
+  else
+    CLASSIFICATION="AMBIGUOUS"
+    CONFIDENCE="low"
+  fi
+
+  # Determine REQUIRED_ACTION based on classification + evidence
+  if [ "$MIXED_FAULTS" = "true" ]; then
+    REQUIRED_ACTION="HUMAN"
+  elif [ "$CLASSIFICATION" = "SPEC_MISMATCH" ]; then
+    REQUIRED_ACTION="HUMAN"
+  elif [ "$CLASSIFICATION" = "TEST_FAULT" ] && [ "$CONFIDENCE" = "high" ]; then
+    REQUIRED_ACTION="FIX_TEST"
+  elif [ "$CLASSIFICATION" = "IMPL_ERROR" ] && [ "$CONFIDENCE" = "high" ]; then
+    REQUIRED_ACTION="FIX_IMPL"
+  elif [ "$CLASSIFICATION" = "ENV_FAULT" ]; then
+    REQUIRED_ACTION="FIX_ENV"
+  elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ] && [ "$FAULTS_FOUND" -ge 2 ]; then
+    REQUIRED_ACTION="HUMAN"
+  elif [ "$CLASSIFICATION" = "AMBIGUOUS" ] && [ "$CONFIDENCE" = "low" ]; then
+    REQUIRED_ACTION="RETRY"
+  elif [ "$TEST_FAULT_COUNT" -ge 2 ]; then
+    REQUIRED_ACTION="FIX_TEST"
+  else
+    REQUIRED_ACTION="RETRY"
+  fi
 fi
 
 # ── Output results ─────────────────────────────────────────────
