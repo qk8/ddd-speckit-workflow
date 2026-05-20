@@ -142,7 +142,7 @@ steps:
             command: >
               bash scripts/record-and-trim.sh validation_revision
               "{{ steps.ts_phase_iteration.output.count || 1 }}"
-          - goto: ts_generate
+          - goto: ts_validate
 
   - id: ts_traceability
     type: shell

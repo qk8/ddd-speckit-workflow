@@ -35,7 +35,6 @@
   },
   "stagnation": {
     "total_abort_force": 3,
-    "revision_limit": 3,
     "drift_revision_limit": 2
   },
   "token_budget": {

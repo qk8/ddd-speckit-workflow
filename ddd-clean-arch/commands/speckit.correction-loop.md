@@ -87,6 +87,8 @@ After each attempt:
   - If global_total >= 10: STOP. Print "ESCALATION: Global correction cap (10) reached."
     Mark task for human review. Proceed to next task.
   - If this attempt made things worse or same: restore from snapshot
+    echo "WARNING: Attempt ${ATTEMPT_NUM} did not improve the situation. Restoring from snapshot."
+    echo "WARNING: If this happens 3+ consecutive times, consider escalating to human review."
     rm -rf .artifacts/correction-snapshots/attempt-${ATTEMPT_NUM}
 
 ─────────────────────────────────────────
