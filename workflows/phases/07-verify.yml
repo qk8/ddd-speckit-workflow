@@ -11,25 +11,25 @@ steps:
     type: shell
     command: >
       bash scripts/regression-baseline.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: vf_integration_smoke
     type: shell
     command: >
       bash scripts/integration-smoke.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: vf_perf_regression
     type: shell
     command: >
       bash scripts/perf-regression.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: vf_dep_scan
     type: shell
     command: >
       bash scripts/run-dep-scan.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: vf_verify_all
     type: if
@@ -71,7 +71,7 @@ steps:
     type: shell
     command: >
       bash scripts/requirement-validate.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: vf_spec_code_delta
     type: prompt
@@ -128,7 +128,7 @@ steps:
         type: shell
         command: >
           bash scripts/state-engine.sh read
-          "{{ steps.impl_check_remaining.output.feature_dir }}" fix_cycles
+          "{{ steps.impl_preflight.output.feature_dir }}" fix_cycles
       - id: vf_fix_cycle_gate
         type: if
         condition: >
@@ -159,7 +159,7 @@ steps:
                 type: shell
                 command: >
                   bash scripts/state-engine.sh fix-cycles-reset
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
               - id: vf_run_spec_delta
                 command: speckit.spec-delta
                 integration: claude
@@ -217,7 +217,7 @@ steps:
             type: shell
             command: >
               bash scripts/state-engine.sh fix-cycles-reset
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
         on_fix-needed:
           - id: fix_add_tasks
             type: prompt
@@ -232,12 +232,12 @@ steps:
             type: shell
             command: >
               bash scripts/validate-fix-tasks.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
           - id: fix_backup
             type: shell
             command: >
               bash scripts/backup-tasks.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" "fix-needed"
+              "{{ steps.impl_preflight.output.feature_dir }}" "fix-needed"
           - id: fix_record
             type: shell
             command: >
@@ -247,7 +247,7 @@ steps:
             type: shell
             command: >
               bash scripts/recovery-engine.sh restore
-              "{{ steps.impl_check_remaining.output.feature_dir }}" "" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" "" || true
             continue_on_error: true
           - goto: impl_loop
         on_abort: abort
@@ -277,13 +277,13 @@ steps:
         type: shell
         command: >
           bash scripts/state-engine.sh fix-cycles-reset
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
     on_fix-needed:
       - id: vf_fix_retry_reset
         type: shell
         command: >
           bash scripts/state-engine.sh fix-cycles-reset
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
       - goto: fix_needed_round
     on_abort:
       - id: vf_fix_abort_cleanup

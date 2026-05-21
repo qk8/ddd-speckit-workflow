@@ -8,13 +8,13 @@ steps:
 
   - id: impl_threshold
     type: shell
-    command: "bash scripts/gate-threshold.sh implement {{ steps.impl_loop_iteration.output.count || 1 }}"
+    command: "bash scripts/gate-threshold.sh implement {{ steps.impl_preflight.output.count || 1 }}"
 
   - id: impl_pre_acceptance
     type: shell
     command: >
       bash scripts/check-gate-preconditions.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" "acceptance"
+      "{{ steps.impl_preflight.output.feature_dir }}" "acceptance"
 
   - id: impl_check_tdd_evidence
     type: if
@@ -25,25 +25,25 @@ steps:
         type: shell
         command: >
           bash scripts/verify-acceptance-coverage.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}" "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}" || echo "TDD_EVIDENCE=UNKNOWN"
+          "{{ steps.impl_preflight.output.feature_dir }}" "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}" || echo "TDD_EVIDENCE=UNKNOWN"
 
   - id: impl_pre_checks
     type: shell
     command: >
       bash scripts/check-gate-preconditions.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" "quality"
+      "{{ steps.impl_preflight.output.feature_dir }}" "quality"
 
   - id: impl_check_escalation
     type: shell
     command: >
       bash scripts/check-escalation.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: impl_pre_tdd
     type: shell
     command: >
       bash scripts/check-gate-preconditions.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" "tdd"
+      "{{ steps.impl_preflight.output.feature_dir }}" "tdd"
 
   - id: impl_review_unified
     type: if
@@ -115,22 +115,22 @@ steps:
           type: shell
           command: >
             bash scripts/recovery-engine.sh pause
-            "{{ steps.impl_check_remaining.output.feature_dir }}"
+            "{{ steps.impl_preflight.output.feature_dir }}"
             "review-unified"
         on_revise:
           - id: impl_lock_unified
             type: shell
             command: >
               bash scripts/lock-task-write.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+              "{{ steps.impl_preflight.output.feature_dir }}/tasks.md"
               IN_PROGRESS
-              "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+              "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}"
               "Task sent back for revision — acceptance, quality, or TDD issues not met."
 
   - id: impl_module_verify
     type: if
     condition: >
-      {{ steps.impl_check_remaining.output.retro_trigger == 'true' }}
+      {{ steps.impl_preflight.output.retro_trigger == 'true' }}
     then:
       - id: impl_run_module_verify
         type: prompt

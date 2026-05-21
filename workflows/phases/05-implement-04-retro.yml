@@ -11,24 +11,24 @@ steps:
 
   - id: impl_retro_drift
     type: if
-    condition: "{{ steps.impl_check_remaining.output.retro_trigger == 'true' }}"
+    condition: "{{ steps.impl_preflight.output.retro_trigger == 'true' }}"
     then:
       - id: impl_reset_drift_revisions
         type: shell
-        command: "echo '0' > '{{ steps.impl_check_remaining.output.feature_dir }}/.drift_revisions'"
+        command: "echo '0' > '{{ steps.impl_preflight.output.feature_dir }}/.drift_revisions'"
 
       - id: impl_test_trend
         type: shell
         command: >
           bash scripts/test-trend-analyzer.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
 
       # ── Issue 7: Check shared revision budget before retro ──────────
       - id: impl_retro_budget_check
         type: shell
         command: >
           bash scripts/shared-revision-budget.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}" check "5" || echo "REMAINING=5"
+          "{{ steps.impl_preflight.output.feature_dir }}" check "5" || echo "REMAINING=5"
         continue_on_error: true
 
       - id: impl_retrospect
@@ -60,20 +60,20 @@ steps:
                 type: shell
                 command: >
                   bash scripts/record-and-trim.sh implement_loop
-                  "{{ steps.impl_loop_iteration.output.count || 1 }}"
+                  "{{ steps.impl_preflight.output.count || 1 }}"
               # Issue 7: Consume from shared revision budget
               - id: impl_retro_budget_consume
                 type: shell
                 command: >
                   bash scripts/shared-revision-budget.sh
-                  "{{ steps.impl_check_remaining.output.feature_dir }}" consume "5" || echo "NEW_REMAINING=0"
+                  "{{ steps.impl_preflight.output.feature_dir }}" consume "5" || echo "NEW_REMAINING=0"
                 continue_on_error: true
               # Issue 6: Bounded revise loop (max 3 iterations)
               - id: impl_retro_revision_counter
                 type: shell
                 command: >
                   bash scripts/state-engine.sh get
-                  "{{ steps.impl_check_remaining.output.feature_dir }}" retro_revisions || echo "count=0"
+                  "{{ steps.impl_preflight.output.feature_dir }}" retro_revisions || echo "count=0"
                 continue_on_error: true
               - id: impl_retro_revision_check
                 type: if
@@ -94,7 +94,7 @@ steps:
                     type: shell
                     command: >
                       bash scripts/state-engine.sh task-incr retro_revisions
-                      "{{ steps.impl_check_remaining.output.feature_dir }}"
+                      "{{ steps.impl_preflight.output.feature_dir }}"
                     continue_on_error: true
                   - goto: impl_retro_run
 
@@ -123,13 +123,13 @@ steps:
             type: shell
             command: >
               bash scripts/check-drift.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
 
           - id: impl_drift_revision_check
             type: shell
             command: >
               bash scripts/check-drift-revisions.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
 
           - id: impl_drift_gate
             type: gate
@@ -149,19 +149,19 @@ steps:
                 type: shell
                 command: >
                   bash scripts/check-stagnation.sh --record-drift
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
               # Issue 7: Consume from shared revision budget
               - id: impl_drift_budget_consume
                 type: shell
                 command: >
                   bash scripts/shared-revision-budget.sh
-                  "{{ steps.impl_check_remaining.output.feature_dir }}" consume "5" || echo "NEW_REMAINING=0"
+                  "{{ steps.impl_preflight.output.feature_dir }}" consume "5" || echo "NEW_REMAINING=0"
                 continue_on_error: true
               - id: impl_drift_rev_check
                 type: shell
                 command: >
                   bash scripts/check-drift-revisions.sh
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
               - id: impl_drift_rev_limit
                 type: if
                 condition: "{{ steps.impl_drift_rev_check.output.MAX_DRIFT_REVISIONS_EXCEEDED == 'true' }}"
@@ -182,7 +182,7 @@ steps:
                 type: shell
                 command: >
                   bash scripts/recovery-engine.sh abort
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
                   "drift_check"
               - goto: abort
 
@@ -190,4 +190,4 @@ steps:
         type: shell
         command: >
           bash scripts/recovery-engine.sh post-gate
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"

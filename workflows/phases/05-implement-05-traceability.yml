@@ -13,7 +13,7 @@ steps:
         type: shell
         command: >
           bash scripts/traceability-check.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
 
       - id: impl_traceability_gate
         type: gate
@@ -42,5 +42,5 @@ steps:
         type: shell
         command: >
           bash scripts/state-engine.sh cadence-reset traceability_counter
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
 

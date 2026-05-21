@@ -27,7 +27,7 @@ steps:
     type: shell
     command: >
       bash scripts/track-token-budget.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   # ── Resilience scenarios ────────────────────────────────────────
@@ -51,7 +51,7 @@ steps:
     type: shell
     command: >
       bash scripts/track-token-budget.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   # ── Architecture review (DDD patterns) ──────────────────────────
@@ -73,14 +73,14 @@ steps:
     type: shell
     command: >
       bash scripts/track-token-budget.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   - id: cr_backup
     type: shell
     command: >
       bash scripts/backup-tasks.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" "pre-code-review"
+      "{{ steps.impl_preflight.output.feature_dir }}" "pre-code-review"
 
   - id: cr_round
     type: while
@@ -132,7 +132,7 @@ steps:
               bash scripts/review-revise-chain.sh
               code_review_round
               "{{ steps.cr_round_iteration.output.count || 1 }}"
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
           - id: cr_plan_fixes
             type: prompt
             integration: claude

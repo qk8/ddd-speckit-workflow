@@ -9,47 +9,47 @@ steps:
     type: shell
     command: >
       bash scripts/log-iteration-progress.sh
-      "{{ steps.impl_loop_iteration.output.count || 1 }}"
-      "{{ steps.impl_check_remaining.output.done_count }}"
-      "{{ steps.impl_check_remaining.output.total_tasks }}"
-      "{{ steps.impl_check_remaining.output.todo_count }}"
-      "{{ steps.impl_check_remaining.output.in_progress || 'none' }}"
+      "{{ steps.impl_preflight.output.count || 1 }}"
+      "{{ steps.impl_preflight.output.done_count }}"
+      "{{ steps.impl_preflight.output.total_tasks }}"
+      "{{ steps.impl_preflight.output.todo_count }}"
+      "{{ steps.impl_preflight.output.in_progress || 'none' }}"
 
   - id: impl_increment_traceability_counter
     type: shell
     command: >
       bash scripts/state-engine.sh cadence-increment traceability_counter
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_check_traceability_due
     type: shell
     command: >
       bash scripts/traceability-cadence.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_pre_task_validate
     type: shell
     command: >
       bash scripts/pre-task-validate.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_validate_deps
     type: shell
     command: >
       bash scripts/validate-task-deps.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+      "{{ steps.impl_preflight.output.feature_dir }}/tasks.md"
     continue_on_error: true
 
   - id: impl_sanitize_prompt
     type: shell
     command: >
       bash scripts/sanitize-prompt.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: impl_generate_context
     type: shell
     command: >
-      bash scripts/prompt-context.sh "{{ steps.impl_check_remaining.output.feature_dir }}"
+      bash scripts/prompt-context.sh "{{ steps.impl_preflight.output.feature_dir }}"
       | head -n 500
       || true
 
@@ -59,7 +59,7 @@ steps:
     type: shell
     command: >
       bash scripts/recovery-engine.sh restore --dry-run
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || echo "ROLLBACK_AVAILABLE=false"
+      "{{ steps.impl_preflight.output.feature_dir }}" || echo "ROLLBACK_AVAILABLE=false"
     continue_on_error: true
 
   - id: impl_rollback_gate
@@ -93,7 +93,7 @@ steps:
           - id: impl_mark_skip
             type: shell
             command: >
-              echo "SKIP_ROLLBACK=true" > "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/skip-rollback"
+              echo "SKIP_ROLLBACK=true" > "{{ steps.impl_preflight.output.feature_dir }}/.artifacts/skip-rollback"
 
   - id: impl_write_test
     type: prompt
@@ -116,22 +116,22 @@ steps:
     type: shell
     command: >
       bash scripts/track-token-budget.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   - id: impl_test_review
     type: shell
     command: >
       bash scripts/verify-test-spec-alignment.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
-      "{{ steps.impl_check_remaining.output.todo_task_id || '' }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.todo_task_id || '' }}"
     continue_on_error: true
 
   - id: impl_capture_spec_baseline
     type: shell
     command: >
       bash scripts/spec-diff-check.sh --capture
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   - id: impl_execute
@@ -151,7 +151,7 @@ steps:
     type: shell
     command: >
       bash scripts/track-token-budget.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
     continue_on_error: true
 
   # ── Batch abort-on-failure (Issue 4) ─────────────────────────────
@@ -161,7 +161,7 @@ steps:
     type: shell
     command: >
       bash scripts/state-engine.sh read
-      "{{ steps.impl_check_remaining.output.feature_dir }}" corrections.global_total || echo "global_total=0"
+      "{{ steps.impl_preflight.output.feature_dir }}" corrections.global_total || echo "global_total=0"
     continue_on_error: true
 
   - id: impl_batch_abort_log
@@ -172,15 +172,15 @@ steps:
       - id: impl_batch_abort_record
         type: shell
         command: >
-          echo "BATCH FAILED: TASK {{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }} reached correction cap (10)" \
-          >> "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/batch-failures.txt"
+          echo "BATCH FAILED: TASK {{ steps.impl_preflight.output.todo_task_id || 'unknown' }} reached correction cap (10)" \
+          >> "{{ steps.impl_preflight.output.feature_dir }}/.artifacts/batch-failures.txt"
         continue_on_error: true
 
   - id: impl_check_spec_drift
     type: shell
     command: >
       bash scripts/spec-diff-check.sh --check
-      "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+      "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   - id: impl_verify
     type: if
@@ -200,7 +200,7 @@ steps:
         type: shell
         command: >
           bash scripts/track-token-budget.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
         continue_on_error: true
 
   - id: impl_velocity_record
@@ -212,24 +212,24 @@ steps:
         type: shell
         command: >
           bash scripts/velocity-tracker.sh record
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
-          "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}"
 
   - id: impl_per_task_drift
     type: if
-    condition: "{{ steps.impl_check_remaining.output.todo_count | int }} > 0"
+    condition: "{{ steps.impl_preflight.output.todo_count | int }} > 0"
     then:
       - id: impl_quick_drift
         type: shell
         command: >
           bash scripts/quick-drift-check.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_post_batch_consistency
     type: if
     condition: >
-      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
-      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+      {{ steps.impl_preflight.output.todo_count | int }} > 0 and
+      {{ steps.impl_preflight.output.abandoned_count | int }} == 0
     then:
       - id: impl_batch_consistency
         type: prompt
@@ -249,14 +249,14 @@ steps:
       - id: impl_batch_regression
         type: if
         condition: >
-          {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
-          {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+          {{ steps.impl_preflight.output.todo_count | int }} > 0 and
+          {{ steps.impl_preflight.output.abandoned_count | int }} == 0
         then:
           - id: impl_run_batch_regression
             type: shell
             command: >
               bash scripts/validate-tests.sh --full
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
 
   # ── Pre-correction diagnostic classification (P9.1 fix) ────────
   # Run deterministic classifier BEFORE any LLM correction loop.
@@ -265,73 +265,73 @@ steps:
   - id: impl_pre_correction_diagnostics
     type: if
     condition: >
-      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
-      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+      {{ steps.impl_preflight.output.todo_count | int }} > 0 and
+      {{ steps.impl_preflight.output.abandoned_count | int }} == 0
     then:
       - id: impl_run_diagnostic_classifier
         type: shell
         command: >
           bash scripts/diagnostic-classifier.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
-          "{{ steps.impl_check_remaining.output.todo_task_type }}"
-          "$(cat "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/test-output.txt" 2>/dev/null || echo '')"
-          "$(cat "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/test-output-impl.txt" 2>/dev/null || echo '')"
-          > "{{ steps.impl_check_remaining.output.feature_dir }}/.artifacts/diagnostic-output.txt" 2>&1 || true
+          "{{ steps.impl_preflight.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.todo_task_type }}"
+          "$(cat "{{ steps.impl_preflight.output.feature_dir }}/.artifacts/test-output.txt" 2>/dev/null || echo '')"
+          "$(cat "{{ steps.impl_preflight.output.feature_dir }}/.artifacts/test-output-impl.txt" 2>/dev/null || echo '')"
+          > "{{ steps.impl_preflight.output.feature_dir }}/.artifacts/diagnostic-output.txt" 2>&1 || true
 
   - id: impl_semantic_check
     type: if
     condition: >
-      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
-      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+      {{ steps.impl_preflight.output.todo_count | int }} > 0 and
+      {{ steps.impl_preflight.output.abandoned_count | int }} == 0
     then:
       - id: impl_run_semantic_check
         type: shell
         command: >
           bash scripts/post-batch-semantic-check.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
         continue_on_error: true
 
   - id: impl_merge_check
     type: if
     condition: >
-      {{ steps.impl_check_remaining.output.todo_count | int }} > 0 and
-      {{ steps.impl_check_remaining.output.abandoned_count | int }} == 0
+      {{ steps.impl_preflight.output.todo_count | int }} > 0 and
+      {{ steps.impl_preflight.output.abandoned_count | int }} == 0
     then:
       - id: impl_run_merge_check
         type: shell
         command: >
           bash scripts/verify-batch-consistency.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_post_verify_cp
     type: shell
     command: >
       bash scripts/recovery-engine.sh post-verify
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
 
   - id: impl_scope_guard
     type: shell
     command: >
       bash scripts/scope-guard.sh --enforce
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
-      "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}"
 
   - id: impl_context_compact
     type: if
-    condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+    condition: "{{ steps.impl_preflight.output.count || 1 }} % 10 == 0"
     then:
       - id: impl_run_context_compact
         type: shell
         command: >
           bash scripts/context-compact.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
         continue_on_error: true
 
   - id: impl_increment_revision
     type: shell
     command: >
       bash scripts/check-task-revisions.sh
-      "{{ steps.impl_check_remaining.output.feature_dir }}"
-      "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
+      "{{ steps.impl_preflight.output.feature_dir }}"
+      "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}"
       "3"
 

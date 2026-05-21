@@ -18,16 +18,16 @@ steps:
   - id: impl_loop
     type: while
     condition: >
-      {{ steps.impl_check_remaining.output.has_todo == 'true' }}
+      {{ steps.impl_preflight.output.has_todo == 'true' }}
     # max_iterations: 100 (source: ddd-clean-arch/workflow-config.json iteration_limits.implement_loop)
 
     max_iterations: 100
     steps:
 
-      - id: impl_check_pause_resume
+      - id: impl_preflight
         type: shell
         command: >
-          bash scripts/workflow-resume.sh
+          python3 scripts/preflight.py
           "$(bash scripts/find-first-feature.sh)"
         continue_on_error: true
 
@@ -37,45 +37,27 @@ steps:
           bash scripts/mcp-health-check.sh all || true
         continue_on_error: true
 
-      - id: impl_check_token_budget
-        type: shell
-        command: >
-          bash scripts/token-budget-check.sh
-          "$(bash scripts/find-first-feature.sh)" || true
-        continue_on_error: true
-
-      - id: impl_check_remaining
-        type: shell
-        command: "bash scripts/check-tasks-safe.sh"
-
-      - id: impl_loop_iteration
-        type: shell
-        command: >
-          bash scripts/increment-iteration.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
-        continue_on_error: true
-
       - id: impl_snapshot
         type: shell
         command: >
           bash scripts/recovery-engine.sh checkpoint
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
           --phase implement
-          --task "{{ steps.impl_check_remaining.output.todo_task_id || 'unknown' }}"
-          --root-dir "{{ steps.impl_check_remaining.output.feature_dir }}/../.."
+          --task "{{ steps.impl_preflight.output.todo_task_id || 'unknown' }}"
+          --root-dir "{{ steps.impl_preflight.output.feature_dir }}/../.."
         continue_on_error: true
-
-      - id: impl_check_spec_revision_limit
-        type: shell
-        command: >
-          bash scripts/check-spec-revisions.sh --dry-run
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
 
       - id: impl_check_spec_revision
         type: if
         condition: >
-          {{ steps.impl_check_remaining.output.todo_task_type == 'spec_revision' }} and
-          {{ steps.impl_check_spec_revision_limit.output.SPEC_REVISION_EXHAUSTED != 'true' }}
+          {{ steps.impl_preflight.output.todo_task_type == 'spec_revision' }} and
+          {{ steps.impl_preflight.output.SPEC_REVISION_EXHAUSTED != 'true' }}
+
+      - id: impl_check_spec_revision
+        type: if
+        condition: >
+          {{ steps.impl_preflight.output.todo_task_type == 'spec_revision' }} and
+          {{ steps.impl_preflight.output.SPEC_REVISION_EXHAUSTED != 'true' }}
         then:
           - id: impl_run_spec_delta
             type: prompt
@@ -118,82 +100,82 @@ steps:
             type: shell
             command: >
               bash scripts/check-spec-revisions.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
           - id: impl_validate_spec_revision_fixes
             type: shell
             command: >
               bash scripts/validate-fix-tasks.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
           - id: impl_spec_version_increment
             type: shell
             command: >
               bash scripts/state-engine.sh spec-increment
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
 
       - id: impl_check_cleanup
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 25 == 0"
+        condition: "{{ steps.impl_preflight.output.count || 1 }} % 25 == 0"
         then:
           - id: impl_cleanup
             type: shell
             command: >
               bash scripts/cleanup-artifacts.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
-              "{{ steps.impl_loop_iteration.output.count || 1 }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.count || 1 }}"
 
       - id: impl_check_llm_quality
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+        condition: "{{ steps.impl_preflight.output.count || 1 }} % 10 == 0"
         then:
           - id: impl_run_llm_quality
             type: shell
             command: >
               bash scripts/measure-llm-quality.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
 
       - id: impl_check_periodic
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 20 == 0"
+        condition: "{{ steps.impl_preflight.output.count || 1 }} % 20 == 0"
         then:
           - id: impl_session_health
             type: shell
             command: >
               bash scripts/session-health.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
           - id: impl_scope_audit
             type: shell
             command: >
               bash scripts/scope-audit.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
           - id: impl_velocity_status
             type: shell
             command: >
               bash scripts/velocity-tracker.sh status
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
 
       - id: impl_check_context_health
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 10 == 0"
+        condition: "{{ steps.impl_preflight.output.count || 1 }} % 10 == 0"
         then:
           - id: impl_context_health
             type: shell
             command: >
               bash scripts/context-health.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
 
       - id: impl_check_coverage
         type: if
-        condition: "{{ steps.impl_loop_iteration.output.count || 1 }} % 5 == 0"
+        condition: "{{ steps.impl_preflight.output.count || 1 }} % 5 == 0"
         then:
           - id: impl_run_quantitative
             type: shell
             command: >
               bash scripts/run-quantitative.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}" || true
+              "{{ steps.impl_preflight.output.feature_dir }}" || true
 
       - id: impl_check_parse_error
         type: if
-        condition: "{{ steps.impl_check_remaining.output.TASKS_PARSE_ERROR == '1' }}"
+        condition: "{{ steps.impl_preflight.output.TASKS_PARSE_ERROR == '1' }}"
         then:
           - id: impl_parse_error_gate
             type: gate
@@ -212,22 +194,22 @@ steps:
                 type: shell
                 command: >
                   bash scripts/recovery-engine.sh abort
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
                   "parse_error"
               - goto: abort
 
       - id: impl_check_all_done
         type: if
-        condition: "{{ steps.impl_check_remaining.output.has_todo == 'false' }}"
+        condition: "{{ steps.impl_preflight.output.has_todo == 'false' }}"
         then:
           - id: impl_done_summary
             type: shell
             continue_on_error: true
             command: >
               bash scripts/log-impl-complete.sh
-              "{{ steps.impl_check_remaining.output.done_count }}"
-              "{{ steps.impl_check_remaining.output.total_tasks }}"
-              "{{ steps.impl_check_remaining.output.abandoned_count | int }}"
+              "{{ steps.impl_preflight.output.done_count }}"
+              "{{ steps.impl_preflight.output.total_tasks }}"
+              "{{ steps.impl_preflight.output.abandoned_count | int }}"
           - id: impl_post_drift
             continue_on_error: true
             command: speckit.check
@@ -248,10 +230,10 @@ steps:
         type: shell
         command: >
           bash scripts/check-stagnation.sh
-          "{{ steps.impl_check_remaining.output.feature_dir }}"
-          "{{ steps.impl_check_remaining.output.done_count }}"
-          "{{ steps.impl_check_remaining.output.total_tasks }}"
-          "{{ steps.impl_check_remaining.output.todo_task_type }}"
+          "{{ steps.impl_preflight.output.feature_dir }}"
+          "{{ steps.impl_preflight.output.done_count }}"
+          "{{ steps.impl_preflight.output.total_tasks }}"
+          "{{ steps.impl_preflight.output.todo_task_type }}"
 
       # ── Stagnation gate (Fix 6: human gate, not just a shell step) ──
       # Only appears when STAGNANT=true. When STAGNANT=false, skipped entirely.
@@ -259,7 +241,7 @@ steps:
         type: if
         condition: >
           {{ steps.impl_stagnation_check.output.STAGNANT == 'true' }} and
-          {{ steps.impl_check_remaining.output.has_todo == 'true' }}
+          {{ steps.impl_preflight.output.has_todo == 'true' }}
         then:
           - id: impl_stagnation_review
             type: gate
@@ -288,7 +270,7 @@ steps:
                 type: shell
                 command: >
                   bash scripts/check-stagnation.sh --reset
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
             on_troubleshoot:
               - id: impl_status
                 command: speckit.status
@@ -307,27 +289,27 @@ steps:
                 type: shell
                 command: >
                   bash scripts/recovery-engine.sh reset-stagnation
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
             on_abort:
               - id: impl_cleanup_stag
                 type: shell
                 command: >
                   bash scripts/recovery-engine.sh abort
-                  "{{ steps.impl_check_remaining.output.feature_dir }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}"
                   "stagnation"
               - goto: abort
 
       - id: impl_check_in_progress
         type: if
-        condition: "{{ steps.impl_check_remaining.output.in_progress != '' }}"
+        condition: "{{ steps.impl_preflight.output.in_progress != '' }}"
         then:
           - id: impl_resolve_in_progress
             type: gate
             message: |
               ⚠ IN_PROGRESS task(s) detected from a previous interrupted session:
-                {{ steps.impl_check_remaining.output.in_progress }}
-              {% if steps.impl_check_remaining.output.in_progress_all != '' and steps.impl_check_remaining.output.in_progress_all != steps.impl_check_remaining.output.in_progress %}
-              Additional IN_PROGRESS tasks: {{ steps.impl_check_remaining.output.in_progress_all }}
+                {{ steps.impl_preflight.output.in_progress }}
+              {% if steps.impl_preflight.output.in_progress_all != '' and steps.impl_preflight.output.in_progress_all != steps.impl_preflight.output.in_progress %}
+              Additional IN_PROGRESS tasks: {{ steps.impl_preflight.output.in_progress_all }}
               {% endif %}
 
               A previous session was interrupted before this task completed.
@@ -343,35 +325,35 @@ steps:
                 type: shell
                 command: >
                   bash scripts/validate-task-deps.sh
-                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
-                  "{{ steps.impl_check_remaining.output.in_progress }}"
+                  "{{ steps.impl_preflight.output.feature_dir }}/tasks.md"
+                  "{{ steps.impl_preflight.output.in_progress }}"
               - id: impl_restart_all
                 type: shell
                 command: >
                   bash scripts/resolve-all-in-progress.sh
-                  "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                  "{{ steps.impl_preflight.output.feature_dir }}/tasks.md"
                   TODO "Crash recovery — restarted all IN_PROGRESS tasks"
             on_abandon:
               type: shell
               command: >
                 bash scripts/resolve-all-in-progress.sh
-                "{{ steps.impl_check_remaining.output.feature_dir }}/tasks.md"
+                "{{ steps.impl_preflight.output.feature_dir }}/tasks.md"
                 ABANDONED "Crash recovery — abandoning all IN_PROGRESS tasks with cascade"
 
       - id: impl_check_abandoned
         type: if
-        condition: "{{ steps.impl_check_remaining.output.abandoned_count | int > 0 }}"
+        condition: "{{ steps.impl_preflight.output.abandoned_count | int > 0 }}"
         then:
           - id: impl_abandon_guard
             type: shell
             command: >
               bash scripts/abandon-guard.sh
-              "{{ steps.impl_check_remaining.output.feature_dir }}"
+              "{{ steps.impl_preflight.output.feature_dir }}"
             continue_on_error: true
           - id: impl_warn_abandoned
             type: gate
             message: |
-              ⚠ {{ steps.impl_check_remaining.output.abandoned_count }} ABANDONED task(s) found.
+              ⚠ {{ steps.impl_preflight.output.abandoned_count }} ABANDONED task(s) found.
               Approve to continue. Revise to clean up abandoned tasks.
               {% if steps.impl_abandon_guard.output.GUARD == 'LOOP_RISK' %}
               **WARNING: This task was previously reset from ABANDONED and failed again.**
